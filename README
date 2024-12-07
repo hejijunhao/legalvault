@@ -1,0 +1,33 @@
+
+**APPLICATION ARCHITECTURE**
+
+LegalVault/
+├── .venv/                  # Python virtual environment
+├── frontend/              # Next.js frontend
+│   ├── src/
+│   │   ├── app/          # Next.js app router pages
+│   │   ├── components/   # Reusable UI components
+│   │   └── lib/          # Utility functions
+│   ├── public/
+│   └── .env.local        # Frontend environment variables
+│
+├── backend/              # FastAPI backend
+│   ├── api/             # API routes
+│   │   └── __init__.py
+│   ├── core/            # Core functionality
+│   │   ├── __init__.py
+│   │   └── database.py  # Baserow connection
+│   ├── models/          # Data models/schemas
+│   │   └── __init__.py
+│   ├── services/        # Business logic
+│   │   └── __init__.py
+│   ├── __init__.py
+│   └── main.py         # FastAPI app entry point
+│
+├── docker/              # Docker configuration
+│   ├── n8n/            # n8n specific configuration
+│   │   └── Dockerfile  # Custom n8n configuration if needed
+│   └── docker-compose.yml  # Docker compose for n8n
+│
+├── .env                 # Backend environment variables
+└── requirements.txt     # Python dependencies
