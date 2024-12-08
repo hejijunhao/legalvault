@@ -1,21 +1,30 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from core.llm import init_llm
+from services.workflow_tracker import WorkflowTracker
 
-app = FastAPI(title="LegalVault API")
+app = FastAPI()
 
-# Configure CORS to allow requests from your Next.js frontend
+# CORS setup for Next.js frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Your Next.js frontend URL
+    allow_origins=["http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-@app.get("/")
-async def root():
-    return {"message": "Welcome to LegalVault API"}
+llm = init_llm()
 
-@app.get("/health")
-async def health_check():
-    return {"status": "healthy"}
+
+@app.post("/process")
+async def process_text(data: dict):
+    tracker = WorkflowTracker()
+
+    # Process with LLM
+    result = llm(data["text"], callbacks=[tracker])
+
+    return {
+        "result": result,
+        "steps": tracker.steps
+    }
