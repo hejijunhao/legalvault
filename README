@@ -2,32 +2,36 @@
 **APPLICATION ARCHITECTURE**
 
 LegalVault/
-├── .venv/                  # Python virtual environment
-├── frontend/              # Next.js frontend
-│   ├── src/
-│   │   ├── app/          # Next.js app router pages
-│   │   ├── components/   # Reusable UI components
-│   │   └── lib/          # Utility functions
-│   ├── public/
-│   └── .env.local        # Frontend environment variables
-│
-├── backend/              # FastAPI backend
-│   ├── api/             # API routes
-│   │   └── __init__.py
-│   ├── core/            # Core functionality
-│   │   ├── __init__.py
-│   │   └── database.py  # Baserow connection
+├── backend/
+│   ├── api/              # API endpoints/routes
+│   ├── core/             # Core application logic
+│   │   ├── database.py  # Supabase/Database setup
+│   │   └── llm.py       # LangChain/HuggingFace setup
 │   ├── models/          # Data models/schemas
-│   │   └── __init__.py
-│   ├── services/        # Business logic
-│   │   └── __init__.py
-│   ├── __init__.py
-│   └── main.py         # FastAPI app entry point
+│   ├── services/        # Business logic services
+│   │   └── workflow_tracker.py
+│   ├── utils/          # Utility functions
+│   │   ├── cache.py    # Caching utilities
+│   │   ├── fallback.py # Fallback strategies
+│   │   └── logging.py  # Basic monitoring
+│   └── main.py         # FastAPI entry point
 │
-├── docker/              # Docker configuration
-│   ├── n8n/            # n8n specific configuration
-│   │   └── Dockerfile  # Custom n8n configuration if needed
-│   └── docker-compose.yml  # Docker compose for n8n
+├── frontend/
+│   ├── public/        # Static assets
+│   │   ├── fonts/
+│   │   └── images/
+│   ├── src/
+│   │   ├── app/      # Next.js pages
+│   │   ├── components/  # React components
+│   │   ├── hooks/      # Custom React hooks
+│   │   ├── lib/        # Shared utilities
+│   │   │   ├── api.ts
+│   │   │   └── supabase.ts
+│   │   ├── styles/    # CSS and styling
+│   │   └── types/     # TypeScript definitions
+│   ├── .env.local    # Environment variables
+│   └── tailwind.config.ts
 │
-├── .env                 # Backend environment variables
-└── requirements.txt     # Python dependencies
+├── .gitignore
+├── README.md
+└── requirements.txt
