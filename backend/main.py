@@ -1,11 +1,9 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from core.llm import init_llm
-from services.workflow_tracker import WorkflowTracker
+from core.database import supabase
 
 app = FastAPI()
 
-# CORS setup for Next.js frontend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"],
@@ -14,17 +12,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-llm = init_llm()
+@app.get("/virtual-paralegals")
+async def list_paralegals():
+    response = supabase.table('virtual_paralegals').select("*").execute()
+    return response.data
 
-
-@app.post("/process")
-async def process_text(data: dict):
-    tracker = WorkflowTracker()
-
-    # Process with LLM
-    result = llm(data["text"], callbacks=[tracker])
-
-    return {
-        "result": result,
-        "steps": tracker.steps
-    }
+@app.post("/virtual-paralegals")
+async def create_paralegal(name: str):
+    response = supabase.table('virtual_paralegals').insert({"name": name}).execute()
+    return response.data
