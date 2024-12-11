@@ -20,7 +20,7 @@ class TechTreeBase(BaseModel):
     description: str
     structure: Dict[str, TechTreeNodeSchema]
     requirements: Dict[str, any]
-    metadata: Dict[str, any]
+    meta_info: Dict[str, any]  # Changed from metadata to meta_info
 
 
 class TechTreeCreate(TechTreeBase):
