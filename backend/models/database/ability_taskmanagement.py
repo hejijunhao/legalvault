@@ -1,7 +1,8 @@
 # backend/models/database/ability_taskmanagement.py
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Dict
 from sqlmodel import SQLModel, Field
+from sqlalchemy import Column
 from sqlalchemy.dialects.postgresql import JSONB
 
 class TaskManagementAbility(SQLModel, table=True):
@@ -12,11 +13,11 @@ class TaskManagementAbility(SQLModel, table=True):
     operation_name: str = Field(max_length=255)
     description: str
     enabled: bool = Field(default=True)
-    input_schema: dict = Field(sa_column=JSONB)
-    output_schema: dict = Field(sa_column=JSONB)
-    workflow_steps: dict = Field(sa_column=JSONB)
-    constraints: dict = Field(sa_column=JSONB)
-    permissions: dict = Field(sa_column=JSONB)
+    input_schema: Dict = Field(sa_column=Column(JSONB))
+    output_schema: Dict = Field(sa_column=Column(JSONB))
+    workflow_steps: Dict = Field(sa_column=Column(JSONB))
+    constraints: Dict = Field(sa_column=Column(JSONB))
+    permissions: Dict = Field(sa_column=Column(JSONB))
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow, sa_column_kwargs={"onupdate": datetime.utcnow})
 

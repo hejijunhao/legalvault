@@ -13,10 +13,11 @@ from alembic import context
 from dotenv import load_dotenv
 from sqlmodel import SQLModel
 
-#techtree models
+#models
 from backend.models.database.user import User
 from backend.models.database.paralegal import VirtualParalegal
-from backend.models.database.techtree import TechTree  # Add this line
+from backend.models.database.techtree import TechTree
+from backend.models.database.ability_taskmanagement import TaskManagementAbility
 
 # Load environment variables
 load_dotenv()
