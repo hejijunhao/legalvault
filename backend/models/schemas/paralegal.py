@@ -17,6 +17,7 @@ class VirtualParalegalUpdate(BaseModel):
     email: Optional[EmailStr] = None
     phone: Optional[str] = None
     whatsapp: Optional[str] = None
+    tech_tree_progress: Optional[Dict[str, Dict]] = None
 
 # Output schema for API responses
 class VirtualParalegalResponse(BaseModel):
@@ -28,6 +29,13 @@ class VirtualParalegalResponse(BaseModel):
     owner_id: UUID
     abilities: List[UUID] = []
     behaviors: Dict[str, Any] = {}
+    tech_tree_progress: Dict[str, Dict] = Field(
+        default_factory=lambda: {
+            "unlocked_nodes": {},
+            "progress": {},
+            "metadata": {}
+        }
+    )
     created_at: datetime
     updated_at: datetime
 
