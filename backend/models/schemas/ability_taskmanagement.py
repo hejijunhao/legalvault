@@ -14,7 +14,7 @@ class TaskManagementAbilityBase(BaseModel):
     permissions: Dict = Field(..., description="Required permissions/conditions")
 
 class TaskManagementAbilityCreate(TaskManagementAbilityBase):
-    techtree_id: int = Field(..., description="Foreign key to tech_trees")
+    ability_id: int = Field(..., description="Foreign key to abilities")
 
 class TaskManagementAbilityUpdate(TaskManagementAbilityBase):
     operation_name: Optional[str] = None
@@ -28,7 +28,7 @@ class TaskManagementAbilityUpdate(TaskManagementAbilityBase):
 
 class TaskManagementAbilityInDB(TaskManagementAbilityBase):
     id: int
-    techtree_id: int
+    ability_id: int
     created_at: datetime
     updated_at: datetime
 

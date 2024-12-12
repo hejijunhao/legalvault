@@ -4,7 +4,7 @@ from datetime import datetime
 from enum import Enum
 
 
-class TechTreeNodeSchema(BaseModel):
+class AbilityNodeSchema(BaseModel):
     id: str
     name: str
     category: str
@@ -15,23 +15,23 @@ class TechTreeNodeSchema(BaseModel):
     metadata: Dict[str, any]
 
 
-class TechTreeBase(BaseModel):
+class AbilityBase(BaseModel):
     name: str
     description: str
-    structure: Dict[str, TechTreeNodeSchema]
+    structure: Dict[str, AbilityNodeSchema]
     requirements: Dict[str, any]
     meta_info: Dict[str, any]  # Changed from metadata to meta_info
 
 
-class TechTreeCreate(TechTreeBase):
+class AbilityCreate(AbilityBase):
     pass
 
 
-class TechTreeUpdate(TechTreeBase):
+class TAbilityUpdate(AbilityBase):
     pass
 
 
-class TechTreeRead(TechTreeBase):
+class TAbilityRead(AbilityBase):
     id: int
     created_at: datetime
     updated_at: datetime
@@ -40,7 +40,7 @@ class TechTreeRead(TechTreeBase):
         orm_mode = True
 
 
-class TechTreeProgressRead(BaseModel):
+class AbilityProgressRead(BaseModel):
     paralegal_id: str
     unlocked_nodes: Dict[str, datetime]
     progress: Dict[str, float]

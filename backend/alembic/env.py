@@ -16,7 +16,7 @@ from sqlmodel import SQLModel
 #models
 from backend.models.database.user import User
 from backend.models.database.paralegal import VirtualParalegal
-from backend.models.database.techtree import TechTree
+from backend.models.database.ability import Ability
 from backend.models.database.ability_taskmanagement import TaskManagementAbility
 
 # Load environment variables

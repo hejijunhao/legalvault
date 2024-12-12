@@ -3,7 +3,7 @@ from typing import Dict, List, Optional
 from enum import Enum
 
 
-class TechTreeCategory(Enum):
+class AbilityCategory(Enum):
     COMMUNICATION = "communication"
     TASK_MANAGEMENT = "task_management"
     DOCUMENT_HANDLING = "document_handling"
@@ -12,10 +12,10 @@ class TechTreeCategory(Enum):
 
 
 @dataclass
-class TechTreeNode:
+class AbilityNode:
     id: str
     name: str
-    category: TechTreeCategory
+    category: AbilityCategory
     level: int
     description: str
     prerequisites: List[str]  # List of node IDs required
@@ -23,7 +23,7 @@ class TechTreeNode:
     metadata: Dict[str, any]
 
 
-class TechTreeProgress:
+class AbilityProgress:
     def __init__(self, paralegal_id: str):
         self.paralegal_id = paralegal_id
         self.unlocked_nodes: Dict[str, datetime] = {}
@@ -35,15 +35,15 @@ class TechTreeProgress:
     def get_available_nodes(self) -> List[str]:
         pass
 
-    def calculate_progress(self, category: Optional[TechTreeCategory] = None) -> float:
+    def calculate_progress(self, category: Optional[AbilityCategory] = None) -> float:
         pass
 
 
-class TechTreeManager:
+class AbilityManager:
     def __init__(self):
-        self.nodes: Dict[str, TechTreeNode] = {}
+        self.nodes: Dict[str, AbilityNode] = {}
 
-    def add_node(self, node: TechTreeNode) -> None:
+    def add_node(self, node: AbilityNode) -> None:
         self.nodes[node.id] = node
 
     def check_prerequisites(self, node_id: str, unlocked_nodes: List[str]) -> bool:
@@ -51,8 +51,8 @@ class TechTreeManager:
             return False
         return all(prereq in unlocked_nodes for prereq in self.nodes[node_id].prerequisites)
 
-    def get_available_upgrades(self, progress: TechTreeProgress) -> List[TechTreeNode]:
+    def get_available_upgrades(self, progress: AbilityProgress) -> List[AbilityNode]:
         pass
 
-    def get_category_progress(self, progress: TechTreeProgress, category: TechTreeCategory) -> float:
+    def get_category_progress(self, progress: AbilityProgress, category: AbilityCategory) -> float:
         pass

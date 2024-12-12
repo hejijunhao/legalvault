@@ -3,8 +3,8 @@ from typing import Dict, Optional
 from datetime import datetime
 
 
-class TechTree(SQLModel, table=True):
-    __tablename__ = "tech_trees"
+class Ability(SQLModel, table=True):
+    __tablename__ = "abilities"
 
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str

@@ -6,7 +6,7 @@ from typing import Dict, Optional
 @dataclass
 class TaskManagementAbilityDomain:
     id: Optional[int]
-    techtree_id: int
+    ability_id: int
     operation_name: str
     description: str
     enabled: bool

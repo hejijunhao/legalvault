@@ -9,7 +9,7 @@ class TaskManagementAbility(SQLModel, table=True):
     __tablename__ = "task_management_abilities"
 
     id: int = Field(default=None, primary_key=True)
-    techtree_id: int = Field(foreign_key="tech_trees.id", index=True)
+    ability_id: int = Field(foreign_key="abilities.id", index=True)
     operation_name: str = Field(max_length=255)
     description: str
     enabled: bool = Field(default=True)

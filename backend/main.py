@@ -16,8 +16,8 @@ async def initialize_operations():
         session = next(get_session())
         initializer = TaskManagementInitializer(session)
         # TODO: Replace with proper tech tree ID retrieval
-        techtree_id = 1
-        operation_ids = initializer.initialize_operations(techtree_id)
+        ability_id = 1
+        operation_ids = initializer.initialize_operations(ability_id)
         logger.info(f"Initialized task management operations: {operation_ids}")
     except Exception as e:
         logger.error(f"Error initializing operations: {e}")
