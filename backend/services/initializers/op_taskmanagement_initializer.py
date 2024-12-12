@@ -13,7 +13,7 @@ class TaskManagementInitializer:
     def __init__(self, session: Session):
         self.session = session
 
-    def _create_operation(self, techtree_id: int, operation: TaskOperation) -> TaskManagementAbility:
+    def _create_operation(self, ability_id: int, operation: TaskOperation) -> TaskManagementAbility:
         """Creates a single operation in the database"""
         workflow_steps_json = {
             "workflow_steps": [
@@ -28,7 +28,7 @@ class TaskManagementInitializer:
         }
 
         return TaskManagementAbility(
-            techtree_id=techtree_id,
+            ability_id=ability_id,
             operation_name=operation.operation_name,
             description=operation.description,
             input_schema=operation.input_schema,
@@ -38,12 +38,12 @@ class TaskManagementInitializer:
             permissions=operation.permissions
         )
 
-    def initialize_operations(self, techtree_id: int) -> Dict[str, int]:
+    def initialize_operations(self, ability_id: int) -> Dict[str, int]:
         """
         Initializes all task management operations for a given tech tree
 
         Args:
-            techtree_id: ID of the tech tree to associate operations with
+            ability_id: ID of the tech tree to associate operations with
 
         Returns:
             Dict mapping operation names to their database IDs
@@ -54,7 +54,7 @@ class TaskManagementInitializer:
             for operation in TASK_OPERATIONS.values():
                 # Check if operation already exists
                 existing = self.session.query(TaskManagementAbility).filter_by(
-                    techtree_id=techtree_id,
+                    ability_id=ability_id,
                     operation_name=operation.operation_name
                 ).first()
 
@@ -64,7 +64,7 @@ class TaskManagementInitializer:
                     continue
 
                 # Create new operation
-                db_operation = self._create_operation(techtree_id, operation)
+                db_operation = self._create_operation(ability_id, operation)
                 self.session.add(db_operation)
                 self.session.flush()  # Get ID without committing
                 operation_ids[operation.operation_name] = db_operation.id
