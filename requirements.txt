@@ -43,3 +43,5 @@ typing_extensions==4.12.2
 urllib3==2.2.3
 uvicorn==0.32.1
 yarl==1.18.3
+sqlmodel~=0.0.22
+alembic~=1.14.0
