@@ -1,8 +1,11 @@
+#models/database/ability_receive_email.py
 from datetime import datetime
 from typing import Optional, Dict
 from sqlmodel import SQLModel, Field, Relationship
 from sqlalchemy import Column, Index
 from sqlalchemy.dialects.postgresql import JSONB
+
+from .ability import Ability
 
 class ReceiveEmailAbility(SQLModel, table=True):
     __tablename__ = "receive_email_abilities"

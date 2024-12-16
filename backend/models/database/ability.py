@@ -1,7 +1,7 @@
-from sqlmodel import SQLModel, Field, Column, JSON
-from typing import Dict, Optional
+# backend/models/database/ability.py
+from sqlmodel import SQLModel, Field, Column, JSON, Relationship
+from typing import Dict, Optional, List
 from datetime import datetime
-
 
 class Ability(SQLModel, table=True):
     __tablename__ = "abilities"
@@ -14,3 +14,10 @@ class Ability(SQLModel, table=True):
     meta_info: Dict = Field(default={}, sa_column=Column(JSON))  # Changed from metadata to meta_info
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+    # Use string literals for both relationship types
+    task_management_abilities: List["TaskManagementAbility"] = Relationship(back_populates="ability")
+    receive_email_abilities: List["ReceiveEmailAbility"] = Relationship(back_populates="ability")
+
+    class Config:
+        arbitrary_types_allowed = True

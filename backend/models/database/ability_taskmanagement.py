@@ -1,9 +1,11 @@
 # backend/models/database/ability_taskmanagement.py
 from datetime import datetime
 from typing import Optional, Dict
-from sqlmodel import SQLModel, Field
+from sqlmodel import SQLModel, Field, Relationship
 from sqlalchemy import Column
 from sqlalchemy.dialects.postgresql import JSONB
+
+from .ability import Ability
 
 class TaskManagementAbility(SQLModel, table=True):
     __tablename__ = "task_management_abilities"
@@ -20,6 +22,8 @@ class TaskManagementAbility(SQLModel, table=True):
     permissions: Dict = Field(sa_column=Column(JSONB))
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow, sa_column_kwargs={"onupdate": datetime.utcnow})
+
+    ability: Optional["Ability"] = Relationship(back_populates="task_management_abilities")
 
     class Config:
         arbitrary_types_allowed = True

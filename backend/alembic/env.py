@@ -13,11 +13,12 @@ from alembic import context
 from dotenv import load_dotenv
 from sqlmodel import SQLModel
 
-#models#
+#models
 from backend.models.database.user import User
 from backend.models.database.paralegal import VirtualParalegal
 from backend.models.database.ability import Ability
 from backend.models.database.ability_taskmanagement import TaskManagementAbility
+from backend.models.database.ability_receive_email import ReceiveEmailAbility
 
 # Load environment variables
 load_dotenv()

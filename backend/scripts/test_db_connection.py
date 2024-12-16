@@ -25,22 +25,17 @@ def debug_database_url():
 
 async def test_connection():
     print("\nTesting database connection...")
-    session = None
-    try:
-        session = await get_session()
-        # Use raw SQL execution without prepared statements
-        query = text("SELECT 1 as test")
-        result = await session.execute(query, execution_options={"prebuffer_rows": True})
-        row = result.first()
-        if row and row.test == 1:
-            print("Database connection successful!")
-            return True
-    except Exception as e:
-        print(f"Database connection failed: {str(e)}")
-        return False
-    finally:
-        if session:
-            await session.close()
+    async with get_session() as session:
+        try:
+            query = text("SELECT 1 as test")
+            result = await session.execute(query)
+            row = result.first()
+            if row and row[0] == 1:
+                print("Database connection successful!")
+                return True
+        except Exception as e:
+            print(f"Database connection failed: {str(e)}")
+            return False
 
 if __name__ == "__main__":
     debug_database_url()
