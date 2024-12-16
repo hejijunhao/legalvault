@@ -1,5 +1,6 @@
 # backend/core/database.py
 import os
+import ssl
 from sqlmodel import SQLModel
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from typing import AsyncGenerator
@@ -12,12 +13,21 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
     raise ValueError("No DATABASE_URL found in environment")
 
+# Create SSL context
+ssl_context = ssl.create_default_context()
+ssl_context.check_hostname = False
+ssl_context.verify_mode = ssl.CERT_NONE
+
 # Create async engine with minimal configuration
 async_engine = create_async_engine(
     DATABASE_URL,
     echo=True,
     future=True,
-    poolclass=None  # Disable connection pooling as we're using pgbouncer
+    poolclass=None,  # Disable connection pooling as we're using pgbouncer
+    connect_args={
+        "server_settings": {"ssl": "true"},
+        "ssl": ssl_context
+    }
 )
 
 # Use async_sessionmaker instead of sessionmaker

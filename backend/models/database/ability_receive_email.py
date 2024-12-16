@@ -5,8 +5,6 @@ from sqlmodel import SQLModel, Field, Relationship
 from sqlalchemy import Column, Index
 from sqlalchemy.dialects.postgresql import JSONB
 
-from .ability import Ability
-
 class ReceiveEmailAbility(SQLModel, table=True):
     __tablename__ = "receive_email_abilities"
     __table_args__ = (Index("ix_receive_email_abilities_operation_name", "operation_name"),)
@@ -27,8 +25,11 @@ class ReceiveEmailAbility(SQLModel, table=True):
         sa_column_kwargs={"onupdate": datetime.utcnow}
     )
 
-    # Add relationship to parent Ability
-    ability: Optional["Ability"] = Relationship(back_populates="receive_email_abilities")
+    # Define relationship back to Ability
+    ability: Optional["Ability"] = Relationship(
+        back_populates="receive_email_abilities",
+        sa_relationship_kwargs={"lazy": "selectin"}
+    )
 
     class Config:
         arbitrary_types_allowed = True
