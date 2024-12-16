@@ -35,3 +35,46 @@ LegalVault/
 ├── .gitignore
 ├── README.md
 └── requirements.txt
+
+**ADDING/MANAGING ABILITIES**
+
+For each new Ability, you need:
+1. `NewAbility.py` files in all three folders:
+    - `models/database/` - SQLModel for database structure (How the car specs are stored in manufacturer's database)
+    - `models/domain/` - Business logic and behavior (What this car model is and how it should behave)
+    - `models/schemas/` - Pydantic models for API validation (Rules for validating car operations and user inputs)
+2. `operations_newability.py` in `models/domain/`:
+    - What operations exist
+    - Their structure via input/output schemas (What inputs each function accepts, like pedal pressure)
+    - Their workflows
+    - Their constraints
+    - Their permissions (Who can use which functions, like license requirements)
+3. `op_newability_initializer.py` in `services/initializers/`:
+    - Takes function descriptions and formats them for database
+    - Handles CRUD operations for these operations (adding/updating/removing)
+    - Manages updates when operations change (Updates documentation when functions change)
+4. `initialize_newability_abilities.py` in `scripts/`:
+    - Provides the entry point to run the initializer (Controls when to publish/update)
+    - Used in deployment scripts (Used during initial setup)
+    - Used for maintenance/updates (Manages maintenance of function documentation)
+5. `newability_executor.py` in `services/executors/`:
+    - Implements actual operation logic (The driver who actually operates the functions)
+    - Handles API calls and integrations (Knows how to physically operate each control)
+    - Manages error handling (Knows what to do if something fails)
+6. `newability_workflow.py` in `services/workflow/`:
+    - Orchestrates operation execution (GPS system planning the route)
+    - Validates inputs and conditions (Driving instructor checking conditions)
+    - Manages operation flow (Ensures functions are used in correct order)
+7. API routes in `api/routes/newability.py`:
+    - Defines endpoints and routes (Road infrastructure)
+    - Handles request/response (Traffic control)
+    - Manages authentication/authorization (Road access and rules)
+
+This structure separates:
+- Domain logic - What things are (What the car is)
+- Infrastructure concerns - How things are stored (How car specs are recorded)
+- Application services - How things change (How to drive the car)
+- Scripts - When things change (When to update the manual)
+- Execution - What actually happens (Actually driving the car)
+- Orchestration - How things flow (Navigation and instruction)
+- Access - How things are reached (Roads and traffic control)
