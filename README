@@ -3,33 +3,77 @@
 
 LegalVault/
 ├── backend/
-│   ├── api/              # API endpoints/routes
-│   ├── core/             # Core application logic
+│   ├── admin/            # Admin configurations
+│   ├── alembic/          # Database migrations
+│   │   ├── versions/     # Migration version files
+│   │   ├── env.py       # Alembic environment configuration
+│   │   └── alembic.ini  # Alembic configuration file
+│   ├── api/             # API endpoints/routes
+│   │   └── routes/      # Routes directory
+│   │       └── taskmanagement.py  # TaskManagement routes
+│   ├── core/            # Core application logic
 │   │   ├── database.py  # Supabase/Database setup
 │   │   └── llm.py       # LangChain/HuggingFace setup
-│   ├── models/          # Data models/schemas
+│   ├── models/          # Data models layer
+│   │   ├── database/    # Database models (SQLModel)
+│   │   │   ├── __init__.py
+│   │   │   ├── ability.py
+│   │   │   ├── behaviour.py
+│   │   │   ├── paralegal.py
+│   │   │   ├── ability_taskmanagement.py
+│   │   │   └── user.py
+│   │   ├── domain/      # Business logic models
+│   │   │   ├── __init__.py
+│   │   │   ├── ability.py
+│   │   │   ├── behaviour.py
+│   │   │   ├── paralegal.py
+│   │   │   ├── ability_taskmanagement.py
+│   │   │   ├── operations_taskmanagement.py  # Operation definitions
+│   │   │   └── user.py
+│   │   └── schemas/     # API schemas (Pydantic)
+│   │       ├── __init__.py
+│   │       ├── ability.py
+│   │       ├── behavior.py
+│   │       ├── paralegal.py
+│   │       ├── ability_taskmanagement.py
+│   │       └── user.py
+│   ├── scripts/         # Scripts directory
+│   │   └── initialize_taskmanagement_abilities.py  # Initialization script
 │   ├── services/        # Business logic services
+│   │   ├── __init__.py
+│   │   ├── initializers/  # Operation initializers
+│   │   │   ├── __init__.py
+│   │   │   └── op_taskmanagement_initializer.py
+│   │   ├── executors/   # Executors directory
+│   │   │   ├── __init__.py
+│   │   │   └── taskmanagement_executor.py  # TaskManagement executor
+│   │   ├── workflow/    # Workflow directory
+│   │   │   ├── __init__.py
+│   │   │   └── taskmanagement_workflow.py  # TaskManagement workflow
 │   │   └── workflow_tracker.py
-│   ├── utils/          # Utility functions
-│   │   ├── cache.py    # Caching utilities
-│   │   ├── fallback.py # Fallback strategies
-│   │   └── logging.py  # Basic monitoring
-│   └── main.py         # FastAPI entry point
+│   ├── utils/           # Utility functions
+│   │   ├── cache.py     # Caching utilities
+│   │   ├── fallback.py  # Fallback strategies
+│   │   └── logging.py   # Basic monitoring
+│   ├── .env             # Environment variables
+│   ├── __init__.py
+│   ├── main.py         # FastAPI entry point
+│   └── requirements.txt
 │
-├── frontend/
-│   ├── public/        # Static assets
+├── frontend/           # Next.js frontend
+│   ├── public/
 │   │   ├── fonts/
 │   │   └── images/
 │   ├── src/
-│   │   ├── app/      # Next.js pages
-│   │   ├── components/  # React components
-│   │   ├── hooks/      # Custom React hooks
-│   │   ├── lib/        # Shared utilities
+│   │   ├── app/
+│   │   ├── components/
+│   │   ├── hooks/
+│   │   ├── lib/
 │   │   │   ├── api.ts
 │   │   │   └── supabase.ts
-│   │   ├── styles/    # CSS and styling
-│   │   └── types/     # TypeScript definitions
-│   ├── .env.local    # Environment variables
+│   │   ├── styles/
+│   │   └── types/
+│   ├── .env.local
 │   └── tailwind.config.ts
 │
 ├── .gitignore
