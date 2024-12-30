@@ -3,6 +3,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 import os
 import sys
+from sqlalchemy import text
 
 # Add project root to path
 current_dir = Path(__file__).resolve()
@@ -32,7 +33,7 @@ def test_connection():
     try:
         with get_session() as session:
             # Simple query to test connection
-            result = session.execute("SELECT 1 as test")
+            result = session.execute(text("SELECT 1 as test"))
             row = result.scalar()
             
             if row == 1:
