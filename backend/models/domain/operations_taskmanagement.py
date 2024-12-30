@@ -22,7 +22,6 @@ class TaskOperation:
     permissions: Dict
 
 
-# Define all task management operations
 TASK_OPERATIONS = {
     "CREATE_TASK": TaskOperation(
         operation_name="CREATE_TASK",
@@ -77,7 +76,6 @@ TASK_OPERATIONS = {
             "required_scopes": ["task:write"]
         }
     ),
-
     "GET_TASK": TaskOperation(
         operation_name="GET_TASK",
         description="Retrieves a specific task by ID",
@@ -123,7 +121,6 @@ TASK_OPERATIONS = {
             "required_scopes": ["task:read"]
         }
     ),
-
     "LIST_TASKS": TaskOperation(
         operation_name="LIST_TASKS",
         description="Retrieves a list of tasks with optional filtering",

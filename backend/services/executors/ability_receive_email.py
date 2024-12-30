@@ -11,7 +11,7 @@ class ReceiveEmailExecutor:
     def __init__(self, db_session):
         self.session = db_session
 
-    async def validate_input(self, input_data: Dict[str, Any], schema: Dict) -> bool:
+    def validate_input(self, input_data: Dict[str, Any], schema: Dict) -> bool:
         try:
             # Add validation logic here
             return True
@@ -19,12 +19,16 @@ class ReceiveEmailExecutor:
             logger.error(f"Input validation failed: {str(e)}")
             return False
 
-    async def receive_inbound_email(self, input_data: Dict[str, Any], user_id: int, metadata: Optional[Dict] = None) -> \
-    Dict[str, Any]:
+    def receive_inbound_email(
+        self, 
+        input_data: Dict[str, Any], 
+        user_id: int, 
+        metadata: Optional[Dict] = None
+    ) -> Dict[str, Any]:
         try:
             logger.info(f"Receiving inbound email for user {user_id}")
 
-            if not await self.validate_input(input_data, {}):  # Add schema
+            if not self.validate_input(input_data, {}):  # Add schema
                 raise ValueError("Invalid input data")
 
             # Add email storage logic here
@@ -37,12 +41,16 @@ class ReceiveEmailExecutor:
             logger.error(f"Error processing inbound email: {str(e)}")
             raise
 
-    async def route_email_to_main_ability(self, input_data: Dict[str, Any], user_id: int,
-                                          metadata: Optional[Dict] = None) -> Dict[str, Any]:
+    def route_email_to_main_ability(
+        self, 
+        input_data: Dict[str, Any], 
+        user_id: int,
+        metadata: Optional[Dict] = None
+    ) -> Dict[str, Any]:
         try:
             logger.info(f"Routing email {input_data.get('email_id')} to main ability")
 
-            if not await self.validate_input(input_data, {}):  # Add schema
+            if not self.validate_input(input_data, {}):  # Add schema
                 raise ValueError("Invalid input data")
 
             # Add routing logic here

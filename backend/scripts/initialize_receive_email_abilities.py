@@ -6,6 +6,7 @@ from pathlib import Path
 from sqlalchemy import text
 from typing import Optional
 from sqlalchemy import select  # Added this import
+from sqlmodel import Session, create_engine
 
 # Add project root to path
 current_dir = Path(__file__).resolve()
@@ -16,62 +17,62 @@ from backend.core.database import get_session
 from backend.models.database.ability import Ability
 from backend.services.initializers.op_receive_email_initializer import ReceiveEmailInitializer
 
-async def test_database_connection() -> bool:
+def test_database_connection() -> bool:
     print("Testing database connection...")
-    async with get_session() as session:
+    engine = create_engine(os.getenv("DATABASE_URL"))
+    with Session(engine) as session:
         try:
-            await session.execute(text("SELECT 1"))
+            session.execute(text("SELECT 1"))
             print("Database connection successful!")
             return True
         except Exception as e:
             print(f"Database connection failed: {str(e)}")
             return False
 
-
-async def initialize_receive_email():
-    if not await test_database_connection():
+def initialize_receive_email():
+    if not test_database_connection():
         raise Exception("Database connection test failed")
 
-    async with get_session() as session:
+    engine = create_engine(os.getenv("DATABASE_URL"))
+    with Session(engine) as session:
         try:
             print("Successfully got database session")
 
             # Get or create base ability
             stmt = select(Ability).where(Ability.name == 'receive_email')
-            result = await session.execute(stmt)
+            result = session.execute(stmt)
             base_ability = result.scalar_one_or_none()
 
             if not base_ability:
                 base_ability = Ability(
                     name="receive_email",
                     description="Handles inbound emails and routes them for processing",
-                    structure={},  # You can add structure if needed
-                    requirements={},  # You can add requirements if needed
-                    meta_info={}  # You can add meta_info if needed
+                    structure={},
+                    requirements={},
+                    meta_info={}
                 )
                 session.add(base_ability)
-                await session.commit()
-                await session.refresh(base_ability)
+                session.commit()
+                session.refresh(base_ability)
                 print(f"Created base receive_email ability with id {base_ability.id}")
             else:
                 print(f"Found existing receive_email ability with id {base_ability.id}")
 
             # Initialize operations using the initializer
             initializer = ReceiveEmailInitializer(session)
-            operation_ids = await initializer.initialize_operations(base_ability.id)
+            operation_ids = initializer.initialize_operations(base_ability.id)
 
             # Log results
             print(f"Successfully initialized {len(operation_ids)} operations")
             for op_name, op_id in operation_ids.items():
                 print(f"- {op_name}: {op_id}")
 
-            await session.commit()
+            session.commit()
 
         except Exception as e:
             print(f"Error during initialization: {str(e)}")
-            await session.rollback()
+            session.rollback()
             raise
-
 
 def check_environment():
     required_vars = ['DATABASE_URL']
@@ -84,7 +85,6 @@ def check_environment():
     print("All required environment variables found")
     return True
 
-
 if __name__ == "__main__":
     from dotenv import load_dotenv
 
@@ -94,7 +94,7 @@ if __name__ == "__main__":
         sys.exit(1)
 
     try:
-        asyncio.run(initialize_receive_email())
+        initialize_receive_email()
     except KeyboardInterrupt:
         print("\nInitialization interrupted by user")
         sys.exit(1)

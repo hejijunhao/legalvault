@@ -3,40 +3,32 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Dict, Optional
 
+
 @dataclass
 class TaskManagementAbilityDomain:
     id: Optional[int]
     ability_id: int
     operation_name: str
     description: str
-    enabled: bool
-    input_schema: Dict
-    output_schema: Dict
-    workflow_steps: Dict
-    constraints: Dict
-    permissions: Dict
-    created_at: datetime
-    updated_at: datetime
+    enabled: bool = True
+    input_schema: Dict = dict()
+    output_schema: Dict = dict()
+    workflow_steps: Dict = dict()
+    constraints: Dict = dict()
+    permissions: Dict = dict()
+    created_at: datetime = datetime.utcnow()
+    updated_at: datetime = datetime.utcnow()
 
     def validate_operation(self) -> bool:
-        """
-        Validates if the operation meets all required constraints and permissions
-        """
-        # Add validation logic here
         return True
 
     def execute_workflow(self) -> Dict:
-        """
-        Executes the workflow steps defined for this operation
-        """
-        # Add workflow execution logic here
         return {"status": "success"}
 
-    def update_schema(self, input_schema: Dict = None, output_schema: Dict = None) -> None:
-        """
-        Updates the input/output schemas for this operation
-        """
-        if input_schema:
+    def update_schema(self, input_schema: Optional[Dict] = None, output_schema: Optional[Dict] = None) -> None:
+        if input_schema is not None:
             self.input_schema = input_schema
-        if output_schema:
+            self.updated_at = datetime.utcnow()
+        if output_schema is not None:
             self.output_schema = output_schema
+            self.updated_at = datetime.utcnow()

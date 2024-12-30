@@ -1,6 +1,6 @@
-#backend/services/initializers/ability_receive_email.py
+#backend/services/initializers/op_receive_email_initializer.py
 from typing import Dict, Optional
-from sqlmodel.ext.asyncio.session import AsyncSession
+from sqlmodel import Session
 from sqlalchemy import select
 from logging import getLogger
 
@@ -10,7 +10,7 @@ from backend.models.domain.operations_ability_receive_email import EMAIL_OPERATI
 logger = getLogger(__name__)
 
 class ReceiveEmailInitializer:
-    def __init__(self, session: AsyncSession):
+    def __init__(self, session: Session):
         self.session = session
 
     def _create_operation(self, ability_id: int, operation: EmailOperation) -> ReceiveEmailAbility:
@@ -37,7 +37,7 @@ class ReceiveEmailInitializer:
             permissions=operation.permissions
         )
 
-    async def initialize_operations(self, ability_id: int) -> Dict[str, int]:
+    def initialize_operations(self, ability_id: int) -> Dict[str, int]:
         operation_ids = {}
         try:
             for operation in EMAIL_OPERATIONS.values():
@@ -45,7 +45,7 @@ class ReceiveEmailInitializer:
                     ReceiveEmailAbility.ability_id == ability_id,
                     ReceiveEmailAbility.operation_name == operation.operation_name
                 )
-                result = await self.session.execute(stmt)
+                result = self.session.execute(stmt)
                 existing = result.scalar_one_or_none()
 
                 if existing:
@@ -55,23 +55,23 @@ class ReceiveEmailInitializer:
 
                 db_operation = self._create_operation(ability_id, operation)
                 self.session.add(db_operation)
-                await self.session.flush()
+                self.session.flush()
                 operation_ids[operation.operation_name] = db_operation.id
                 logger.info(f"Created operation {operation.operation_name}")
 
-            await self.session.commit()
+            self.session.commit()
             return operation_ids
         except Exception as e:
-            await self.session.rollback()
+            self.session.rollback()
             logger.error(f"Error initializing email operations: {str(e)}")
             raise
 
-    async def update_operation(self, operation_name: str, updates: Dict) -> bool:
+    def update_operation(self, operation_name: str, updates: Dict) -> bool:
         try:
             stmt = select(ReceiveEmailAbility).where(
                 ReceiveEmailAbility.operation_name == operation_name
             )
-            result = await self.session.execute(stmt)
+            result = self.session.execute(stmt)
             operation = result.scalar_one_or_none()
 
             if not operation:
@@ -82,17 +82,17 @@ class ReceiveEmailInitializer:
                 if hasattr(operation, field):
                     setattr(operation, field, value)
 
-            await self.session.commit()
+            self.session.commit()
             logger.info(f"Updated operation {operation_name}")
             return True
         except Exception as e:
-            await self.session.rollback()
+            self.session.rollback()
             logger.error(f"Error updating operation {operation_name}: {str(e)}")
             raise
 
-    async def get_operation(self, operation_name: str) -> Optional[ReceiveEmailAbility]:
+    def get_operation(self, operation_name: str) -> Optional[ReceiveEmailAbility]:
         stmt = select(ReceiveEmailAbility).where(
             ReceiveEmailAbility.operation_name == operation_name
         )
-        result = await self.session.execute(stmt)
+        result = self.session.execute(stmt)
         return result.scalar_one_or_none()

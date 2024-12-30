@@ -14,7 +14,7 @@ def get_current_user():
 router = APIRouter(prefix="/api/v1/inbound-email", tags=["inbound_email"])
 
 @router.post("/receive", response_model=dict)
-async def receive_inbound_email(
+def receive_inbound_email(
     email_data: dict,
     session: Session = Depends(get_session),
     current_user_id: int = Depends(get_current_user)
@@ -26,13 +26,13 @@ async def receive_inbound_email(
         input_data=email_data,
         user_id=current_user_id
     )
-    result = await workflow.execute_workflow(context)
+    result = workflow.execute_workflow(context)
     if result["status"] == "error":
         raise HTTPException(status_code=400, detail=result["error"])
     return result["data"]
 
 @router.post("/route", response_model=dict)
-async def route_email_to_main_ability(
+def route_email_to_main_ability(
     route_data: dict,
     session: Session = Depends(get_session),
     current_user_id: int = Depends(get_current_user)
@@ -44,7 +44,7 @@ async def route_email_to_main_ability(
         input_data=route_data,
         user_id=current_user_id
     )
-    result = await workflow.execute_workflow(context)
+    result = workflow.execute_workflow(context)
     if result["status"] == "error":
         raise HTTPException(status_code=400, detail=result["error"])
     return result["data"]
