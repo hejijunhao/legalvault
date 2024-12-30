@@ -33,27 +33,23 @@ def initialize_receive_email():
     if not test_database_connection():
         raise Exception("Database connection test failed")
 
-    engine = create_engine(os.getenv("DATABASE_URL"))
-    with Session(engine) as session:
+    with get_session() as session:
         try:
             print("Successfully got database session")
 
             # Get or create base ability
             stmt = select(Ability).where(Ability.name == 'receive_email')
-            result = session.execute(stmt)
-            base_ability = result.scalar_one_or_none()
+            base_ability = session.scalar(stmt)
 
             if not base_ability:
                 base_ability = Ability(
                     name="receive_email",
                     description="Handles inbound emails and routes them for processing",
-                    structure={},
-                    requirements={},
-                    meta_info={}
+                    version="1.0.0",
+                    enabled=True
                 )
                 session.add(base_ability)
                 session.commit()
-                session.refresh(base_ability)
                 print(f"Created base receive_email ability with id {base_ability.id}")
             else:
                 print(f"Found existing receive_email ability with id {base_ability.id}")
