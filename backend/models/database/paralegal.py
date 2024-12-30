@@ -1,4 +1,4 @@
-from sqlmodel import SQLModel, Field
+from sqlmodel import SQLModel, Field, Relationship
 from typing import Optional, Dict, List
 from uuid import UUID, uuid4
 from datetime import datetime
@@ -13,7 +13,7 @@ class VirtualParalegal(SQLModel, table=True):
     phone: Optional[str] = None
     whatsapp: Optional[str] = None
     owner_id: UUID = Field(foreign_key="users.id")
-    # Change these two lines:
+    profile_picture_id: Optional[int] = Field(default=None, foreign_key="vp_profile_pictures.id")
     abilities: List = Field(sa_column=Column(JSON), default=[])
     behaviors: Dict = Field(sa_column=Column(JSON), default={})
     created_at: datetime = Field(default_factory=datetime.utcnow)
@@ -25,4 +25,9 @@ class VirtualParalegal(SQLModel, table=True):
             "metadata": {}  # Additional tracking data
         },
         sa_column=Column(JSON)
+    )
+
+    # Add relationship
+    profile_picture: Optional["VPProfilePicture"] = Relationship(
+        back_populates="virtual_paralegals"
     )

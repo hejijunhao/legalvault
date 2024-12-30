@@ -6,8 +6,8 @@ from sqlalchemy import Column, Index
 from sqlalchemy.dialects.postgresql import JSONB
 
 class ReceiveEmailAbility(SQLModel, table=True):
-    __tablename__ = "receive_email_abilities"
-    __table_args__ = (Index("ix_receive_email_abilities_operation_name", "operation_name"),)
+    __tablename__ = "ability_receive_email"
+    __table_args__ = (Index("ix_ability_receive_email_operation_name", "operation_name"),)
 
     id: int = Field(default=None, primary_key=True)
     ability_id: int = Field(foreign_key="abilities.id", index=True)

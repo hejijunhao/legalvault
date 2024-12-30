@@ -1,4 +1,4 @@
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from uuid import UUID
 from dataclasses import dataclass, field
 
@@ -9,6 +9,10 @@ class VirtualParalegalManager:
         "progress": {},
         "metadata": {}
     })
+
+    def update_profile_picture(self, paralegal_id: UUID, profile_picture_id: int) -> bool:
+        # Business logic for updating profile picture
+        pass
 
     def unlock_ability(self, paralegal_id: UUID, ability_id: UUID) -> bool:
         # Business logic for unlocking abilities
