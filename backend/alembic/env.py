@@ -19,6 +19,7 @@ from backend.models.database.paralegal import VirtualParalegal
 from backend.models.database.ability import Ability
 from backend.models.database.ability_taskmanagement import TaskManagementAbility
 from backend.models.database.ability_receive_email import ReceiveEmailAbility
+from backend.models.database.profile_picture import VPProfilePicture
 
 # Load environment variables
 load_dotenv()
@@ -34,6 +35,7 @@ config.set_main_option("sqlalchemy.url", os.environ["SYNC_DATABASE_URL"])
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
+print("Available tables:", SQLModel.metadata.tables.keys())
 # Set SQLModel metadata as target
 target_metadata = SQLModel.metadata
 
