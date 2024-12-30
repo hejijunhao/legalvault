@@ -5,6 +5,7 @@ import asyncio
 from pathlib import Path
 from sqlalchemy import text
 from typing import Optional
+from sqlalchemy import select  # Added this import
 
 # Add project root to path
 current_dir = Path(__file__).resolve()
@@ -26,6 +27,7 @@ async def test_database_connection() -> bool:
             print(f"Database connection failed: {str(e)}")
             return False
 
+
 async def initialize_receive_email():
     if not await test_database_connection():
         raise Exception("Database connection test failed")
@@ -33,22 +35,35 @@ async def initialize_receive_email():
     async with get_session() as session:
         try:
             print("Successfully got database session")
-            stmt = text("SELECT * FROM abilities WHERE name = 'receive_email'")
+
+            # Get or create base ability
+            stmt = select(Ability).where(Ability.name == 'receive_email')
             result = await session.execute(stmt)
-            base_ability = result.first()
+            base_ability = result.scalar_one_or_none()
 
             if not base_ability:
                 base_ability = Ability(
                     name="receive_email",
                     description="Handles inbound emails and routes them for processing",
-                    version="1.0.0",
-                    enabled=True
+                    structure={},  # You can add structure if needed
+                    requirements={},  # You can add requirements if needed
+                    meta_info={}  # You can add meta_info if needed
                 )
                 session.add(base_ability)
                 await session.commit()
+                await session.refresh(base_ability)
                 print(f"Created base receive_email ability with id {base_ability.id}")
             else:
-                print(f"Found existing receive_email ability")
+                print(f"Found existing receive_email ability with id {base_ability.id}")
+
+            # Initialize operations using the initializer
+            initializer = ReceiveEmailInitializer(session)
+            operation_ids = await initializer.initialize_operations(base_ability.id)
+
+            # Log results
+            print(f"Successfully initialized {len(operation_ids)} operations")
+            for op_name, op_id in operation_ids.items():
+                print(f"- {op_name}: {op_id}")
 
             await session.commit()
 
@@ -56,6 +71,7 @@ async def initialize_receive_email():
             print(f"Error during initialization: {str(e)}")
             await session.rollback()
             raise
+
 
 def check_environment():
     required_vars = ['DATABASE_URL']
@@ -68,8 +84,10 @@ def check_environment():
     print("All required environment variables found")
     return True
 
+
 if __name__ == "__main__":
     from dotenv import load_dotenv
+
     load_dotenv()
 
     if not check_environment():
