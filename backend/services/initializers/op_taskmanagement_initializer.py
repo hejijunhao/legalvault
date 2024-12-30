@@ -1,6 +1,6 @@
 # backend/services/initializers/op_taskmanagement_initializer.py
 from typing import Dict, Optional
-from sqlmodel.ext.asyncio.session import AsyncSession
+from sqlalchemy.orm import Session
 from sqlalchemy import select
 from logging import getLogger
 
@@ -10,7 +10,7 @@ from backend.models.domain.operations_taskmanagement import TASK_OPERATIONS, Tas
 logger = getLogger(__name__)
 
 class TaskManagementInitializer:
-    def __init__(self, session: AsyncSession):
+    def __init__(self, session: Session):
         self.session = session
 
     def _create_operation(self, ability_id: int, operation: TaskOperation) -> TaskManagementAbility:
@@ -38,7 +38,7 @@ class TaskManagementInitializer:
             permissions=operation.permissions
         )
 
-    async def initialize_operations(self, ability_id: int) -> Dict[str, int]:
+    def initialize_operations(self, ability_id: int) -> Dict[str, int]:
         """
         Initializes all task management operations for a given tech tree
 
@@ -53,12 +53,10 @@ class TaskManagementInitializer:
         try:
             for operation in TASK_OPERATIONS.values():
                 # Check if operation already exists
-                stmt = select(TaskManagementAbility).where(
+                existing = self.session.query(TaskManagementAbility).filter(
                     TaskManagementAbility.ability_id == ability_id,
                     TaskManagementAbility.operation_name == operation.operation_name
-                )
-                result = await self.session.execute(stmt)
-                existing = result.scalar_one_or_none()
+                ).first()
 
                 if existing:
                     logger.info(f"Operation {operation.operation_name} already exists")
@@ -68,19 +66,19 @@ class TaskManagementInitializer:
                 # Create new operation
                 db_operation = self._create_operation(ability_id, operation)
                 self.session.add(db_operation)
-                await self.session.flush()  # Get ID without committing
+                self.session.flush()
                 operation_ids[operation.operation_name] = db_operation.id
                 logger.info(f"Created operation {operation.operation_name}")
 
-            await self.session.commit()
+            self.session.commit()
             return operation_ids
 
         except Exception as e:
-            await self.session.rollback()
+            self.session.rollback()
             logger.error(f"Error initializing operations: {str(e)}")
             raise
 
-    async def update_operation(self, operation_name: str, updates: Dict) -> bool:
+    def update_operation(self, operation_name: str, updates: Dict) -> bool:
         """
         Updates an existing operation with new configuration
 
@@ -92,11 +90,9 @@ class TaskManagementInitializer:
             bool indicating success
         """
         try:
-            stmt = select(TaskManagementAbility).where(
+            operation = self.session.query(TaskManagementAbility).filter(
                 TaskManagementAbility.operation_name == operation_name
-            )
-            result = await self.session.execute(stmt)
-            operation = result.scalar_one_or_none()
+            ).first()
 
             if not operation:
                 logger.warning(f"Operation {operation_name} not found")
@@ -106,16 +102,16 @@ class TaskManagementInitializer:
                 if hasattr(operation, field):
                     setattr(operation, field, value)
 
-            await self.session.commit()
+            self.session.commit()
             logger.info(f"Updated operation {operation_name}")
             return True
 
         except Exception as e:
-            await self.session.rollback()
+            self.session.rollback()
             logger.error(f"Error updating operation {operation_name}: {str(e)}")
             raise
 
-    async def get_operation(self, operation_name: str) -> Optional[TaskManagementAbility]:
+    def get_operation(self, operation_name: str) -> Optional[TaskManagementAbility]:
         """
         Retrieves an operation by name
 
@@ -125,8 +121,6 @@ class TaskManagementInitializer:
         Returns:
             TaskManagementAbility if found, None otherwise
         """
-        stmt = select(TaskManagementAbility).where(
+        return self.session.query(TaskManagementAbility).filter(
             TaskManagementAbility.operation_name == operation_name
-        )
-        result = await self.session.execute(stmt)
-        return result.scalar_one_or_none()
+        ).first()

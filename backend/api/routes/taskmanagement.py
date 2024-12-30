@@ -1,9 +1,10 @@
 # backend/api/routes/taskmanagement.py
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Session
-from typing import List
+from typing import List, Optional
 
 from core.database import get_session
+from core.auth import get_current_user
 from models.schemas.ability_taskmanagement import (
     TaskManagementAbilityCreate,
     TaskManagementAbilityUpdate,
@@ -16,10 +17,10 @@ router = APIRouter(prefix="/api/v1/tasks", tags=["tasks"])
 
 
 @router.post("/", response_model=dict)
-async def create_task(
+def create_task(
         task_data: dict,
         session: Session = Depends(get_session),
-        current_user_id: int = Depends(get_current_user)  # TODO: Implement auth dependency
+        current_user_id: int = Depends(get_current_user)
 ):
     executor = TaskManagementExecutor(session)
     workflow = TaskManagementWorkflow(executor)
@@ -30,7 +31,7 @@ async def create_task(
         user_id=current_user_id
     )
 
-    result = await workflow.execute_workflow(context)
+    result = workflow.execute_workflow(context)
     if result["status"] == "error":
         raise HTTPException(status_code=400, detail=result["error"])
 
@@ -38,10 +39,10 @@ async def create_task(
 
 
 @router.get("/{task_id}", response_model=dict)
-async def get_task(
+def get_task(
         task_id: int,
         session: Session = Depends(get_session),
-        current_user_id: int = Depends(get_current_user)  # TODO: Implement auth dependency
+        current_user_id: int = Depends(get_current_user)
 ):
     executor = TaskManagementExecutor(session)
     workflow = TaskManagementWorkflow(executor)
@@ -52,7 +53,7 @@ async def get_task(
         user_id=current_user_id
     )
 
-    result = await workflow.execute_workflow(context)
+    result = workflow.execute_workflow(context)
     if result["status"] == "error":
         raise HTTPException(status_code=400, detail=result["error"])
 
@@ -60,13 +61,30 @@ async def get_task(
 
 
 @router.get("/", response_model=dict)
-async def list_tasks(
-        status: str = None,
-        priority: str = None,
-        page: int = 1,
-        page_size: int = 20,
+def list_tasks(
+        status: Optional[str] = Query(
+            None, 
+            enum=["pending", "in_progress", "completed"],
+            description="Filter tasks by status"
+        ),
+        priority: Optional[str] = Query(
+            None, 
+            enum=["low", "medium", "high"],
+            description="Filter tasks by priority"
+        ),
+        page: int = Query(
+            default=1, 
+            ge=1,
+            description="Page number"
+        ),
+        page_size: int = Query(
+            default=20, 
+            ge=1, 
+            le=100,
+            description="Number of items per page"
+        ),
         session: Session = Depends(get_session),
-        current_user_id: int = Depends(get_current_user)  # TODO: Implement auth dependency
+        current_user_id: int = Depends(get_current_user)
 ):
     executor = TaskManagementExecutor(session)
     workflow = TaskManagementWorkflow(executor)
@@ -82,7 +100,7 @@ async def list_tasks(
         user_id=current_user_id
     )
 
-    result = await workflow.execute_workflow(context)
+    result = workflow.execute_workflow(context)
     if result["status"] == "error":
         raise HTTPException(status_code=400, detail=result["error"])
 
