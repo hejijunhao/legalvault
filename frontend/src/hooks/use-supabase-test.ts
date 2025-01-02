@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { supabase, handleSupabaseError } from '@/lib/supabase'
+import { supabase } from '@/lib/supabase'
 
 export const useSupabaseTest = () => {
   const [isConnected, setIsConnected] = useState<boolean | null>(null)
@@ -8,7 +8,7 @@ export const useSupabaseTest = () => {
   useEffect(() => {
     const testConnection = async () => {
       try {
-        const { data, error } = await supabase.from('virtual_paralegals').select('id').limit(1)
+        const { data: _, error } = await supabase.from('virtual_paralegals').select('id').limit(1)
 
         if (error) {
           throw error
