@@ -1,5 +1,5 @@
 import React from 'react';
-import { Card, Title, Text, BarList, Metric, Flex } from '@tremor/react';
+import { Card, Title, Text } from '@tremor/react';
 
 interface WorkflowStep {
   type: string;
