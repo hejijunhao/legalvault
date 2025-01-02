@@ -1,4 +1,5 @@
 // app/paralegal/page.tsx
+
 "use client"
 
 import { Scale } from 'lucide-react'
