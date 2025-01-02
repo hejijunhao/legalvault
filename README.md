@@ -1,4 +1,49 @@
 
+**TECH STACK**
+
+Frontend Layer
+* Framework: Next.js (React)
+* Language: TypeScript
+* UI Components: Tremor UI
+* Styling: Tailwind CSS
+* State/Data Management: Direct Supabase client integration
+
+Backend Layer
+* Framework: FastAPI (Python)
+* Core Services:
+   * LangChain for AI orchestration
+   * HuggingFace for AI models
+   * Workflow tracking service
+
+Data Layer
+* Database: Supabase (PostgreSQL)
+* Authentication: Supabase Auth
+* Vectorisation/Embedding: Supabase, Pinecone [in future]
+* Conversation history: MongoDB [in future]
+* Caching: Redis [in future]
+* Real-time capabilities via WebSocket
+
+Infrastructure Layer
+* AWS EB for Backend
+* Vercel for Frontend
+* REST API endpoints with WebSocket support
+* AI/ML service orchestration
+
+Development Layer
+* Type safety with TypeScript & Pydantic
+* Database: SQLModel/Alembic migrations, Supabase Dashboard
+* API: FastAPI CRUD endpoints
+* Error handling & fallback strategies
+* Custom React hooks
+* Logging & caching utilities
+
+Database Structure
+* User -> VirtualParalegal relationship (bi-directional)
+* VirtualParalegal -> Abilities -> UniqueAbility hierarchy
+* First ability: TaskManagementAbility (JSONB schemas/workflows)
+* SQLModel/PostgreSQL with validated Alembic migrations
+
+
 **APPLICATION ARCHITECTURE**
 
 LegalVault/
@@ -10,17 +55,29 @@ LegalVault/
 │   │   └── alembic.ini  # Alembic configuration file
 │   ├── api/             # API endpoints/routes
 │   │   └── routes/      # Routes directory
-│   │       └── taskmanagement.py  # TaskManagement routes
+│   │       ├── taskmanagement.py  # TaskManagement routes
+│   │       ├── receiveemail.py    # Email handling routes
+│   │       └── profile_pictures.py # Profile picture routes
 │   ├── core/            # Core application logic
+│   │   ├── __init__.py
 │   │   ├── database.py  # Supabase/Database setup
-│   │   └── llm.py       # LangChain/HuggingFace setup
+│   │   ├── orchestrator.py  # Main orchestrator logic
+│   │   ├── llm/         # LLM components
+│   │   │   ├── __init__.py
+│   │   │   ├── base.py  # Base LLM configurations
+│   │   │   ├── orchestrator.py  # Intent classification LLM
+│   │   │   └── abilities/      # Ability-specific LLM logic
+│   │   │       ├── __init__.py
+│   │   │       └── taskmanager.py
 │   ├── models/          # Data models layer
 │   │   ├── database/    # Database models (SQLModel)
 │   │   │   ├── __init__.py
 │   │   │   ├── ability.py
 │   │   │   ├── behaviour.py
 │   │   │   ├── paralegal.py
+│   │   │   ├── profile_picture.py
 │   │   │   ├── ability_taskmanagement.py
+│   │   │   ├── ability_receiveemail.py
 │   │   │   └── user.py
 │   │   ├── domain/      # Business logic models
 │   │   │   ├── __init__.py
@@ -28,34 +85,49 @@ LegalVault/
 │   │   │   ├── behaviour.py
 │   │   │   ├── paralegal.py
 │   │   │   ├── ability_taskmanagement.py
-│   │   │   ├── operations_taskmanagement.py  # Operation definitions
+│   │   │   ├── ability_receiveemail.py
+│   │   │   ├── operations_taskmanagement.py
+│   │   │   ├── operations_receiveemail.py
 │   │   │   └── user.py
 │   │   └── schemas/     # API schemas (Pydantic)
 │   │       ├── __init__.py
 │   │       ├── ability.py
 │   │       ├── behavior.py
 │   │       ├── paralegal.py
+│   │       ├── profile_picture.py
 │   │       ├── ability_taskmanagement.py
+│   │       ├── ability_receiveemail.py
 │   │       └── user.py
 │   ├── scripts/         # Scripts directory
-│   │   └── initialize_taskmanagement_abilities.py  # Initialization script
+│   │   ├── initialize_taskmanagement_abilities.py
+│   │   ├── initialize_receiveemail_abilities.py
+│   │   └── initialize_profile_pictures.py
 │   ├── services/        # Business logic services
 │   │   ├── __init__.py
 │   │   ├── initializers/  # Operation initializers
 │   │   │   ├── __init__.py
-│   │   │   └── op_taskmanagement_initializer.py
+│   │   │   ├── op_taskmanagement_initializer.py
+│   │   │   └── op_receiveemail_initializer.py
 │   │   ├── executors/   # Executors directory
 │   │   │   ├── __init__.py
-│   │   │   └── taskmanagement_executor.py  # TaskManagement executor
+│   │   │   ├── taskmanagement_executor.py
+│   │   │   └── receiveemail_executor.py
 │   │   ├── workflow/    # Workflow directory
 │   │   │   ├── __init__.py
-│   │   │   └── taskmanagement_workflow.py  # TaskManagement workflow
+│   │   │   ├── taskmanagement_workflow.py
+│   │   │   └── receiveemail_workflow.py
 │   │   └── workflow_tracker.py
+│   ├── tests/           # Test directory
+│   │   ├── __init__.py
+│   │   ├── conftest.py  # pytest configuration
+│   │   ├── test_database.py
+│   │   └── test_models.py
 │   ├── utils/           # Utility functions
 │   │   ├── cache.py     # Caching utilities
 │   │   ├── fallback.py  # Fallback strategies
 │   │   └── logging.py   # Basic monitoring
 │   ├── .env             # Environment variables
+│   ├── alembic.ini      # Alembic configuration
 │   ├── __init__.py
 │   ├── main.py         # FastAPI entry point
 │   └── requirements.txt
@@ -64,6 +136,12 @@ LegalVault/
 │   ├── public/
 │   │   ├── fonts/
 │   │   └── images/
+│   │       └── vp/
+│   │           ├── professional.png
+│   │           ├── casual.png
+│   │           ├── modern.png
+│   │           ├── traditional.png
+│   │           └── creative.png
 │   ├── src/
 │   │   ├── app/
 │   │   ├── components/
