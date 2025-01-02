@@ -12,7 +12,10 @@ interface WorkflowDashboardProps {
   result: string;
 }
 
-export default function WorkflowDashboard({ steps, result }: WorkflowDashboardProps) {
+export default function WorkflowDashboard({
+  steps,
+  result,
+}: WorkflowDashboardProps) {
   return (
     <Card className="max-w-4xl mx-auto mt-4">
       <Title>Workflow Execution</Title>
@@ -26,7 +29,9 @@ export default function WorkflowDashboard({ steps, result }: WorkflowDashboardPr
                 step.status === 'completed' ? 'bg-green-500' : 'bg-blue-500'
               }`}
             />
-            <Text>{step.type} - {step.status}</Text>
+            <Text>
+              {step.type} - {step.status}
+            </Text>
             <Text className="text-gray-500">{step.timestamp}</Text>
           </div>
         ))}
