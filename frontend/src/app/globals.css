@@ -5,6 +5,13 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  --cold-grey: 220 16% 61%;
+  --icon-primary: 171 59% 11%;
+  --selected: 225 12% 36%;
+  --black: 0 0% 11%;
+  --lv-lime: 97 70% 71%;
+  --border: 220 14% 91%;
+  --background-2: 222 47% 11%;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -16,6 +23,6 @@
 
 body {
   color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  background: linear-gradient(247deg, #EFF2F5 0%, #E3E7EB 50%, #D9DEE3 100%);
+  font-family: Inter, Arial, Helvetica, sans-serif;
 }
