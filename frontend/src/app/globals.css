@@ -26,3 +26,11 @@ body {
   background: linear-gradient(247deg, #EFF2F5 0%, #E3E7EB 50%, #D9DEE3 100%);
   font-family: Inter, Arial, Helvetica, sans-serif;
 }
+
+@font-face {
+  font-family: 'Inter';
+  src: url('/fonts/Inter-Regular.woff2') format('woff2'),
+  url('/fonts/Inter-Regular.woff') format('woff');
+  font-weight: 400;
+  font-style: normal;
+}
