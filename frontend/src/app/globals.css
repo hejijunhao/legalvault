@@ -2,6 +2,18 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Import fonts */
+@import url('https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital@1&display=swap');
+
+@font-face {
+  font-family: 'Inter';
+  src: url('/fonts/Inter-Regular.woff2') format('woff2'),
+  url('/fonts/Inter-Regular.woff') format('woff');
+  font-weight: 400;
+  font-style: normal;
+}
+
+/* Root variables */
 :root {
   --background: #ffffff;
   --foreground: #171717;
@@ -21,16 +33,22 @@
   }
 }
 
+/* Global styles */
 body {
   color: var(--foreground);
   background: linear-gradient(247deg, #EFF2F5 0%, #E3E7EB 50%, #D9DEE3 100%);
   font-family: Inter, Arial, Helvetica, sans-serif;
 }
 
-@font-face {
-  font-family: 'Inter';
-  src: url('/fonts/Inter-Regular.woff2') format('woff2'),
-  url('/fonts/Inter-Regular.woff') format('woff');
-  font-weight: 400;
-  font-style: normal;
+/* Utility classes */
+.search-input {
+  font-family: 'Libre Baskerville', serif;
+}
+
+.text-shadow-sm {
+  text-shadow: 0px 4px 4px rgba(52, 52, 52, 0.25);
+}
+
+.text-shadow-xs {
+  text-shadow: 0px 4px 4px rgba(52, 52, 52, 0.15);
 }
