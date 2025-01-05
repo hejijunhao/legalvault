@@ -1,7 +1,7 @@
 // src/components/workspace/reminders.tsx
 
 import { Card, CardTitle } from "@/components/ui/card"
-import { Clock, Bell } from 'lucide-react'
+import { Bell } from 'lucide-react'
 
 const reminders = [
   { id: 1, title: "Review Gemini pitchdeck", time: "Today 6pm", urgent: true },

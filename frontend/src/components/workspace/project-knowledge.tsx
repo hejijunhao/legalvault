@@ -9,7 +9,7 @@ export function ProjectKnowledge() {
         PROJECT GREENBRIDGE
       </CardTitle>
       <p className="flex-1 text-[13px] font-normal tracking-[-0.39px] text-[#111827]">
-        The merger of TerraLink Construction and EcoBuild Innovations to form TerraEco Holdings Pte Ltd is a strategic response to the growing emphasis on sustainable construction in Singapore and Southeast Asia. TerraLink's extensive industry experience and EcoBuild's innovative green technologies are united to create a company positioned as a leader in sustainable building practices.
+        The merger of TerraLink Construction and EcoBuild Innovations to form TerraEco Holdings Pte Ltd is a strategic response to the growing emphasis on sustainable construction in Singapore and Southeast Asia. TerraLink&apos;s extensive industry experience and EcoBuild&apos;s innovative green technologies are united to create a company positioned as a leader in sustainable building practices.
       </p>
     </Card>
   )
