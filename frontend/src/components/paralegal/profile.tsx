@@ -11,7 +11,7 @@ interface ProfileProps {
 export function Profile({ name, email }: ProfileProps) {
   return (
     <div className="relative h-[674px] w-[412px] flex-shrink-0">
-      <Card className="h-full w-full overflow-hidden rounded-[22.547px] border-2 border-white/65 bg-[#8CFFF8]">
+      <Card className="h-full w-full overflow-hidden rounded-[22.547px]">
         <div className="relative h-full w-full">
           {/* Background Pattern */}
           <div
@@ -26,8 +26,8 @@ export function Profile({ name, email }: ProfileProps) {
           {/* VP Profile Image */}
           <div className="absolute inset-0">
             <Image
-              src="/images/vp-background-pattern.svg"
-              alt="Virtual Paralegal Profile"
+              src="/images/vp-robert-mcnamara.png"
+              alt="Virtual Paralegal Robert McNamara"
               width={412}
               height={674}
               className="h-full w-full object-cover"
