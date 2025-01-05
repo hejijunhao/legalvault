@@ -19,9 +19,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-    <body className={`${inter.className} min-h-screen bg-gray-50`}>
+    <body className={inter.className}>
     <MainHeader />
-    <main className="container mx-auto px-4 py-8">{children}</main>
+    <main className="mx-auto max-w-[1440px] px-4">{children}</main>
     </body>
     </html>
   )

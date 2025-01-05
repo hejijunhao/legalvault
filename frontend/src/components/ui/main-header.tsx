@@ -17,7 +17,7 @@ export function MainHeader() {
 
   return (
     <header className="sticky top-0 z-50 w-full bg-transparent">
-      <div className="container mx-auto flex h-16 items-center justify-between px-4">
+      <div className="mx-auto flex h-16 max-w-[1440px] items-center justify-between px-4">
         <div className="flex items-center">
           <Link href="/" className="flex items-center space-x-2">
             <Image
@@ -75,4 +75,3 @@ export function MainHeader() {
     </header>
   )
 }
-
