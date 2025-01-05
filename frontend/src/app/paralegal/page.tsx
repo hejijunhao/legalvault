@@ -1,7 +1,5 @@
 // app/paralegal/page.tsx
 
-"use client"
-
 import { Profile } from "@/components/paralegal/profile"
 import { Abilities } from "@/components/paralegal/abilities"
 import { Behaviours } from "@/components/paralegal/behaviours"
