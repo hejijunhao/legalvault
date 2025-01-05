@@ -21,7 +21,7 @@ export function MainHeader() {
         <div className="flex items-center">
           <Link href="/" className="flex items-center space-x-2">
             <Image
-              src="/placeholder.svg"
+              src="/images/legalvault-logo.svg"
               alt="LegalVault Logo"
               width={32}
               height={32}
