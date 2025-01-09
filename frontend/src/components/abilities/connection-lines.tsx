@@ -16,7 +16,6 @@ interface ConnectionLinesProps {
 }
 
 export function ConnectionLines({ abilities }: ConnectionLinesProps) {
-  const firstOrderNodes = abilities.filter(a => a.id !== "core" && a.children?.length > 0)
   const radius = 220 // Radius of the circle connecting first order nodes
 
   return (

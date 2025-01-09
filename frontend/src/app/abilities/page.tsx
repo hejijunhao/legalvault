@@ -1,4 +1,4 @@
-// src/app/abilities.page.tsx
+// src/app/abilities/page.tsx
 
 "use client"
 
@@ -27,7 +27,7 @@ export default function AbilitiesPage() {
         <div className="mx-auto max-w-5xl">
           <h1 className="mb-2 text-center text-2xl font-bold text-[#1C1C1C]">VP Abilities Overview</h1>
           <p className="mb-8 text-center text-sm text-[#525766]">
-            Unlock and customise your Virtual Paralegal's capabilities through our evolving skill tree.
+            Unlock and customise your Virtual Paralegal&apos;s capabilities through our evolving skill tree.
           </p>
           <div className="aspect-square w-full">
             <AbilityTree

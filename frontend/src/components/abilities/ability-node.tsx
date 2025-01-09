@@ -64,11 +64,6 @@ export function AbilityNode({ ability, onClick }: AbilityNodeProps) {
           ${isCore ? "text-sm" : isMainBranch ? "text-xs" : "text-[10px]"}
         `}
       >
-        {ability.name.split(' ').map((word, index, array) => (
-          <tspan key={index} x="0" dy={index ? "1.2em" : 0}>
-            {word}
-          </tspan>
-        ))}
       </text>
     </g>
   )
