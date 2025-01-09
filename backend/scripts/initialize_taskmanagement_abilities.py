@@ -12,9 +12,9 @@ current_dir = Path(__file__).resolve()
 project_root = str(current_dir.parent.parent.parent)
 sys.path.append(project_root)
 
-from backend.core.database import get_session
-from backend.models.database.ability import Ability
-from backend.services.initializers.op_taskmanagement_initializer import TaskManagementInitializer
+from core.database import get_session
+from models.database.ability import Ability
+from services.initializers.op_taskmanagement_initializer import TaskManagementInitializer
 
 
 def test_database_connection() -> bool:

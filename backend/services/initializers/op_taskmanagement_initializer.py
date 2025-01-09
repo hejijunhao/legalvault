@@ -4,8 +4,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select
 from logging import getLogger
 
-from backend.models.database.ability_taskmanagement import TaskManagementAbility
-from backend.models.domain.operations_taskmanagement import TASK_OPERATIONS, TaskOperation
+from models.database.ability_taskmanagement import TaskManagementAbility
+from models.domain.operations_taskmanagement import TASK_OPERATIONS, TaskOperation
 
 logger = getLogger(__name__)
 

@@ -14,12 +14,13 @@ from dotenv import load_dotenv
 from sqlmodel import SQLModel
 
 #models
-from backend.models.database.user import User
-from backend.models.database.paralegal import VirtualParalegal
-from backend.models.database.ability import Ability
-from backend.models.database.ability_taskmanagement import TaskManagementAbility
-from backend.models.database.ability_receive_email import ReceiveEmailAbility
-from backend.models.database.profile_picture import VPProfilePicture
+from models.database.user import User
+from models.database.paralegal import VirtualParalegal
+from models.database.ability import Ability
+from models.database.ability_taskmanagement import TaskManagementAbility
+from models.database.ability_receive_email import ReceiveEmailAbility
+from models.database.profile_picture import VPProfilePicture
+from models.database.behaviour import Behaviour, AbilityBehaviour
 
 # Load environment variables
 load_dotenv()
