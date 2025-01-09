@@ -44,6 +44,9 @@ psycopg2-binary==2.9.10
 pydantic==2.10.3
 pydantic_core==2.27.1
 pypika-tortoise==0.3.2
+pytest==8.3.4
+pytest-asyncio==0.25.2
+pytest-cov==6.0.0
 python-dateutil==2.9.0.post0
 python-dotenv==1.0.1
 python-multipart==0.0.19
