@@ -21,6 +21,7 @@ from models.database.ability_taskmanagement import TaskManagementAbility
 from models.database.ability_receive_email import ReceiveEmailAbility
 from models.database.profile_picture import VPProfilePicture
 from models.database.behaviour import Behaviour, AbilityBehaviour
+from models.database.longterm_memory.self_identity import SelfIdentity
 
 # Load environment variables
 load_dotenv()
