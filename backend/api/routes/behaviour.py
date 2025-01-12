@@ -43,3 +43,12 @@ async def get_ability_behaviours(
     """
     behaviours = await workflow.get_ability_behaviours(ability_id)
     return behaviours
+
+@router.get("/vp/{vp_id}", response_model=List[BehaviourRead])
+async def get_vp_behaviours(
+    vp_id: UUID,
+    workflow: BehaviourWorkflow = Depends(BehaviourWorkflow)
+):
+    """Get all behaviours associated with a VP"""
+    behaviours = await workflow.get_vp_behaviours(vp_id)
+    return behaviours

@@ -43,3 +43,19 @@ class AbilityBehaviour(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
+class BehaviourVP(SQLModel, table=True):
+    __tablename__ = "behaviour_vps"
+
+    vp_id: UUID = Field(default=None, sa_column=Column(
+        ForeignKey("virtual_paralegals.id", ondelete="CASCADE"),
+        primary_key=True,
+        nullable=False
+    ))
+    behaviour_id: UUID = Field(default=None, sa_column=Column(
+        ForeignKey("behaviours.id", ondelete="CASCADE"),
+        primary_key=True,
+        nullable=False
+    ))
+    is_active: bool = Field(default=True)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)

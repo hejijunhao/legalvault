@@ -53,3 +53,16 @@ class BehaviourWorkflow:
         except Exception as e:
             print(f"Error fetching ability behaviours: {e}")
             return []
+
+    async def get_vp_behaviours(self, vp_id: UUID) -> List[BehaviourDomain]:
+        """Get all behaviours associated with a VP"""
+        try:
+            result = await self.supabase.table('behaviour_vps') \
+                .select('behaviours!inner(*)') \
+                .eq('vp_id', str(vp_id)) \
+                .eq('is_active', True) \
+                .execute()
+            return [BehaviourDomain.from_db(item['behaviours']) for item in result.data]
+        except Exception as e:
+            print(f"Error fetching VP behaviours: {e}")
+            return []

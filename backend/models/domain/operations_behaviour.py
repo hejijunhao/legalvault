@@ -12,6 +12,11 @@ class BehaviourOperationInput(BaseModel):
     behaviour_id: UUID
 
 
+class BehaviourVPOperationInput(BaseModel):
+    vp_id: UUID
+    behaviour_id: UUID
+
+
 class BehaviourOperationOutput(BaseModel):
     success: bool
     message: str
@@ -87,4 +92,51 @@ class BehaviourOperations:
             return BehaviourOperationOutput(
                 success=False,
                 message=f"Failed to update behaviour status: {str(e)}"
+            )
+
+    @staticmethod
+    async def apply_behaviour_to_vp(input_data: BehaviourVPOperationInput) -> BehaviourOperationOutput:
+        """Apply a behaviour to a VP"""
+        try:
+            supabase = get_supabase_client()
+            data = {
+                'vp_id': str(input_data.vp_id),
+                'behaviour_id': str(input_data.behaviour_id),
+                'is_active': True
+            }
+
+            result = await supabase.table('behaviour_vps').insert(data).execute()
+
+            return BehaviourOperationOutput(
+                success=True,
+                message="Behaviour successfully applied to VP",
+                behaviour_id=input_data.behaviour_id
+            )
+        except Exception as e:
+            return BehaviourOperationOutput(
+                success=False,
+                message=f"Failed to apply behaviour: {str(e)}"
+            )
+
+    @staticmethod
+    async def remove_behaviour_from_vp(input_data: BehaviourVPOperationInput) -> BehaviourOperationOutput:
+        """Remove a behaviour from a VP"""
+        try:
+            supabase = get_supabase_client()
+
+            result = await supabase.table('behaviour_vps') \
+                .delete() \
+                .eq('vp_id', str(input_data.vp_id)) \
+                .eq('behaviour_id', str(input_data.behaviour_id)) \
+                .execute()
+
+            return BehaviourOperationOutput(
+                success=True,
+                message="Behaviour successfully removed from VP",
+                behaviour_id=input_data.behaviour_id
+            )
+        except Exception as e:
+            return BehaviourOperationOutput(
+                success=False,
+                message=f"Failed to remove behaviour: {str(e)}"
             )
