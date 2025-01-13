@@ -24,6 +24,7 @@ from models.database.behaviour import Behaviour, AbilityBehaviour, BehaviourVP
 from models.database.longterm_memory.self_identity import SelfIdentity
 from models.database.longterm_memory.global_knowledge import GlobalKnowledge
 from models.database.longterm_memory.educational_knowledge import EducationalKnowledge
+from models.database.longterm_memory.conversational_history import ConversationalHistory
 
 # Load environment variables
 load_dotenv()
