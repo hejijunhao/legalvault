@@ -1,3 +1,5 @@
+# models/database/user.py
+
 from sqlmodel import SQLModel, Field
 from typing import Optional
 from uuid import UUID, uuid4
