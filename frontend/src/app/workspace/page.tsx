@@ -3,17 +3,36 @@
 import { Notebook } from "@/components/workspace/notebook"
 import { Tasks } from "@/components/workspace/tasks"
 import { Reminders } from "@/components/workspace/reminders"
-import { ProjectKnowledge } from "@/components/workspace/project-knowledge"
+import { Knowledge } from "@/components/workspace/project-knowledge"
+import { ArrowLeft } from 'lucide-react'
+import Link from 'next/link'
 
 export default function WorkspacePage() {
   return (
     <div className="mx-auto w-full max-w-[1280px] space-y-6 py-6">
+      {/* Back Navigation and Title */}
+      <div className="flex flex-col gap-4">
+        <div className="flex justify-between items-center self-stretch">
+          <Link
+            href="/workspaces"
+            className="flex items-center gap-1.5 rounded-[5px] px-2 py-1 hover:bg-black/5"
+          >
+            <ArrowLeft className="h-3 w-3 text-[#1C1C1C]" />
+            <span className="text-xs text-[#1C1C1C]">All Workspaces</span>
+          </Link>
+        </div>
+        <h1 className="flex h-11 flex-1 flex-col justify-center text-[32px] font-normal italic leading-6 text-[#111827] font-['Libre_Baskerville']">
+          Project Greenbridge
+        </h1>
+      </div>
+
+      {/* Content Grid */}
       <div className="grid gap-6 md:grid-cols-3">
         <Notebook />
         <Tasks />
         <Reminders />
       </div>
-      <ProjectKnowledge />
+      <Knowledge />
     </div>
   )
 }
