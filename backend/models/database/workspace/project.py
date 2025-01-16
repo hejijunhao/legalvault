@@ -5,7 +5,7 @@ from enum import Enum
 from typing import List, Optional
 from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import UUID
-from sqlmodel import Field, SQLModel, JSON, Column, UniqueConstraint, Index, ForeignKey
+from sqlmodel import Field, SQLModel, JSON, Column, UniqueConstraint, Index, ForeignKey, Relationship
 
 
 class ProjectStatus(str, Enum):
@@ -143,6 +143,16 @@ class Project(SQLModel, table=True):
     summary_updated_at: datetime = Field(
         nullable=True,
         description="Timestamp when the project summary was last updated"
+    )
+
+    # Relationships
+    notebook: Optional["Notebook"] = Relationship(
+        back_populates="project",
+        sa_relationship_kwargs={
+            "uselist": False,  # One-to-one relationship
+            "cascade": "all, delete-orphan",  # Cascade deletion
+            "lazy": "selectin"  # Eager loading for better performance
+        }
     )
 
     def __repr__(self) -> str:

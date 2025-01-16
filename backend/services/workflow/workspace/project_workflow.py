@@ -12,6 +12,10 @@ from models.domain.workspace.operations_project import (
     ProjectOperation,
     validate_operation_constraints
 )
+from models.domain.workspace.operations_notebook import (
+    NotebookOperation,
+    validate_operation_constraints as validate_notebook_operation
+)
 from models.schemas.workspace.project import (
     ProjectCreate,
     ProjectUpdate,
@@ -21,6 +25,7 @@ from models.schemas.workspace.project import (
     ProjectListResponse
 )
 from services.executors.workspace.project_executor import ProjectExecutor
+from services.workflow.workspace.notebook_workflow import NotebookWorkflow
 from services.workflow.workflow_tracker import WorkflowTracker
 
 
@@ -34,20 +39,22 @@ class ProjectWorkflow:
     Orchestrates project-related workflows, handling operation validation,
     execution tracking, and coordination between services.
     """
+
     def __init__(
-        self,
-        session: Session = Depends(get_session),
-        tracker: Optional[WorkflowTracker] = None
+            self,
+            session: Session = Depends(get_session),
+            tracker: Optional[WorkflowTracker] = None
     ):
         self.session = session
         self.executor = ProjectExecutor(session)
+        self.notebook_workflow = NotebookWorkflow(session)
         self.tracker = tracker or WorkflowTracker()
 
     async def _handle_workflow_error(
-        self,
-        workflow_id: Optional[str],
-        error: Exception,
-        operation: ProjectOperation
+            self,
+            workflow_id: Optional[str],
+            error: Exception,
+            operation: ProjectOperation
     ) -> None:
         """Handles workflow errors consistently"""
         if workflow_id:
@@ -65,10 +72,10 @@ class ProjectWorkflow:
             raise HTTPException(status_code=500, detail="Internal workflow error")
 
     async def create_project(
-        self, data: ProjectCreate, user_id: UUID, user_permissions: List[str]
+            self, data: ProjectCreate, user_id: UUID, user_permissions: List[str]
     ) -> ProjectResponse:
         """
-        Workflow for project creation.
+        Workflow for project creation. Optionally creates associated notebook.
         """
         if not validate_operation_constraints(ProjectOperation.CREATE_PROJECT, user_permissions):
             raise HTTPException(status_code=403, detail="Insufficient permissions")
@@ -81,7 +88,28 @@ class ProjectWorkflow:
                 metadata={"project_name": data.name}
             )
 
+            # Create project
             project = await self.executor.create_project(data, user_id)
+
+            # Create notebook if requested
+            if data.create_notebook:
+                if not validate_notebook_operation(NotebookOperation.CREATE_NOTEBOOK, user_permissions):
+                    raise HTTPException(status_code=403, detail="Insufficient permissions for notebook creation")
+
+                notebook = await self.notebook_workflow.create_notebook(
+                    project.project_id,
+                    user_id,
+                    user_permissions
+                )
+
+                # Update project with notebook information
+                project = await self.executor.update_notebook_status(
+                    project.project_id,
+                    notebook.notebook_id,
+                    {"is_archived": notebook.is_archived},
+                    user_id
+                )
+
             await self.tracker.complete_workflow(
                 workflow_id,
                 metadata={"project_id": str(project.project_id)}
@@ -93,11 +121,11 @@ class ProjectWorkflow:
             await self._handle_workflow_error(workflow_id, e, ProjectOperation.CREATE_PROJECT)
 
     async def update_project(
-        self,
-        project_id: UUID,
-        data: ProjectUpdate,
-        user_id: UUID,
-        user_permissions: List[str]
+            self,
+            project_id: UUID,
+            data: ProjectUpdate,
+            user_id: UUID,
+            user_permissions: List[str]
     ) -> ProjectResponse:
         """
         Workflow for project updates.
@@ -114,6 +142,19 @@ class ProjectWorkflow:
             )
 
             project = await self.executor.update_project(project_id, data, user_id)
+
+            # If project is being archived, ensure notebook is archived first
+            if data.status == ProjectStatus.ARCHIVED:
+                if project.notebook_id and not project.notebook_status.get("is_archived"):
+                    if not validate_notebook_operation(NotebookOperation.ARCHIVE_NOTEBOOK, user_permissions):
+                        raise HTTPException(status_code=403, detail="Insufficient permissions for notebook archival")
+
+                    await self.notebook_workflow.archive_notebook(
+                        project.notebook_id,
+                        user_id,
+                        user_permissions
+                    )
+
             await self.tracker.complete_workflow(workflow_id)
 
             return ProjectResponse.from_orm(project)
@@ -121,75 +162,14 @@ class ProjectWorkflow:
         except Exception as e:
             await self._handle_workflow_error(workflow_id, e, ProjectOperation.UPDATE_PROJECT)
 
-    async def update_knowledge(
-        self,
-        project_id: UUID,
-        data: ProjectKnowledgeUpdate,
-        user_id: UUID,
-        user_permissions: List[str]
-    ) -> ProjectResponse:
-        """
-        Workflow for updating project knowledge.
-        """
-        if not validate_operation_constraints(ProjectOperation.UPDATE_KNOWLEDGE, user_permissions):
-            raise HTTPException(status_code=403, detail="Insufficient permissions")
-
-        workflow_id = None
-        try:
-            workflow_id = await self.tracker.start_workflow(
-                operation=ProjectOperation.UPDATE_KNOWLEDGE,
-                user_id=user_id,
-                metadata={"project_id": str(project_id)}
-            )
-
-            project = await self.executor.update_knowledge(project_id, data, user_id)
-            await self.tracker.complete_workflow(
-                workflow_id,
-                metadata={"content_length": len(data.content)}
-            )
-
-            return ProjectResponse.from_orm(project)
-
-        except Exception as e:
-            await self._handle_workflow_error(workflow_id, e, ProjectOperation.UPDATE_KNOWLEDGE)
-
-    async def update_summary(
-        self,
-        project_id: UUID,
-        data: ProjectSummaryUpdate,
-        user_id: UUID,
-        user_permissions: List[str]
-    ) -> ProjectResponse:
-        """
-        Workflow for updating project summary.
-        """
-        if not validate_operation_constraints(ProjectOperation.UPDATE_SUMMARY, user_permissions):
-            raise HTTPException(status_code=403, detail="Insufficient permissions")
-
-        workflow_id = None
-        try:
-            workflow_id = await self.tracker.start_workflow(
-                operation=ProjectOperation.UPDATE_SUMMARY,
-                user_id=user_id,
-                metadata={"project_id": str(project_id)}
-            )
-
-            project = await self.executor.update_summary(project_id, data, user_id)
-            await self.tracker.complete_workflow(workflow_id)
-
-            return ProjectResponse.from_orm(project)
-
-        except Exception as e:
-            await self._handle_workflow_error(workflow_id, e, ProjectOperation.UPDATE_SUMMARY)
-
     async def archive_project(
-        self,
-        project_id: UUID,
-        user_id: UUID,
-        user_permissions: List[str]
+            self,
+            project_id: UUID,
+            user_id: UUID,
+            user_permissions: List[str]
     ) -> ProjectResponse:
         """
-        Workflow for archiving a project.
+        Workflow for archiving a project. Ensures notebook is archived first.
         """
         if not validate_operation_constraints(ProjectOperation.ARCHIVE_PROJECT, user_permissions):
             raise HTTPException(status_code=403, detail="Insufficient permissions")
@@ -202,11 +182,26 @@ class ProjectWorkflow:
                 metadata={"project_id": str(project_id)}
             )
 
+            project = await self.executor.get_project(project_id)
+
+            # Archive notebook if it exists
+            if project.notebook_id:
+                if not validate_notebook_operation(NotebookOperation.ARCHIVE_NOTEBOOK, user_permissions):
+                    raise HTTPException(status_code=403, detail="Insufficient permissions for notebook archival")
+
+                await self.notebook_workflow.archive_notebook(
+                    project.notebook_id,
+                    user_id,
+                    user_permissions
+                )
+
+            # Archive project
             project = await self.executor.update_status(
                 project_id,
                 ProjectStatus.ARCHIVED,
                 user_id
             )
+
             await self.tracker.complete_workflow(workflow_id)
 
             return ProjectResponse.from_orm(project)
@@ -214,29 +209,44 @@ class ProjectWorkflow:
         except Exception as e:
             await self._handle_workflow_error(workflow_id, e, ProjectOperation.ARCHIVE_PROJECT)
 
-    async def list_projects(
-        self,
-        user_id: UUID,
-        user_permissions: List[str],
-        status: Optional[ProjectStatus] = None,
-        practice_area: Optional[str] = None
-    ) -> List[ProjectListResponse]:
+    async def get_project_with_notebook(
+            self,
+            project_id: UUID,
+            user_id: UUID,
+            user_permissions: List[str]
+    ) -> ProjectResponse:
         """
-        Workflow for listing projects.
+        Retrieves project and its notebook details.
         """
-        if not validate_operation_constraints(ProjectOperation.LIST_PROJECTS, user_permissions):
+        if not validate_operation_constraints(ProjectOperation.GET_PROJECT, user_permissions):
             raise HTTPException(status_code=403, detail="Insufficient permissions")
 
         try:
-            projects = await self.executor.list_projects(
-                user_id,
-                status=status,
-                practice_area=practice_area
-            )
-            return [ProjectListResponse.from_orm(p) for p in projects]
+            project = await self.executor.get_project(project_id)
+
+            if project.notebook_id:
+                notebook = await self.notebook_workflow.get_notebook(
+                    project.notebook_id,
+                    user_id,
+                    user_permissions
+                )
+
+                # Update notebook status
+                project = await self.executor.update_notebook_status(
+                    project_id,
+                    notebook.notebook_id,
+                    {
+                        "is_archived": notebook.is_archived,
+                        "last_modified": notebook.updated_at,
+                        "has_content": bool(notebook.content)
+                    },
+                    user_id
+                )
+
+            return ProjectResponse.from_orm(project)
 
         except Exception as e:
             raise HTTPException(
                 status_code=500,
-                detail=f"Error listing projects: {str(e)}"
+                detail=f"Error retrieving project: {str(e)}"
             )

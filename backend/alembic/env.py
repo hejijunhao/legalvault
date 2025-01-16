@@ -27,6 +27,7 @@ from models.database.longterm_memory.educational_knowledge import EducationalKno
 from models.database.longterm_memory.conversational_history import ConversationalHistory
 from models.database.longterm_memory.actions_history import ActionsHistory
 from models.database.workspace.project import Project
+from models.database.workspace.notebook import Notebook
 
 # Load environment variables
 load_dotenv()

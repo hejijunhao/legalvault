@@ -1,7 +1,7 @@
 # services/executors/workspace/project_executor.py
 
 from datetime import datetime
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Any
 from uuid import UUID
 
 from sqlmodel import Session, select
@@ -90,6 +90,35 @@ class ProjectExecutor:
             await self.session.rollback()
             raise HTTPException(status_code=400, detail=str(e))
 
+    async def update_notebook_status(
+            self,
+            project_id: UUID,
+            notebook_id: UUID,
+            status: Dict[str, Any],
+            user_id: UUID
+    ) -> ProjectDomain:
+        """Updates project's notebook status information."""
+        try:
+            project = await self._get_project(project_id)
+
+            # Create domain model for business logic
+            domain_project = ProjectDomain(**project.dict())
+            domain_project.update_notebook_status(notebook_id, status, user_id)
+
+            # Update database model
+            project.notebook_id = notebook_id
+            project.notebook_status = status
+            project.modified_by = user_id
+            project.updated_at = datetime.utcnow()
+
+            await self.session.commit()
+            await self.session.refresh(project)
+
+            return ProjectDomain(**project.dict())
+        except Exception as e:
+            await self.session.rollback()
+            raise HTTPException(status_code=400, detail=str(e))
+
     async def update_summary(
             self, project_id: UUID, data: ProjectSummaryUpdate, user_id: UUID
     ) -> ProjectDomain:
@@ -117,10 +146,13 @@ class ProjectExecutor:
         try:
             project = await self._get_project(project_id)
 
-            # Validate status transition
-            if status == ProjectStatus.ARCHIVED and not ProjectDomain(**project.dict()).can_be_archived():
-                raise ValueError("Project cannot be archived in its current state")
+            # Create domain model for business logic
+            domain_project = ProjectDomain(**project.dict())
 
+            # Validate status transition through domain model
+            domain_project.update_status(status, user_id)
+
+            # Update database model
             project.status = status
             project.modified_by = user_id
             project.updated_at = datetime.utcnow()
@@ -152,6 +184,9 @@ class ProjectExecutor:
                 query = query.where(Project.status == status)
             if practice_area:
                 query = query.where(Project.practice_area == practice_area)
+
+            # Order by updated_at for consistency
+            query = query.order_by(Project.updated_at.desc())
 
             result = await self.session.execute(query)
             projects = result.scalars().all()

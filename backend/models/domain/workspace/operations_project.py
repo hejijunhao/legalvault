@@ -41,7 +41,7 @@ OPERATION_PERMISSIONS = {
     ProjectOperation.ARCHIVE_PROJECT: [ProjectPermission.ARCHIVE],
     ProjectOperation.ADD_TAGS: [ProjectPermission.UPDATE],
     ProjectOperation.REMOVE_TAGS: [ProjectPermission.UPDATE],
-    ProjectOperation.UPDATE_CONFIDENTIALITY: [ProjectPermission.MANAGE_CONFIDENTIALITY]
+    ProjectOperation.UPDATE_CONFIDENTIALITY: [ProjectPermission.MANAGE_CONFIDENTIALITY],
 }
 
 
@@ -58,3 +58,16 @@ def validate_operation_constraints(operation: ProjectOperation, user_permissions
     """
     required_permissions = OPERATION_PERMISSIONS[operation]
     return all(perm.value in user_permissions for perm in required_permissions)
+
+
+def get_required_permissions(operation: ProjectOperation) -> List[str]:
+    """
+    Gets list of required permissions for an operation.
+
+    Args:
+        operation: The operation to check
+
+    Returns:
+        List[str]: List of required permission strings
+    """
+    return [perm.value for perm in OPERATION_PERMISSIONS[operation]]

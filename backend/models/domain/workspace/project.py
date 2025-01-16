@@ -1,7 +1,7 @@
 # models/domain/workspace/project.py
 
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from uuid import UUID
 from fastapi import HTTPException
 from models.database.workspace.project import ProjectStatus, ConfidentialityLevel, ProjectKnowledge
@@ -33,7 +33,9 @@ class ProjectDomain:
             summary: Optional[str] = None,
             summary_updated_at: Optional[datetime] = None,
             created_at: Optional[datetime] = None,
-            updated_at: Optional[datetime] = None
+            updated_at: Optional[datetime] = None,
+            notebook_id: Optional[UUID] = None,
+            notebook_status: Optional[Dict[str, Any]] = None
     ):
         self.project_id = project_id
         self.name = name
@@ -49,6 +51,8 @@ class ProjectDomain:
         self.summary_updated_at = summary_updated_at
         self.created_at = created_at or datetime.utcnow()
         self.updated_at = updated_at or datetime.utcnow()
+        self.notebook_id = notebook_id
+        self.notebook_status = notebook_status or {}
 
     def _validate_active_state(self) -> None:
         """Validates if project is in an active state for modifications"""
@@ -106,6 +110,23 @@ class ProjectDomain:
         self.summary_updated_at = datetime.utcnow()
         self._update_modification_metadata(modified_by)
 
+    def update_notebook_status(self, notebook_id: UUID, status: Dict[str, Any], modified_by: UUID) -> None:
+        """
+        Updates notebook status information.
+
+        Args:
+            notebook_id: UUID of the associated notebook
+            status: Dictionary containing notebook status information
+            modified_by: UUID of the user making the modification
+
+        Raises:
+            ProjectStateError: If project is archived
+        """
+        self._validate_active_state()
+        self.notebook_id = notebook_id
+        self.notebook_status = status
+        self._update_modification_metadata(modified_by)
+
     def add_tags(self, new_tags: List[str], modified_by: UUID) -> None:
         """
         Adds new tags to the project.
@@ -114,7 +135,6 @@ class ProjectDomain:
             ProjectStateError: If project is archived
         """
         self._validate_active_state()
-        # Filter out empty or whitespace-only tags
         valid_tags = [tag.strip() for tag in new_tags if tag and tag.strip()]
         if valid_tags:
             self.tags = list(set(self.tags + valid_tags))
@@ -150,7 +170,8 @@ class ProjectDomain:
         return (
                 self.status == ProjectStatus.COMPLETED and
                 self.knowledge is not None and
-                self.summary is not None
+                self.summary is not None and
+                bool(self.notebook_status.get('is_archived', False))  # Ensure notebook is archived
         )
 
     def can_be_completed(self) -> bool:
@@ -158,7 +179,8 @@ class ProjectDomain:
         return (
                 self.status == ProjectStatus.ACTIVE and
                 self.knowledge is not None and  # Must have knowledge content
-                bool(self.tags)  # Must have at least one tag
+                bool(self.tags) and  # Must have at least one tag
+                self.notebook_id is not None  # Must have an associated notebook
         )
 
     def dict(self) -> dict:
@@ -177,5 +199,7 @@ class ProjectDomain:
             'summary': self.summary,
             'summary_updated_at': self.summary_updated_at,
             'created_at': self.created_at,
-            'updated_at': self.updated_at
+            'updated_at': self.updated_at,
+            'notebook_id': self.notebook_id,
+            'notebook_status': self.notebook_status
         }
