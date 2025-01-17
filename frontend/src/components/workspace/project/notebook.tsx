@@ -1,4 +1,4 @@
-// src/components/workspace/notebook.tsx
+// src/components/workspace/project/notebook.tsx
 
 import { Card, CardTitle } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"

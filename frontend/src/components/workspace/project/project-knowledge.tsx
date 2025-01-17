@@ -1,4 +1,4 @@
-// src/components/workspace/project-knowledge.tsx
+// src/components/workspace/project/project-knowledge.tsx
 
 "use client"
 

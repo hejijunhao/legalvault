@@ -1,4 +1,4 @@
-// src/components/workspaces/client-grid.tsx
+// src/components/workspace/client-grid.tsx
 
 import Image from "next/image"
 

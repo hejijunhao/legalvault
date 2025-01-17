@@ -1,4 +1,4 @@
-// src/components/workspaces/project-list.tsx
+// src/components/workspace/project-list.tsx
 
 "use client"
 
@@ -11,35 +11,35 @@ const projects = [
     name: "Project Greenbridge",
     status: "LIVE M&A DEAL",
     background: "from-[#9FE870]/20 to-[#BFE999]/20",
-    href: "/project-greenbridge"
+    href: "/workspace/project-greenbridge"
   },
   {
     id: 2,
     name: "Adams v. Sculley",
     status: "LIVE LITIGATION",
     background: "from-[#AF52DE]/20 to-[#E5A4FF]/20",
-    href: "/adams-v-sculley"
+    href: "/workspace/adams-v-sculley"
   },
   {
     id: 3,
     name: "Project Sparta",
     status: "LIVE M&A DEAL",
     background: "from-[#FF9B9B]/20 to-[#FFC4C4]/20",
-    href: "/project-sparta"
+    href: "/workspace/project-sparta"
   },
   {
     id: 4,
     name: "JCLim v. PHenley",
     status: "LIVE LITIGATION",
     background: "from-[#00C7BE]/20 to-[#7DEAE5]/20",
-    href: "/jclim-v-phenley"
+    href: "/workspace/jclim-v-phenley"
   },
   {
     id: 5,
     name: "Project Norse",
     status: "LIVE S&P DEAL",
     background: "from-[#93C5FD]/20 to-[#BFDBFE]/20",
-    href: "/project-norse"
+    href: "/workspace/project-norse"
   }
 ]
 

@@ -1,4 +1,4 @@
-// src/components/workspace/tasks.tsx
+// src/components/workspace/project/tasks.tsx
 
 import { Card, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"

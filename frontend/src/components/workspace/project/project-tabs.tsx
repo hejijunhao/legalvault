@@ -1,4 +1,4 @@
-// // src/components/workspace/project-tabs.tsx
+// // src/components/workspace/project/project-tabs.tsx
 
 "use client"
 

@@ -1,4 +1,4 @@
-// src/components/workspace/reminders.tsx
+// src/components/workspace/project/reminders.tsx
 
 import { Card, CardTitle } from "@/components/ui/card"
 import { Bell } from 'lucide-react'
