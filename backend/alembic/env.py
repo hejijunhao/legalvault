@@ -28,6 +28,7 @@ from models.database.longterm_memory.conversational_history import Conversationa
 from models.database.longterm_memory.actions_history import ActionsHistory
 from models.database.workspace.project import Project
 from models.database.workspace.notebook import Notebook
+from models.database.workspace.reminder import Reminder
 
 # Load environment variables
 load_dotenv()

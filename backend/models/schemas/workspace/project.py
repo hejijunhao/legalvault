@@ -5,6 +5,7 @@ from typing import List, Optional, Annotated, Dict, Any
 from uuid import UUID
 from pydantic import BaseModel, Field, validator, constr
 from models.database.workspace.project import ProjectStatus, ConfidentialityLevel, ProjectKnowledge
+from models.schemas.workspace.reminder import ReminderListResponse
 
 # Type definitions for validation
 TagType = constr(min_length=1, max_length=50)
@@ -33,7 +34,6 @@ class NotebookStatusSchema(BaseModel):
     is_archived: bool = False
     last_modified: datetime
     has_content: bool = False
-
 
 class ProjectCreate(BaseModel):
     """Schema for creating a new project"""
@@ -179,6 +179,8 @@ class ProjectResponse(BaseModel):
             }
         }
 
+    pending_reminders: Optional[List[ReminderListResponse]] = None
+    overdue_reminders: Optional[List[ReminderListResponse]] = None
 
 class ProjectListResponse(BaseModel):
     """Schema for project list responses"""

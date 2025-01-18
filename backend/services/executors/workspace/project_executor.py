@@ -9,6 +9,7 @@ from fastapi import HTTPException
 
 from models.database.workspace.project import Project, ProjectStatus, ProjectKnowledge
 from models.domain.workspace.project import ProjectDomain
+from models.domain.workspace.reminder import ReminderDomain
 from models.schemas.workspace.project import ProjectCreate, ProjectUpdate, ProjectKnowledgeUpdate, ProjectSummaryUpdate
 
 
@@ -165,10 +166,20 @@ class ProjectExecutor:
             await self.session.rollback()
             raise HTTPException(status_code=400, detail=str(e))
 
+
     async def get_project(self, project_id: UUID) -> ProjectDomain:
-        """Retrieves a project by ID."""
+        """Retrieves a project by ID with reminders."""
         project = await self._get_project(project_id)
-        return ProjectDomain(**project.dict())
+        domain_project = ProjectDomain(**project.dict())
+
+        # Load reminders if they exist
+        if project.reminders:
+            domain_project.reminders = [
+                ReminderDomain(**reminder.dict())
+                for reminder in project.reminders
+            ]
+
+        return domain_project
 
     async def list_projects(
             self,

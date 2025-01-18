@@ -24,6 +24,7 @@ from models.schemas.workspace.project import (
     ProjectResponse,
     ProjectListResponse
 )
+from models.schemas.workspace.reminder import ReminderListResponse
 from services.executors.workspace.project_executor import ProjectExecutor
 from services.workflow.workspace.notebook_workflow import NotebookWorkflow
 from services.workflow.workflow_tracker import WorkflowTracker
@@ -49,6 +50,20 @@ class ProjectWorkflow:
         self.executor = ProjectExecutor(session)
         self.notebook_workflow = NotebookWorkflow(session)
         self.tracker = tracker or WorkflowTracker()
+
+    def _build_project_response(self, project) -> ProjectResponse:
+        """Helper method to build ProjectResponse with reminders"""
+        response = ProjectResponse.from_orm(project)
+        if hasattr(project, 'reminders'):
+            response.pending_reminders = [
+                ReminderListResponse.from_orm(r)
+                for r in project.get_pending_reminders()
+            ]
+            response.overdue_reminders = [
+                ReminderListResponse.from_orm(r)
+                for r in project.get_overdue_reminders()
+            ]
+        return response
 
     async def _handle_workflow_error(
             self,
@@ -115,7 +130,7 @@ class ProjectWorkflow:
                 metadata={"project_id": str(project.project_id)}
             )
 
-            return ProjectResponse.from_orm(project)
+            return self._build_project_response(project)
 
         except Exception as e:
             await self._handle_workflow_error(workflow_id, e, ProjectOperation.CREATE_PROJECT)
@@ -157,10 +172,69 @@ class ProjectWorkflow:
 
             await self.tracker.complete_workflow(workflow_id)
 
-            return ProjectResponse.from_orm(project)
+            return self._build_project_response(project)
 
         except Exception as e:
             await self._handle_workflow_error(workflow_id, e, ProjectOperation.UPDATE_PROJECT)
+
+    async def update_knowledge(
+            self,
+            project_id: UUID,
+            data: ProjectKnowledgeUpdate,
+            user_id: UUID,
+            user_permissions: List[str]
+    ) -> ProjectResponse:
+        """
+        Workflow for updating project knowledge content.
+        """
+        if not validate_operation_constraints(ProjectOperation.UPDATE_KNOWLEDGE, user_permissions):
+            raise HTTPException(status_code=403, detail="Insufficient permissions")
+
+        workflow_id = None
+        try:
+            workflow_id = await self.tracker.start_workflow(
+                operation=ProjectOperation.UPDATE_KNOWLEDGE,
+                user_id=user_id,
+                metadata={"project_id": str(project_id)}
+            )
+
+            project = await self.executor.update_knowledge(project_id, data, user_id)
+            await self.tracker.complete_workflow(workflow_id)
+
+            return self._build_project_response(project)
+
+        except Exception as e:
+            await self._handle_workflow_error(workflow_id, e, ProjectOperation.UPDATE_KNOWLEDGE)
+
+    async def update_summary(
+            self,
+            project_id: UUID,
+            data: ProjectSummaryUpdate,
+            user_id: UUID,
+            user_permissions: List[str]
+    ) -> ProjectResponse:
+        """
+        Workflow for updating project summary.
+        """
+        if not validate_operation_constraints(ProjectOperation.UPDATE_SUMMARY, user_permissions):
+            raise HTTPException(status_code=403, detail="Insufficient permissions")
+
+        workflow_id = None
+        try:
+            workflow_id = await self.tracker.start_workflow(
+                operation=ProjectOperation.UPDATE_SUMMARY,
+                user_id=user_id,
+                metadata={"project_id": str(project_id)}
+            )
+
+            project = await self.executor.update_summary(project_id, data, user_id)
+            await self.tracker.complete_workflow(workflow_id)
+
+            return self._build_project_response(project)
+
+        except Exception as e:
+            await self._handle_workflow_error(workflow_id, e, ProjectOperation.UPDATE_SUMMARY)
+
 
     async def archive_project(
             self,
@@ -204,49 +278,52 @@ class ProjectWorkflow:
 
             await self.tracker.complete_workflow(workflow_id)
 
-            return ProjectResponse.from_orm(project)
+            return self._build_project_response(project)
 
         except Exception as e:
             await self._handle_workflow_error(workflow_id, e, ProjectOperation.ARCHIVE_PROJECT)
 
-    async def get_project_with_notebook(
+    async def get_project(
             self,
             project_id: UUID,
             user_id: UUID,
             user_permissions: List[str]
     ) -> ProjectResponse:
         """
-        Retrieves project and its notebook details.
+        Retrieves project and its details.
         """
         if not validate_operation_constraints(ProjectOperation.GET_PROJECT, user_permissions):
             raise HTTPException(status_code=403, detail="Insufficient permissions")
 
         try:
             project = await self.executor.get_project(project_id)
-
-            if project.notebook_id:
-                notebook = await self.notebook_workflow.get_notebook(
-                    project.notebook_id,
-                    user_id,
-                    user_permissions
-                )
-
-                # Update notebook status
-                project = await self.executor.update_notebook_status(
-                    project_id,
-                    notebook.notebook_id,
-                    {
-                        "is_archived": notebook.is_archived,
-                        "last_modified": notebook.updated_at,
-                        "has_content": bool(notebook.content)
-                    },
-                    user_id
-                )
-
-            return ProjectResponse.from_orm(project)
+            return self._build_project_response(project)
 
         except Exception as e:
             raise HTTPException(
                 status_code=500,
                 detail=f"Error retrieving project: {str(e)}"
+            )
+
+    async def list_projects(
+            self,
+            user_id: UUID,
+            user_permissions: List[str],
+            status: Optional[ProjectStatus] = None,
+            practice_area: Optional[str] = None
+    ) -> List[ProjectListResponse]:
+        """
+        Lists all projects with optional filters.
+        """
+        if not validate_operation_constraints(ProjectOperation.LIST_PROJECTS, user_permissions):
+            raise HTTPException(status_code=403, detail="Insufficient permissions")
+
+        try:
+            projects = await self.executor.list_projects(user_id, status, practice_area)
+            return [ProjectListResponse.from_orm(project) for project in projects]
+
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error listing projects: {str(e)}"
             )

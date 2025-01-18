@@ -155,6 +155,14 @@ class Project(SQLModel, table=True):
         }
     )
 
+    reminders: List["Reminder"] = Relationship(
+        back_populates="project",
+        sa_relationship_kwargs={
+            "cascade": "all, delete-orphan",
+            "lazy": "selectin"
+        }
+    )
+
     def __repr__(self) -> str:
         """String representation of the Project"""
         return f"Project(id={self.project_id}, name={self.name}, status={self.status})"

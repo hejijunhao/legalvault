@@ -4,7 +4,14 @@ from datetime import datetime
 from typing import List, Optional, Dict, Any
 from uuid import UUID
 from fastapi import HTTPException
+
+# Database Model Imports
 from models.database.workspace.project import ProjectStatus, ConfidentialityLevel, ProjectKnowledge
+from models.database.workspace.reminder import ReminderStatus
+
+# Domain Model Imports
+from models.domain.workspace.reminder import ReminderDomain
+from models.domain.workspace.notebook import NotebookDomain
 
 
 class ProjectStateError(Exception):
@@ -35,7 +42,8 @@ class ProjectDomain:
             created_at: Optional[datetime] = None,
             updated_at: Optional[datetime] = None,
             notebook_id: Optional[UUID] = None,
-            notebook_status: Optional[Dict[str, Any]] = None
+            notebook_status: Optional[Dict[str, Any]] = None,
+            reminders: Optional[List[ReminderDomain]] = None
     ):
         self.project_id = project_id
         self.name = name
@@ -53,6 +61,7 @@ class ProjectDomain:
         self.updated_at = updated_at or datetime.utcnow()
         self.notebook_id = notebook_id
         self.notebook_status = notebook_status or {}
+        self.reminders = reminders or []
 
     def _validate_active_state(self) -> None:
         """Validates if project is in an active state for modifications"""
@@ -183,6 +192,21 @@ class ProjectDomain:
                 self.notebook_id is not None  # Must have an associated notebook
         )
 
+    # Reminder Class References
+    def get_pending_reminders(self) -> List[ReminderDomain]:
+        """Returns all pending reminders for the project"""
+        return [
+            reminder for reminder in self.reminders
+            if reminder.status == ReminderStatus.PENDING
+        ]
+
+    def get_overdue_reminders(self) -> List[ReminderDomain]:
+        """Returns all overdue reminders for the project"""
+        return [
+            reminder for reminder in self.reminders
+            if reminder.is_overdue()
+        ]
+
     def dict(self) -> dict:
         """Converts domain model to dictionary representation"""
         return {
@@ -201,5 +225,6 @@ class ProjectDomain:
             'created_at': self.created_at,
             'updated_at': self.updated_at,
             'notebook_id': self.notebook_id,
-            'notebook_status': self.notebook_status
+            'notebook_status': self.notebook_status,
+            'reminders': [reminder.dict() for reminder in self.reminders] if self.reminders else []
         }
