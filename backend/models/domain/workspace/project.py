@@ -12,6 +12,7 @@ from models.database.workspace.reminder import ReminderStatus
 # Domain Model Imports
 from models.domain.workspace.reminder import ReminderDomain
 from models.domain.workspace.notebook import NotebookDomain
+from models.domain.workspace.task import TaskDomain
 
 
 class ProjectStateError(Exception):
@@ -43,7 +44,8 @@ class ProjectDomain:
             updated_at: Optional[datetime] = None,
             notebook_id: Optional[UUID] = None,
             notebook_status: Optional[Dict[str, Any]] = None,
-            reminders: Optional[List[ReminderDomain]] = None
+            reminders: Optional[List[ReminderDomain]] = None,
+            tasks: Optional[List[TaskDomain]] = None
     ):
         self.project_id = project_id
         self.name = name
@@ -226,5 +228,17 @@ class ProjectDomain:
             'updated_at': self.updated_at,
             'notebook_id': self.notebook_id,
             'notebook_status': self.notebook_status,
-            'reminders': [reminder.dict() for reminder in self.reminders] if self.reminders else []
+            'reminders': [reminder.dict() for reminder in self.reminders] if self.reminders else [],
+            'tasks': [task.dict() for task in self.tasks] if self.tasks else []
         }
+
+    # Task Class References
+    def get_pending_tasks(self) -> List[TaskDomain]:
+        """Returns all pending tasks"""
+        return [task for task in (self.tasks or [])
+                if task.status == TaskStatus.TODO]
+
+    def get_overdue_tasks(self) -> List[TaskDomain]:
+        """Returns all overdue tasks"""
+        return [task for task in (self.tasks or [])
+                if task.is_overdue()]

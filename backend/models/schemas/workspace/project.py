@@ -6,6 +6,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field, validator, constr
 from models.database.workspace.project import ProjectStatus, ConfidentialityLevel, ProjectKnowledge
 from models.schemas.workspace.reminder import ReminderListResponse
+from models.schemas.workspace.task import TaskListResponse
 
 # Type definitions for validation
 TagType = constr(min_length=1, max_length=50)
@@ -160,6 +161,9 @@ class ProjectResponse(BaseModel):
     summary_updated_at: Optional[datetime]
     notebook_id: Optional[UUID]
     notebook_status: Optional[NotebookStatusSchema]
+    tasks: Optional[List[TaskListResponse]] = None
+    pending_tasks: Optional[List[TaskListResponse]] = None
+    overdue_tasks: Optional[List[TaskListResponse]] = None
 
     class Config:
         orm_mode = True

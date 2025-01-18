@@ -179,6 +179,13 @@ class ProjectExecutor:
                 for reminder in project.reminders
             ]
 
+        # Load tasks if they exist
+        if project.tasks:
+            domain_project.tasks = [
+                TaskDomain(**task.dict())
+                for task in project.tasks
+            ]
+
         return domain_project
 
     async def list_projects(

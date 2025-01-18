@@ -40,7 +40,8 @@ class Project(SQLModel, table=True):
         UniqueConstraint("name", name="uq_project_name"),
         Index("idx_project_status_practice", "status", "practice_area"),
         Index("idx_project_created_by", "created_by"),
-        Index("idx_project_modified", "modified_by", "updated_at")
+        Index("idx_project_modified", "modified_by", "updated_at"),
+        Index("idx_project_tasks", "project_id"),
     )
 
     model_config = {
@@ -156,6 +157,14 @@ class Project(SQLModel, table=True):
     )
 
     reminders: List["Reminder"] = Relationship(
+        back_populates="project",
+        sa_relationship_kwargs={
+            "cascade": "all, delete-orphan",
+            "lazy": "selectin"
+        }
+    )
+
+    tasks: List["Task"] = Relationship(
         back_populates="project",
         sa_relationship_kwargs={
             "cascade": "all, delete-orphan",
