@@ -6,9 +6,12 @@ from .core.database import get_session
 from .models.database.paralegal import VirtualParalegal
 from backend.services.initializers.op_taskmanagement_initializer import TaskManagementInitializer
 from logging import getLogger
+from .api.routes import router as api_router
 
 logger = getLogger(__name__)
 app = FastAPI()
+
+app.include_router(api_router)
 
 @app.on_event("startup")
 async def initialize_operations():

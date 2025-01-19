@@ -6,6 +6,7 @@ from typing import List, Optional
 from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlmodel import Field, SQLModel, JSON, Column, UniqueConstraint, Index, ForeignKey, Relationship
+from .project_client import ProjectClient
 
 
 class ProjectStatus(str, Enum):
@@ -170,6 +171,12 @@ class Project(SQLModel, table=True):
             "cascade": "all, delete-orphan",
             "lazy": "selectin"
         }
+    )
+
+    clients: List["Client"] = Relationship(
+        back_populates="projects",
+        link_model=ProjectClient,
+        sa_relationship_kwargs={"lazy": "selectin"}
     )
 
     def __repr__(self) -> str:

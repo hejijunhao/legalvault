@@ -30,7 +30,7 @@ from models.database.workspace.notebook import Notebook
 from models.database.workspace.reminder import Reminder
 from models.database.workspace.task import Task
 from models.database.workspace.client import Client
-
+from models.database.workspace.project_client import ProjectClient
 
 # Load environment variables
 load_dotenv()
