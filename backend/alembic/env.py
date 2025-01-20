@@ -34,6 +34,7 @@ from models.database.workspace.project_client import ProjectClient
 from models.database.workspace.contact import Contact
 from models.database.workspace.contact_client import ContactClient
 from models.database.workspace.contact_project import ContactProject
+from models.database.integrations import Integration, Credentials, integration_ability
 
 # Load environment variables
 load_dotenv()

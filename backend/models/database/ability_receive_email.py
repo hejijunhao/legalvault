@@ -1,4 +1,5 @@
 #models/database/ability_receive_email.py
+
 from datetime import datetime
 from typing import Optional, Dict
 from sqlmodel import SQLModel, Field, Relationship
