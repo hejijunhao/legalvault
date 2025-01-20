@@ -31,6 +31,9 @@ from models.database.workspace.reminder import Reminder
 from models.database.workspace.task import Task
 from models.database.workspace.client import Client
 from models.database.workspace.project_client import ProjectClient
+from models.database.workspace.contact import Contact
+from models.database.workspace.contact_client import ContactClient
+from models.database.workspace.contact_project import ContactProject
 
 # Load environment variables
 load_dotenv()

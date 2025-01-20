@@ -7,6 +7,8 @@ from sqlalchemy import text, JSON
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlmodel import Field, SQLModel, Index, Column, ForeignKey, Relationship
 from .project_client import ProjectClient
+from .contact import Contact
+from .contact_client import ContactClient
 
 
 class LegalEntityType(str, Enum):
@@ -219,8 +221,12 @@ class Client(SQLModel, table=True):
         link_model=ProjectClient,
         sa_relationship_kwargs={"lazy": "selectin"}
     )
-    
-    # contacts: List["Contact"] = Relationship(back_populates="client")
+    contacts: List["Contact"] = Relationship(
+        back_populates="clients",
+        link_model=ContactClient,
+        sa_relationship_kwargs={"lazy": "selectin"}
+    )
+
     # documents: List["Document"] = Relationship(back_populates="client")
     # users: List["User"] = Relationship(back_populates="client")
 
