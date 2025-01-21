@@ -1,4 +1,4 @@
-// src/app/workspace/[projectId]/page.tsx
+// src/app/workspace/projects/[projectId]/page.tsx
 
 import { Notebook } from "@/components/workspace/project/notebook"
 import { Tasks } from "@/components/workspace/project/tasks"
@@ -7,16 +7,8 @@ import { Knowledge } from "@/components/workspace/project/project-knowledge"
 import { ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
 
-// Define the params interface
-interface ProjectPageProps {
-  params: {
-    projectId: string
-  }
-  searchParams: { [key: string]: string | string[] | undefined }
-}
-
 // This will be replaced with real data fetching once backend is connected
-async function getDummyProject(projectId: string) {
+const getDummyProject = (projectId: string) => {
   return {
     id: projectId,
     name: projectId === "project-greenbridge" ? "Project Greenbridge" : `Project ${projectId}`,
@@ -24,8 +16,8 @@ async function getDummyProject(projectId: string) {
   }
 }
 
-export default async function ProjectPage({ params, searchParams }: ProjectPageProps) {
-  const project = await getDummyProject(params.projectId)
+export default function ProjectPage({ params }: { params: { projectId: string } }) {
+  const project = getDummyProject(params.projectId)
 
   return (
     <div className="mx-auto w-full max-w-[1280px] space-y-6 py-6">
@@ -55,3 +47,5 @@ export default async function ProjectPage({ params, searchParams }: ProjectPageP
     </div>
   )
 }
+
+

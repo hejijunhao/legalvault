@@ -1,3 +1,5 @@
+// app/workspace/clients/[clientID]/page.tsx
+
 import { ClientProfile } from "@/components/workspace/client/client-profile"
 import { ArrowLeft } from "lucide-react"
 import Link from "next/link"
@@ -47,8 +49,8 @@ const getDummyClient = (clientId: string) => {
   }
 }
 
-export default function ClientPage({ params }: { params: { clientId: string } }) {
-  const client = getDummyClient(params.clientId)
+export default function ClientPage({ params }: { params: { clientID: string } }) {
+  const client = getDummyClient(params.clientID)
 
   return (
     <div className="mx-auto w-full max-w-[1440px] space-y-6 py-6">
@@ -69,3 +71,4 @@ export default function ClientPage({ params }: { params: { clientId: string } })
     </div>
   )
 }
+

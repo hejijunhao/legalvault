@@ -1,3 +1,5 @@
+// components/workspace/client-grid.tsx
+
 import Image from "next/image"
 import Link from "next/link"
 
@@ -46,7 +48,7 @@ export function ClientGrid() {
       {clients.map((client) => (
         <Link
           key={client.id}
-          href={`/workspace/client/${client.id}`}
+          href={`/workspace/clients/${client.id}`}
           className="flex h-[202px] flex-1 cursor-pointer flex-col items-center justify-center gap-4 rounded-[4px] bg-white/15 p-4 shadow-[0px_4px_15px_0px_rgba(0,0,0,0.05)] transition-all hover:scale-[1.02]"
         >
           <div className="relative h-24 w-24 overflow-hidden rounded-full">
@@ -67,3 +69,4 @@ export function ClientGrid() {
     </div>
   )
 }
+

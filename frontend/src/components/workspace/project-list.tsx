@@ -7,39 +7,34 @@ import Link from "next/link"
 
 const projects = [
   {
-    id: 1,
+    id: "project-greenbridge",
     name: "Project Greenbridge",
     status: "LIVE M&A DEAL",
     background: "from-[#9FE870]/20 to-[#BFE999]/20",
-    href: "/workspace/project-greenbridge"
   },
   {
-    id: 2,
+    id: "adams-v-sculley",
     name: "Adams v. Sculley",
     status: "LIVE LITIGATION",
     background: "from-[#AF52DE]/20 to-[#E5A4FF]/20",
-    href: "/workspace/adams-v-sculley"
   },
   {
-    id: 3,
+    id: "project-sparta",
     name: "Project Sparta",
     status: "LIVE M&A DEAL",
     background: "from-[#FF9B9B]/20 to-[#FFC4C4]/20",
-    href: "/workspace/project-sparta"
   },
   {
-    id: 4,
+    id: "jclim-v-phenley",
     name: "JCLim v. PHenley",
     status: "LIVE LITIGATION",
     background: "from-[#00C7BE]/20 to-[#7DEAE5]/20",
-    href: "/workspace/jclim-v-phenley"
   },
   {
-    id: 5,
+    id: "project-norse",
     name: "Project Norse",
     status: "LIVE S&P DEAL",
     background: "from-[#93C5FD]/20 to-[#BFDBFE]/20",
-    href: "/workspace/project-norse"
   }
 ]
 
@@ -49,7 +44,10 @@ export function ProjectList() {
       <ScrollArea className="w-full">
         <div className="flex space-x-4 p-1">
           {projects.map((project) => (
-            <Link key={project.id} href={project.href}>
+            <Link
+              key={project.id}
+              href={`/workspace/projects/${project.id}`}
+            >
               <div
                 className={`flex h-[250px] w-[200px] cursor-pointer flex-col justify-end rounded-[10px] border border-white/10 bg-gradient-to-br p-[0px_10px_10px_10px] backdrop-blur-[17.7px] transition-all duration-500 ease-in-out hover:w-[395px] hover:bg-white/23 ${project.background}`}
               >

@@ -1,3 +1,5 @@
+// src/components/workspace/client/client-profile.tsx
+
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
