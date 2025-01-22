@@ -27,7 +27,7 @@ export function BehavioursOverview() {
     responsiveness: "high",
   })
 
-  const handleChange = (id: string, value: any) => {
+  const handleChange = (id: string, value: number | boolean | string) => { // Specific type
     setValues((prev) => ({ ...prev, [id]: value }))
   }
 

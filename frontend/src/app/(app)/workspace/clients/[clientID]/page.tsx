@@ -7,7 +7,7 @@ import Link from "next/link"
 // This will be replaced with real data fetching
 const getDummyClient = (clientId: string) => {
   return {
-    name: "Aurora Solutions",
+    name: clientId.replace("-", " ").toUpperCase(), // Example: "aurora-solutions" -> "AURORA SOLUTIONS"
     legal_entity_type: "corporation",
     status: "active",
     domicile: "Singapore",

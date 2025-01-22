@@ -2,7 +2,7 @@
 
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import { useRef, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import Link from "next/link"
 import { User, Settings, Building, LogOut } from "lucide-react"
@@ -47,7 +47,7 @@ export function DropdownProfileMenu({ isOpen, onClose }: DropdownProfileMenuProp
           transition={{ duration: 0.2 }}
           className="absolute right-0 mt-2 w-48 rounded-md bg-white py-2 shadow-lg ring-1 ring-black ring-opacity-5"
         >
-          {menuItems.map((item, index) => (
+          {menuItems.map((item) => (
             <Link
               key={item.label}
               href={item.href}
