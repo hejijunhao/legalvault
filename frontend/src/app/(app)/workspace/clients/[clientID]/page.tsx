@@ -2,7 +2,14 @@
 
 import { ClientProfile } from "@/components/workspace/client/client-profile";
 import { ArrowLeft } from "lucide-react";
+import { type Metadata } from 'next'
 import Link from "next/link";
+
+interface PageProps {
+  params: {
+    clientID: string
+  }
+}
 
 // This will be replaced with real data fetching
 const getDummyClient = (clientId: string) => {
@@ -48,7 +55,11 @@ const getDummyClient = (clientId: string) => {
   };
 };
 
-export default function ClientPage({ params }: { params: { clientID: string } }) {
+export const metadata: Metadata = {
+  title: 'Client Details',
+}
+
+export default async function ClientPage({ params }: PageProps) {
   const client = getDummyClient(params.clientID);
 
   return (
