@@ -1,10 +1,9 @@
-// app/paralegal/page.tsx
+// app/(app)/paralegal/page.tsx
 
 import { Profile } from "@/components/paralegal/profile"
 import { Abilities } from "@/components/paralegal/abilities"
 import { Behaviours } from "@/components/paralegal/behaviours"
 import { Knowledge } from "@/components/paralegal/knowledge"
-import { Access } from "@/components/paralegal/access"
 import { Integrations } from "@/components/paralegal/integrations"
 
 export default function ParalegalPage() {
