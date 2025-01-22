@@ -1,8 +1,8 @@
 // app/(app)/workspace/clients/[clientID]/page.tsx
 
-import { ClientProfile } from "@/components/workspace/client/client-profile"
-import { ArrowLeft } from "lucide-react"
-import Link from "next/link"
+import { ClientProfile } from "@/components/workspace/client/client-profile";
+import { ArrowLeft } from "lucide-react";
+import Link from "next/link";
 
 // This will be replaced with real data fetching
 const getDummyClient = (clientId: string) => {
@@ -11,7 +11,7 @@ const getDummyClient = (clientId: string) => {
     legal_entity_type: "corporation",
     status: "active",
     domicile: "Singapore",
-    primary_email: "contact@aurorasolutions.com",
+    primary_email: `contact@${clientId}.com`,
     primary_phone: "+65 6789 0123",
     address: {
       street: "71 Robinson Road",
@@ -25,10 +25,9 @@ const getDummyClient = (clientId: string) => {
     industry: "Technology",
     tax_id: "T23LC0123456K",
     registration_number: "202312345K",
-    website: "https://aurorasolutions.com",
+    website: `https://${clientId}.com`,
     client_profile: {
-      summary:
-        "Aurora Solutions is a leading technology company specializing in AI and machine learning solutions for the financial services industry. They have been at the forefront of developing innovative solutions for risk assessment and automated trading systems.",
+      summary: `${clientId.replace("-", " ")} is a leading technology company specializing in AI and machine learning solutions for the financial services industry. They are at the forefront of developing innovative solutions for risk assessment and automated trading systems.`,
       last_updated: "2024-01-20T08:00:00Z",
     },
     preferences: {
@@ -43,14 +42,14 @@ const getDummyClient = (clientId: string) => {
       { id: 2, name: "Project Norse", status: "PLANNING" },
     ],
     contacts: [
-      { id: 1, name: "Sarah Chen", role: "CEO", email: "sarah.chen@aurorasolutions.com" },
-      { id: 2, name: "Michael Wong", role: "Legal Counsel", email: "michael.wong@aurorasolutions.com" },
+      { id: 1, name: "Sarah Chen", role: "CEO", email: `sarah.chen@${clientId}.com` },
+      { id: 2, name: "Michael Wong", role: "Legal Counsel", email: `michael.wong@${clientId}.com` },
     ],
-  }
-}
+  };
+};
 
 export default function ClientPage({ params }: { params: { clientID: string } }) {
-  const client = getDummyClient(params.clientID)
+  const client = getDummyClient(params.clientID);
 
   return (
     <div className="mx-auto w-full max-w-[1440px] space-y-6 py-6">
@@ -69,6 +68,5 @@ export default function ClientPage({ params }: { params: { clientID: string } })
 
       <ClientProfile client={client} />
     </div>
-  )
+  );
 }
-
