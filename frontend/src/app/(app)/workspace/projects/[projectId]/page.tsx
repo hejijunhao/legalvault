@@ -1,4 +1,4 @@
-// src/app/workspace/projects/[projectId]/page.tsx
+// src/app/(app)/workspace/projects/[projectId]/page.tsx
 
 import { Notebook } from "@/components/workspace/project/notebook"
 import { Tasks } from "@/components/workspace/project/tasks"

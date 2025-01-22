@@ -1,4 +1,4 @@
-// src/app/workspace/page.tsx
+// src/app/(app)/workspace/page.tsx
 
 "use client"
 

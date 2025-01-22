@@ -2,18 +2,8 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Import fonts */
-@import url('https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital@1&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital@1&display=swap");
 
-@font-face {
-  font-family: 'Inter';
-  src: url('/fonts/Inter-Regular.woff2') format('woff2'),
-  url('/fonts/Inter-Regular.woff') format('woff');
-  font-weight: 400;
-  font-style: normal;
-}
-
-/* Root variables */
 :root {
   --background: #ffffff;
   --foreground: #171717;
@@ -26,23 +16,27 @@
   --background-2: 222 47% 11%;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* Reset any default margins that might affect full-screen layout */
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  width: 100%;
 }
 
-/* Global styles */
 body {
   color: var(--foreground);
-  background: linear-gradient(247deg, #EFF2F5 0%, #E3E7EB 50%, #D9DEE3 100%);
   font-family: Inter, Arial, Helvetica, sans-serif;
 }
 
-/* Utility classes */
+/* Only apply the gradient background to non-auth pages */
+body:not(:has(.fixed.inset-0)) {
+  background: linear-gradient(247deg, #eff2f5 0%, #e3e7eb 50%, #d9dee3 100%);
+}
+
 .search-input {
-  font-family: 'Libre Baskerville', serif;
+  font-family: "Libre Baskerville", serif;
 }
 
 .text-shadow-sm {
@@ -52,3 +46,4 @@ body {
 .text-shadow-xs {
   text-shadow: 0px 4px 4px rgba(52, 52, 52, 0.15);
 }
+

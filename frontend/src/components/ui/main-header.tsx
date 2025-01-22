@@ -7,6 +7,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import Image from "next/image"
 import { ChatOverlay } from "@/components/chat/chat-overlay"
+import { DropdownProfileMenu } from "@/components/ui/dropdown-profile-menu"
 
 const navigation = [
   { name: "Workspace", href: "/workspace" },
@@ -17,6 +18,7 @@ const navigation = [
 export function MainHeader() {
   const pathname = usePathname()
   const [isChatOpen, setIsChatOpen] = useState(false)
+  const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false)
 
   return (
     <>
@@ -109,52 +111,60 @@ export function MainHeader() {
                 strokeWidth="1.5"
               />
             </svg>
-            <svg xmlns="http://www.w3.org/2000/svg" width="25" height="24" viewBox="0 0 25 24" fill="none">
-              <path
-                d="M7.55566 21C3.55566 21 2.55566 20 2.55566 16V8C2.55566 4 3.55566 3 7.55566 3H17.5557C21.5557 3 22.5557 4 22.5557 8V16C22.5557 20 21.5557 21 17.5557 21H7.55566Z"
-                stroke="#8992A9"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <path
-                d="M14.5557 8H19.5557"
-                stroke="#8992A9"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <path
-                d="M15.5557 12H19.5557"
-                stroke="#8992A9"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <path
-                d="M17.5557 16H19.5557"
-                stroke="#8992A9"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <path
-                fillRule="evenodd"
-                clipRule="evenodd"
-                d="M9.05561 11.2899C8.05597 11.2899 7.24561 10.4796 7.24561 9.47992C7.24561 8.48029 8.05597 7.66992 9.05561 7.66992C10.0552 7.66992 10.8656 8.48029 10.8656 9.47992C10.8656 10.4796 10.0552 11.2899 9.05561 11.2899Z"
-                stroke="#8992A9"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <path
-                d="M12.5557 16.33C12.4157 14.88 11.2657 13.74 9.81566 13.61C9.31566 13.56 8.80566 13.56 8.29566 13.61C6.84566 13.75 5.69566 14.88 5.55566 16.33"
-                stroke="#8992A9"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
+            <div className="relative">
+              <button
+                onClick={() => setIsProfileDropdownOpen(!isProfileDropdownOpen)}
+                className="rounded-full p-2 transition-colors hover:bg-black/5"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="25" height="24" viewBox="0 0 25 24" fill="none">
+                  <path
+                    d="M7.55566 21C3.55566 21 2.55566 20 2.55566 16V8C2.55566 4 3.55566 3 7.55566 3H17.5557C21.5557 3 22.5557 4 22.5557 8V16C22.5557 20 21.5557 21 17.5557 21H7.55566Z"
+                    stroke="#8992A9"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d="M14.5557 8H19.5557"
+                    stroke="#8992A9"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d="M15.5557 12H19.5557"
+                    stroke="#8992A9"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d="M17.5557 16H19.5557"
+                    stroke="#8992A9"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    fillRule="evenodd"
+                    clipRule="evenodd"
+                    d="M9.05561 11.2899C8.05597 11.2899 7.24561 10.4796 7.24561 9.47992C7.24561 8.48029 8.05597 7.66992 9.05561 7.66992C10.0552 7.66992 10.8656 8.48029 10.8656 9.47992C10.8656 10.4796 10.0552 11.2899 9.05561 11.2899Z"
+                    stroke="#8992A9"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d="M12.5557 16.33C12.4157 14.88 11.2657 13.74 9.81566 13.61C9.31566 13.56 8.80566 13.56 8.29566 13.61C6.84566 13.75 5.69566 14.88 5.55566 16.33"
+                    stroke="#8992A9"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </button>
+              <DropdownProfileMenu isOpen={isProfileDropdownOpen} onClose={() => setIsProfileDropdownOpen(false)} />
+            </div>
           </div>
         </div>
       </header>
