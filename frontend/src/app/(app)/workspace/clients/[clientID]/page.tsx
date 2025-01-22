@@ -5,16 +5,15 @@ import { ArrowLeft } from "lucide-react";
 import { type Metadata } from 'next'
 import Link from "next/link";
 
-// Remove the PageProps interface and use the specific type Next.js expects
-type Props = {
-  params: { clientID: string };
-  searchParams: { [key: string]: string | string[] | undefined };
+// Updated Props type to match Next.js 15.0.4 requirements
+type PageProps = {
+  params: Promise<{ clientID: string }>;
+  searchParams?: { [key: string]: string | string[] | undefined };
 };
 
-// This will be replaced with real data fetching
 const getDummyClient = (clientId: string) => {
   return {
-    name: clientId.replace("-", " ").toUpperCase(), // Example: "aurora-solutions" -> "AURORA SOLUTIONS"
+    name: clientId.replace("-", " ").toUpperCase(),
     legal_entity_type: "corporation",
     status: "active",
     domicile: "Singapore",
@@ -59,8 +58,9 @@ export const metadata: Metadata = {
   title: 'Client Details',
 }
 
-export default function ClientPage({ params, searchParams }: Props) {
-  const client = getDummyClient(params.clientID);
+export default async function ClientPage({ params }: PageProps) {
+  const resolvedParams = await params;
+  const client = getDummyClient(resolvedParams.clientID);
 
   return (
     <div className="mx-auto w-full max-w-[1440px] space-y-6 py-6">
