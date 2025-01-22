@@ -5,11 +5,11 @@ import { ArrowLeft } from "lucide-react";
 import { type Metadata } from 'next'
 import Link from "next/link";
 
-interface PageProps {
-  params: {
-    clientID: string
-  }
-}
+// Remove the PageProps interface and use the specific type Next.js expects
+type Props = {
+  params: { clientID: string };
+  searchParams: { [key: string]: string | string[] | undefined };
+};
 
 // This will be replaced with real data fetching
 const getDummyClient = (clientId: string) => {
@@ -59,7 +59,7 @@ export const metadata: Metadata = {
   title: 'Client Details',
 }
 
-export default async function ClientPage({ params }: PageProps) {
+export default function ClientPage({ params, searchParams }: Props) {
   const client = getDummyClient(params.clientID);
 
   return (
