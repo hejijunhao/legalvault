@@ -5,10 +5,8 @@ import { ArrowLeft } from "lucide-react";
 import { type Metadata } from 'next'
 import Link from "next/link";
 
-// Updated Props type to match Next.js 15.0.4 requirements
 type PageProps = {
   params: Promise<{ clientID: string }>;
-  searchParams?: { [key: string]: string | string[] | undefined };
 };
 
 const getDummyClient = (clientId: string) => {
