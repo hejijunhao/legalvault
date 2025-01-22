@@ -6,6 +6,11 @@ import { Reminders } from "@/components/workspace/project/reminders"
 import { Knowledge } from "@/components/workspace/project/project-knowledge"
 import { ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
+import { type Metadata } from 'next'
+
+type PageProps = {
+  params: Promise<{ projectId: string }>;
+};
 
 // This will be replaced with real data fetching once backend is connected
 const getDummyProject = (projectId: string) => {
@@ -16,8 +21,13 @@ const getDummyProject = (projectId: string) => {
   }
 }
 
-export default function ProjectPage({ params }: { params: { projectId: string } }) {
-  const project = getDummyProject(params.projectId)
+export const metadata: Metadata = {
+  title: 'Project Details',
+}
+
+export default async function ProjectPage({ params }: PageProps) {
+  const resolvedParams = await params;
+  const project = getDummyProject(resolvedParams.projectId);
 
   return (
     <div className="mx-auto w-full max-w-[1280px] space-y-6 py-6">
@@ -47,5 +57,3 @@ export default function ProjectPage({ params }: { params: { projectId: string } 
     </div>
   )
 }
-
-
