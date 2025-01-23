@@ -13,6 +13,7 @@ from alembic import context
 from dotenv import load_dotenv
 from sqlmodel import SQLModel
 
+
 from models.database.user import User
 from models.database.paralegal import VirtualParalegal
 from models.database.ability import Ability
@@ -35,6 +36,7 @@ from models.database.workspace.contact import Contact
 from models.database.workspace.contact_client import ContactClient
 from models.database.workspace.contact_project import ContactProject
 from models.database.integrations import Integration, Credentials, integration_ability
+from models.database.library.masterfiledatabase import MasterFileDatabase
 
 # Load environment variables
 load_dotenv()
