@@ -1,3 +1,5 @@
+# models/schemas/user.py
+
 class UserCreate(BaseModel):
     email: str
     name: str
