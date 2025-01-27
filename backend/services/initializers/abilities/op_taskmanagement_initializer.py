@@ -1,11 +1,10 @@
 # backend/services/initializers/op_taskmanagement_initializer.py
 from typing import Dict, Optional
 from sqlalchemy.orm import Session
-from sqlalchemy import select
 from logging import getLogger
 
-from models.database.ability_taskmanagement import TaskManagementAbility
-from models.domain.operations_taskmanagement import TASK_OPERATIONS, TaskOperation
+from models.database.abilities.ability_taskmanagement import TaskManagementAbility
+from models.domain.abilities.operations_taskmanagement import TASK_OPERATIONS, TaskOperation
 
 logger = getLogger(__name__)
 

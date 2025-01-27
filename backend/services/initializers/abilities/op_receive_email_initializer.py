@@ -4,8 +4,8 @@ from sqlmodel import Session
 from sqlalchemy import select
 from logging import getLogger
 
-from models.database.ability_receive_email import ReceiveEmailAbility
-from models.domain.operations_ability_receive_email import EMAIL_OPERATIONS, EmailOperation
+from models.database.abilities.ability_receive_email import ReceiveEmailAbility
+from models.domain.abilities.operations_ability_receive_email import EMAIL_OPERATIONS, EmailOperation
 
 logger = getLogger(__name__)
 

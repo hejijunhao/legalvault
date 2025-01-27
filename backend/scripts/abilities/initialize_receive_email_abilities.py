@@ -1,10 +1,8 @@
 # backend/scripts/initialize_receive_email_abilities.py
 import os
 import sys
-import asyncio
 from pathlib import Path
 from sqlalchemy import text
-from typing import Optional
 from sqlalchemy import select  # Added this import
 from sqlmodel import Session, create_engine
 
@@ -14,8 +12,8 @@ project_root = str(current_dir.parent.parent.parent)
 sys.path.append(project_root)
 
 from core.database import get_session
-from models.database.ability import Ability
-from services.initializers.op_receive_email_initializer import ReceiveEmailInitializer
+from models.database.abilities.ability import Ability
+from services.initializers.abilities.op_receive_email_initializer import ReceiveEmailInitializer
 
 def test_database_connection() -> bool:
     print("Testing database connection...")

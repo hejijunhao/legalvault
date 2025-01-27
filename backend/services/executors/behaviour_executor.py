@@ -1,8 +1,6 @@
 # /backend/services/executors/behaviour_executor.py
 
-from uuid import UUID
-from models.domain.operations_behaviour import BehaviourOperationInput, BehaviourOperationOutput
-from models.database.behaviour import Behaviour, AbilityBehaviour
+from models.domain.abilities.operations_behaviour import BehaviourOperationInput, BehaviourOperationOutput
 from core.database import get_supabase_client
 
 

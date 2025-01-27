@@ -13,8 +13,8 @@ project_root = str(current_dir.parent.parent.parent)
 sys.path.append(project_root)
 
 from core.database import get_session
-from models.database.ability import Ability
-from services.initializers.op_taskmanagement_initializer import TaskManagementInitializer
+from models.database.abilities.ability import Ability
+from services.initializers.abilities.op_taskmanagement_initializer import TaskManagementInitializer
 
 
 def test_database_connection() -> bool:

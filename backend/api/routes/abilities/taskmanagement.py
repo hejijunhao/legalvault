@@ -1,17 +1,12 @@
 # backend/api/routes/taskmanagement.py
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Session
-from typing import List, Optional
+from typing import Optional
 
 from core.database import get_session
 from core.auth import get_current_user
-from models.schemas.ability_taskmanagement import (
-    TaskManagementAbilityCreate,
-    TaskManagementAbilityUpdate,
-    TaskManagementAbilityInDB
-)
-from services.workflow.taskmanagement_workflow import TaskManagementWorkflow, WorkflowContext
-from services.executors.taskmanagement_executor import TaskManagementExecutor
+from services.workflow.abilities.taskmanagement_workflow import TaskManagementWorkflow, WorkflowContext
+from services.executors.abilities.taskmanagement_executor import TaskManagementExecutor
 
 router = APIRouter(prefix="/api/v1/tasks", tags=["tasks"])
 

@@ -13,32 +13,6 @@ from alembic import context
 from dotenv import load_dotenv
 from sqlmodel import SQLModel
 
-
-from models.database.user import User
-from models.database.paralegal import VirtualParalegal
-from models.database.ability import Ability
-from models.database.ability_taskmanagement import TaskManagementAbility
-from models.database.ability_receive_email import ReceiveEmailAbility
-from models.database.profile_picture import VPProfilePicture
-from models.database.behaviour import Behaviour, AbilityBehaviour, BehaviourVP
-from models.database.longterm_memory.self_identity import SelfIdentity
-from models.database.longterm_memory.global_knowledge import GlobalKnowledge
-from models.database.longterm_memory.educational_knowledge import EducationalKnowledge
-from models.database.longterm_memory.conversational_history import ConversationalHistory
-from models.database.longterm_memory.actions_history import ActionsHistory
-from models.database.workspace.project import Project
-from models.database.workspace.notebook import Notebook
-from models.database.workspace.reminder import Reminder
-from models.database.workspace.task import Task
-from models.database.workspace.client import Client
-from models.database.workspace.project_client import ProjectClient
-from models.database.workspace.contact import Contact
-from models.database.workspace.contact_client import ContactClient
-from models.database.workspace.contact_project import ContactProject
-from models.database.integrations import Integration, Credentials, integration_ability
-from models.database.library.masterfiledatabase import MasterFileDatabase
-from models.database.library.collections import Collection
-
 # Load environment variables
 load_dotenv()
 

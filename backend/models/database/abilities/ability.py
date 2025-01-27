@@ -4,7 +4,7 @@ from typing import Dict, Optional, List, TYPE_CHECKING, Any
 from datetime import datetime
 
 if TYPE_CHECKING:
-    from . import TaskManagementAbility, ReceiveEmailAbility
+    from models.database import TaskManagementAbility, ReceiveEmailAbility
 
 
 class Ability(SQLModel, table=True):

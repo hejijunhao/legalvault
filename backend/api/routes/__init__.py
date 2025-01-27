@@ -1,6 +1,7 @@
 # api/routes/__init__.py
 from fastapi import APIRouter
-from . import behaviour, ability_receive_email, taskmanagement, profile_pictures
+from . import behaviour, profile_pictures
+from .abilities import ability_receive_email, taskmanagement
 from .workspace import router as workspace_router
 from .longterm_memory import router as memory_router
 

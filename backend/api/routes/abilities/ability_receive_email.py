@@ -3,8 +3,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session
 
 from core.database import get_session
-from services.workflow.ability_receive_email import ReceiveEmailWorkflow, WorkflowContext
-from services.executors.ability_receive_email import ReceiveEmailExecutor
+from services.workflow.abilities.ability_receive_email import ReceiveEmailWorkflow, WorkflowContext
+from services.executors.abilities.ability_receive_email import ReceiveEmailExecutor
 
 # TODO: Implement get_current_user or similar authentication
 def get_current_user():

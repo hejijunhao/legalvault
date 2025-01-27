@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .integration import Integration
-    from models.database.ability import Ability
+    from models.database.abilities.ability import Ability
 
 class IntegrationAbility(SQLModel, table=True):
     __tablename__ = "integration_abilities"
