@@ -2,16 +2,16 @@
 
 "use client"
 
-import { AbilityTree } from "@/components/abilities/ability-tree"
+import { AbilityBoxes } from "@/components/abilities/ability-boxes"
 import { Button } from "@/components/ui/button"
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft } from "lucide-react"
 import Link from "next/link"
 
 export default function AbilitiesPage() {
   return (
-    <div className="relative min-h-screen p-6">
+    <div className="relative min-h-screen">
       <div className="mx-auto max-w-[1440px] px-4">
-        <div className="mb-6">
+        <div className="mb-6 pt-6">
           <Button
             variant="outline"
             size="sm"
@@ -24,22 +24,14 @@ export default function AbilitiesPage() {
             </Link>
           </Button>
         </div>
-        <div className="mx-auto max-w-5xl">
+        <div className="mb-8">
           <h1 className="mb-2 text-center text-2xl font-bold text-[#1C1C1C]">VP Abilities Overview</h1>
-          <p className="mb-8 text-center text-sm text-[#525766]">
-            Unlock and customise your Virtual Paralegal&apos;s capabilities through our evolving skill tree.
-          </p>
-          <div className="aspect-square w-full">
-            <AbilityTree
-              onNodeClick={(nodeId) => {
-                // Handle node click
-                console.log("Clicked node:", nodeId);
-              }}
-            />
-          </div>
+          <p className="text-center text-sm text-[#525766]">Explore and unlock your Virtual Paralegal's capabilities</p>
         </div>
+      </div>
+      <div className="w-full px-4">
+        <AbilityBoxes />
       </div>
     </div>
   )
 }
-
