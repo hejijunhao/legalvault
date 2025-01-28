@@ -16,23 +16,41 @@
   --background-2: 222 47% 11%;
 }
 
-/* Reset any default margins that might affect full-screen layout */
-html,
-body {
-  margin: 0;
-  padding: 0;
-  height: 100%;
-  width: 100%;
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
 }
 
 body {
   color: var(--foreground);
+  background: linear-gradient(247deg, #eff2f5 0%, #e3e7eb 50%, #d9dee3 100%);
   font-family: Inter, Arial, Helvetica, sans-serif;
 }
 
-/* Only apply the gradient background to non-auth pages */
-body:not(:has(.fixed.inset-0)) {
-  background: linear-gradient(247deg, #eff2f5 0%, #e3e7eb 50%, #d9dee3 100%);
+/* Add styles to make ReactFlow completely static */
+.react-flow__renderer {
+  cursor: default !important;
+}
+
+.react-flow__node {
+  cursor: default !important;
+}
+
+.react-flow__handle {
+  display: none !important;
+}
+
+/* Remove any ReactFlow selection styles */
+.react-flow__node-custom {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.react-flow__node.selected {
+  outline: none !important;
+  box-shadow: none !important;
 }
 
 .search-input {
