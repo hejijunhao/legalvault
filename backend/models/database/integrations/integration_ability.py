@@ -11,13 +11,14 @@ if TYPE_CHECKING:
 
 class IntegrationAbility(SQLModel, table=True):
     __tablename__ = "integration_abilities"
+    __table_args__ = {'schema': 'vault'}
 
     integration_id: UUID = Field(
-        foreign_key="integrations.integration_id",
+        foreign_key="vault.integrations.integration_id",
         primary_key=True
     )
     ability_id: int = Field(
-        foreign_key="abilities.id",
+        foreign_key="vault.abilities.id",
         primary_key=True
     )
     is_required: bool = Field(default=False)

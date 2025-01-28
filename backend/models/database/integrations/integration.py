@@ -19,6 +19,7 @@ class AuthType(str, Enum):
 
 class Integration(SQLModel, table=True):
     __tablename__ = "integrations"
+    __table_args__ = {'schema': 'vault'}
 
     integration_id: UUID = Field(
         default=None,

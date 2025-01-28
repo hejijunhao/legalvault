@@ -7,9 +7,10 @@ from sqlalchemy.dialects.postgresql import JSONB
 
 class TaskManagementAbility(SQLModel, table=True):
     __tablename__ = "task_management_abilities"
+    __table_args__ = {'schema': 'vault'}
 
     id: int = Field(default=None, primary_key=True)
-    ability_id: int = Field(foreign_key="abilities.id", index=True)
+    ability_id: int = Field(foreign_key="vault.abilities.id", index=True)
     operation_name: str = Field(max_length=255)
     description: str
     enabled: bool = Field(default=True)

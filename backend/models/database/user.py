@@ -8,11 +8,12 @@ from datetime import datetime
 
 class User(SQLModel, table=True):
     __tablename__ = "users"
+    __table_args__ = {'schema': 'vault'}
 
     id: UUID = Field(default_factory=uuid4, primary_key=True)
     email: str = Field(unique=True, index=True)
     name: str
     role: str = Field(default="lawyer")
-    paralegal_id: Optional[UUID] = Field(default=None, foreign_key="virtual_paralegals.id")
+    paralegal_id: Optional[UUID] = Field(default=None, foreign_key="vault.virtual_paralegals.id")
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)

@@ -9,6 +9,7 @@ if TYPE_CHECKING:
 
 class Ability(SQLModel, table=True):
     __tablename__ = "abilities"
+    __table_args__ = {'schema': 'vault'}
 
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str
@@ -23,7 +24,7 @@ class Ability(SQLModel, table=True):
     task_management_abilities: List["TaskManagementAbility"] = Relationship(
         sa_relationship_kwargs={
             "lazy": "selectin",
-            "primaryjoin": "Ability.id == TaskManagementAbility.ability_id"
+            "primaryjoin": "vault.Ability.id == vault.TaskManagementAbility.ability_id"
         },
         back_populates="ability"
     )
@@ -31,7 +32,7 @@ class Ability(SQLModel, table=True):
     receive_email_abilities: List["ReceiveEmailAbility"] = Relationship(
         sa_relationship_kwargs={
             "lazy": "selectin",
-            "primaryjoin": "Ability.id == ReceiveEmailAbility.ability_id"
+            "primaryjoin": "vault.Ability.id == vault.ReceiveEmailAbility.ability_id"
         },
         back_populates="ability"
     )

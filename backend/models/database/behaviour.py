@@ -16,6 +16,7 @@ class BehaviourStatus(str, Enum):
 
 class Behaviour(SQLModel, table=True):
     __tablename__ = "behaviours"
+    __table_args__ = {'schema': 'vault'}
 
     id: UUID = Field(default_factory=uuid4, primary_key=True)
     name: str = Field(unique=True, index=True)
@@ -28,14 +29,15 @@ class Behaviour(SQLModel, table=True):
 
 class AbilityBehaviour(SQLModel, table=True):
     __tablename__ = "ability_behaviours"
+    __table_args__ = {'schema': 'vault'}
 
     ability_id: UUID = Field(default=None, sa_column=Column(
-        ForeignKey("abilities.id", ondelete="CASCADE"),
+        ForeignKey("vault.abilities.id", ondelete="CASCADE"),
         primary_key=True,
         nullable=False
     ))
     behaviour_id: UUID = Field(default=None, sa_column=Column(
-        ForeignKey("behaviours.id", ondelete="CASCADE"),
+        ForeignKey("vault.behaviours.id", ondelete="CASCADE"),
         primary_key=True,
         nullable=False
     ))
@@ -45,14 +47,15 @@ class AbilityBehaviour(SQLModel, table=True):
 
 class BehaviourVP(SQLModel, table=True):
     __tablename__ = "behaviour_vps"
+    __table_args__ = {'schema': 'vault'}
 
     vp_id: UUID = Field(default=None, sa_column=Column(
-        ForeignKey("virtual_paralegals.id", ondelete="CASCADE"),
+        ForeignKey("vault.virtual_paralegals.id", ondelete="CASCADE"),
         primary_key=True,
         nullable=False
     ))
     behaviour_id: UUID = Field(default=None, sa_column=Column(
-        ForeignKey("behaviours.id", ondelete="CASCADE"),
+        ForeignKey("vault.behaviours.id", ondelete="CASCADE"),
         primary_key=True,
         nullable=False
     ))

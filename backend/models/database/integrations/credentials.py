@@ -10,6 +10,7 @@ from .integration import Integration
 
 class Credentials(SQLModel, table=True):
     __tablename__ = "credentials"
+    __table_args__ = {'schema': 'vault'}
 
     credential_id: UUID = Field(
         default=None,
@@ -18,12 +19,12 @@ class Credentials(SQLModel, table=True):
         index=True
     )
     user_id: UUID = Field(
-        foreign_key="users.id",
+        foreign_key="vault.users.id",
         index=True,
         nullable=False
     )
     integration_id: UUID = Field(
-        foreign_key="integrations.integration_id",
+        foreign_key="vault.integrations.integration_id",
         index=True,
         nullable=False
     )
