@@ -21,7 +21,7 @@ class EducationalKnowledge(SQLModel, table=True):
     __tablename__ = "longterm_memory_educational_knowledge"
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    vp_id: uuid.UUID = Field(foreign_key="virtual_paralegals.id")
+    vp_id: uuid.UUID = Field(foreign_key="vault.virtual_paralegals.id")
     education_type: EducationType = Field(sa_column=Column(SQLEnum(EducationType)))
     prompt: str = Field(sa_column=Column(Text))
 
@@ -30,4 +30,5 @@ class EducationalKnowledge(SQLModel, table=True):
 
     __table_args__ = (
         sqlmodel.UniqueConstraint('vp_id', 'education_type'),
+        {'schema': 'public'}
     )

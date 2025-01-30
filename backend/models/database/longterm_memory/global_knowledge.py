@@ -20,7 +20,7 @@ class GlobalKnowledge(SQLModel, table=True):
     __tablename__ = "longterm_memory_global_knowledge"
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    vp_id: uuid.UUID = Field(foreign_key="virtual_paralegals.id")
+    vp_id: uuid.UUID = Field(foreign_key="vault.virtual_paralegals.id")
     knowledge_type: KnowledgeType = Field(sa_column=Column(SQLEnum(KnowledgeType)))
     prompt: str = Field(sa_column=Column(Text))
 
@@ -30,4 +30,5 @@ class GlobalKnowledge(SQLModel, table=True):
     __table_args__ = (
         # Ensure each VP has only one prompt per knowledge type
         sqlmodel.UniqueConstraint('vp_id', 'knowledge_type'),
+        {'schema': 'public'}
     )
