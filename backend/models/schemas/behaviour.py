@@ -4,7 +4,7 @@ from datetime import datetime
 from pydantic import BaseModel, Field, validator
 from typing import Optional
 from uuid import UUID
-from models.database.behaviour import BehaviourStatus
+from models.database.behaviours.behaviour import BehaviourStatus
 
 class BehaviourBase(BaseModel):
     name: str

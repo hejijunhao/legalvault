@@ -2,8 +2,7 @@
 
 from typing import List, Optional
 from uuid import UUID
-from models.domain.behaviour import BehaviourDomain
-from models.schemas.behaviour import BehaviourCreate, BehaviourUpdate
+from models.domain.behaviours.behaviour import BehaviourDomain
 from core.database import get_supabase_client
 
 

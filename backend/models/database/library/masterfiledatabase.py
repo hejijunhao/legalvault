@@ -53,6 +53,7 @@ class MasterFileDatabase(SQLModel, table=True):
     __tablename__ = "master_file_database"
 
     __table_args__ = (
+        {'schema': 'public'},
         Index("idx_file_status", "file_attributes", postgresql_using='gin'),
         Index("idx_document_type", "file_attributes", postgresql_using='gin'),
         Index("idx_owner_source", "owner_id", "source"),
@@ -108,16 +109,31 @@ class MasterFileDatabase(SQLModel, table=True):
     # Relationships with cascade behavior
     client_id: Optional[UUID] = Field(
         default=None,
-        sa_column=Column("client_id", SQLAlchemyUUID, ForeignKey("clients.client_id", ondelete="SET NULL"), nullable=True)
+        sa_column=Column(
+            "client_id",
+            SQLAlchemyUUID,
+            ForeignKey("public.clients.client_id", ondelete="SET NULL"),
+            nullable=True
+        )
     )
 
     project_id: Optional[UUID] = Field(
         default=None,
-        sa_column=Column("project_id", SQLAlchemyUUID, ForeignKey("projects.project_id", ondelete="SET NULL"), nullable=True)
+        sa_column=Column(
+            "project_id",
+            SQLAlchemyUUID,
+            ForeignKey("public.projects.project_id", ondelete="SET NULL"),
+            nullable=True
+        )
     )
 
     owner_id: UUID = Field(
-        sa_column=Column("owner_id", SQLAlchemyUUID, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+        sa_column=Column(
+            "owner_id",
+            SQLAlchemyUUID,
+            ForeignKey("vault.users.id", ondelete="CASCADE"),
+            nullable=False
+        )
     )
 
     permissions: List[UUID] = Field(
