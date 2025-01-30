@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Optional
 from uuid import UUID
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, constr
 from models.database.workspace.contact import ContactType, ContactStatus
 
 

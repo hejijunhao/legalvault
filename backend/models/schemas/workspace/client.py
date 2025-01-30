@@ -1,9 +1,9 @@
 # models/schemas/workspace/client.py
 
 from datetime import datetime
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Any
 from uuid import UUID
-from pydantic import BaseModel, Field, validator, EmailStr, constr, AnyHttpUrl
+from pydantic import BaseModel, Field, validator, EmailStr, constr, AnyHttpUrl, root_validator
 from models.database.workspace.client import ClientStatus, LegalEntityType
 
 # Type definitions for validation
@@ -40,10 +40,14 @@ class ClientPreferencesSchema(BaseModel):
         default="UTC",
         description="Preferred timezone"
     )
+    tenant_specific_settings: Optional[Dict[str, Any]] = Field(
+        default=dict(),
+        description="Tenant-specific preference settings"
+    )
 
 
-class ClientCreate(BaseModel):
-    """Schema for creating a new client"""
+class ClientBase(BaseModel):
+    """Base schema for clients with common fields and validators"""
     name: NameType = Field(
         ...,
         description="Client name",
@@ -75,6 +79,22 @@ class ClientCreate(BaseModel):
         max_length=255,
         description="Client's primary industry"
     )
+
+    @validator('name')
+    def validate_name(cls, v):
+        if not v.strip():
+            raise ValueError('Client name cannot be empty or whitespace')
+        return v.strip()
+
+    @validator('primary_phone')
+    def validate_phone(cls, v):
+        if not v.strip():
+            raise ValueError('Phone number cannot be empty')
+        return v.strip()
+
+
+class ClientCreate(ClientBase):
+    """Schema for creating a new client"""
     client_join_date: datetime = Field(
         default_factory=datetime.utcnow,
         description="When client relationship began"
@@ -95,22 +115,9 @@ class ClientCreate(BaseModel):
     )
     preferences: Optional[ClientPreferencesSchema] = None
     tags: Optional[List[TagType]] = Field(
-        default_factory=list,
+        default=list(),
         description="Client categorization tags"
     )
-
-    @validator('name')
-    def validate_name(cls, v):
-        if not v.strip():
-            raise ValueError('Client name cannot be empty or whitespace')
-        return v.strip()
-
-    @validator('primary_phone')
-    def validate_phone(cls, v):
-        # Basic phone validation - can be enhanced based on requirements
-        if not v.strip():
-            raise ValueError('Phone number cannot be empty')
-        return v.strip()
 
     @validator('tags')
     def validate_tags(cls, v):
@@ -173,18 +180,19 @@ class ClientTagsUpdate(BaseModel):
         return [tag.strip().lower() for tag in v if tag.strip()]
 
 
-class ClientResponse(BaseModel):
+class TenantPreferencesUpdate(BaseModel):
+    """Schema for updating tenant-specific preferences"""
+    tenant_specific_settings: Dict[str, Any] = Field(
+        ...,
+        description="Tenant-specific preference settings"
+    )
+
+
+class ClientResponse(ClientBase):
     """Schema for client API responses"""
     client_id: UUID
-    name: str
-    legal_entity_type: LegalEntityType
     status: ClientStatus
-    domicile: str
-    primary_email: EmailStr
-    primary_phone: str
-    address: AddressSchema
     client_join_date: datetime
-    industry: str
     tax_id: Optional[str]
     registration_number: Optional[str]
     website: Optional[AnyHttpUrl]

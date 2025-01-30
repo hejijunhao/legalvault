@@ -23,6 +23,7 @@ class Reminder(SQLModel, table=True):
 
     # Table configuration
     __table_args__ = (
+        {'schema': 'public'},
         Index("idx_reminder_project", "project_id"),
         Index("idx_reminder_status", "status"),
         Index("idx_reminder_due_date", "due_date"),
@@ -57,7 +58,7 @@ class Reminder(SQLModel, table=True):
     project_id: UUID = Field(
         sa_column=Column(
             UUID(as_uuid=True),
-            ForeignKey("projects.project_id", ondelete="CASCADE"),
+            ForeignKey("public.projects.project_id", ondelete="CASCADE"),
             nullable=False
         ),
         description="ID of the associated project"
@@ -99,7 +100,7 @@ class Reminder(SQLModel, table=True):
     created_by: UUID = Field(
         sa_column=Column(
             UUID(as_uuid=True),
-            ForeignKey("users.id", ondelete="RESTRICT"),
+            ForeignKey("vault.users.id", ondelete="RESTRICT"),
             nullable=False
         ),
         description="User ID of reminder creator"
@@ -107,7 +108,7 @@ class Reminder(SQLModel, table=True):
     modified_by: UUID = Field(
         sa_column=Column(
             UUID(as_uuid=True),
-            ForeignKey("users.id", ondelete="RESTRICT"),
+            ForeignKey("vault.users.id", ondelete="RESTRICT"),
             nullable=False
         ),
         description="User ID of last modifier"

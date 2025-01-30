@@ -30,9 +30,8 @@ class Contact(SQLModel, table=True):
     Contains personal information and professional details.
     """
     __tablename__ = "contacts"
-
-    # Table configuration
     __table_args__ = (
+        {'schema': 'public'},
         Index("idx_contact_name", "first_name", "last_name"),
         Index("idx_contact_email", "email"),
         Index("idx_contact_type", "contact_type"),
@@ -131,7 +130,7 @@ class Contact(SQLModel, table=True):
     created_by: UUID = Field(
         sa_column=Column(
             UUID(as_uuid=True),
-            ForeignKey("users.id", ondelete="RESTRICT"),
+            ForeignKey("vault.users.id", ondelete="RESTRICT"),
             nullable=False
         ),
         description="User ID of contact creator"
@@ -139,7 +138,7 @@ class Contact(SQLModel, table=True):
     modified_by: UUID = Field(
         sa_column=Column(
             UUID(as_uuid=True),
-            ForeignKey("users.id", ondelete="RESTRICT"),
+            ForeignKey("vault.users.id", ondelete="RESTRICT"),
             nullable=False
         ),
         description="User ID of last modifier"
@@ -149,13 +148,21 @@ class Contact(SQLModel, table=True):
     clients: List["Client"] = Relationship(
         back_populates="contacts",
         link_model=ContactClient,
-        sa_relationship_kwargs={"lazy": "selectin"}
+        sa_relationship_kwargs={
+            "lazy": "selectin",
+            "primaryjoin": "and_(Contact.contact_id==ContactClient.contact_id, "
+                           "Contact.__table__.schema==ContactClient.__table__.schema)"
+        }
     )
 
     projects: List["Project"] = Relationship(
         back_populates="contacts",
         link_model=ContactProject,
-        sa_relationship_kwargs={"lazy": "selectin"}
+        sa_relationship_kwargs={
+            "lazy": "selectin",
+            "primaryjoin": "and_(Contact.contact_id==ContactProject.contact_id, "
+                           "Contact.__table__.schema==ContactProject.__table__.schema)"
+        }
     )
 
     def __repr__(self) -> str:

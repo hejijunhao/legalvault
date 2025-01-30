@@ -20,6 +20,10 @@ class ClientOperation(str, Enum):
     REACTIVATE_CLIENT = "reactivate_client"
     DELETE_CLIENT = "delete_client"
 
+    # Tenant operations
+    VALIDATE_TENANT_RULES = "validate_tenant_rules"
+    GET_TENANT_PREFERENCES = "get_tenant_preferences"
+
     # Relationship operations
     ADD_CONTACT = "add_contact"
     REMOVE_CONTACT = "remove_contact"
@@ -46,6 +50,7 @@ class ClientPermission(str, Enum):
     MANAGE_STATUS = "client:manage_status"
     MANAGE_RELATIONSHIPS = "client:manage_relationships"
     VIEW_SENSITIVE = "client:view_sensitive"  # For tax ID, registration numbers etc.
+    MANAGE_TENANT_RULES = "client:manage_tenant_rules"
 
 
 # Map operations to required permissions
@@ -56,6 +61,16 @@ OPERATION_PERMISSIONS = {
     ClientOperation.GET_CLIENT: [ClientPermission.READ],
     ClientOperation.LIST_CLIENTS: [ClientPermission.READ],
     ClientOperation.DELETE_CLIENT: [ClientPermission.DELETE],
+
+    # Tenant-specific operations
+    ClientOperation.VALIDATE_TENANT_RULES: [
+        ClientPermission.READ,
+        ClientPermission.MANAGE_TENANT_RULES
+    ],
+    ClientOperation.GET_TENANT_PREFERENCES: [
+        ClientPermission.READ,
+        ClientPermission.MANAGE_TENANT_RULES
+    ],
 
     # Detailed update operations
     ClientOperation.UPDATE_CORE_DETAILS: [

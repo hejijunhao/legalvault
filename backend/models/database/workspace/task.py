@@ -23,6 +23,7 @@ class Task(SQLModel, table=True):
 
     # Table configuration
     __table_args__ = (
+        {'schema': 'public'},
         Index("idx_task_project", "project_id"),
         Index("idx_task_status", "status"),
         Index("idx_task_due_date", "due_date"),
@@ -58,7 +59,7 @@ class Task(SQLModel, table=True):
     project_id: UUID = Field(
         sa_column=Column(
             UUID(as_uuid=True),
-            ForeignKey("projects.project_id", ondelete="CASCADE"),
+            ForeignKey("public.projects.project_id", ondelete="CASCADE"),
             nullable=False
         ),
         description="ID of the associated project"
@@ -87,7 +88,7 @@ class Task(SQLModel, table=True):
     assigned_to: UUID = Field(
         sa_column=Column(
             UUID(as_uuid=True),
-            ForeignKey("users.id", ondelete="RESTRICT"),
+            ForeignKey("vault.users.id", ondelete="RESTRICT"),
             nullable=False
         ),
         description="User ID of task assignee"
@@ -108,7 +109,7 @@ class Task(SQLModel, table=True):
     created_by: UUID = Field(
         sa_column=Column(
             UUID(as_uuid=True),
-            ForeignKey("users.id", ondelete="RESTRICT"),
+            ForeignKey("vault.users.id", ondelete="RESTRICT"),
             nullable=False
         ),
         description="User ID of task creator"
@@ -116,7 +117,7 @@ class Task(SQLModel, table=True):
     modified_by: UUID = Field(
         sa_column=Column(
             UUID(as_uuid=True),
-            ForeignKey("users.id", ondelete="RESTRICT"),
+            ForeignKey("vault.users.id", ondelete="RESTRICT"),
             nullable=False
         ),
         description="User ID of last modifier"

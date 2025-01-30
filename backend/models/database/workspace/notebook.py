@@ -18,6 +18,7 @@ class Notebook(SQLModel, table=True):
 
     # Table configuration
     __table_args__ = (
+        {'schema': 'public'},
         Index("idx_notebook_project", "project_id"),
         Index("idx_notebook_modified", "modified_by", "updated_at"),
         Index("idx_notebook_created", "created_by")
@@ -48,7 +49,7 @@ class Notebook(SQLModel, table=True):
     project_id: UUID = Field(
         sa_column=Column(
             UUID(as_uuid=True),
-            ForeignKey("projects.project_id", ondelete="CASCADE"),
+            ForeignKey("public.projects.project_id", ondelete="CASCADE"),
             nullable=False,
             unique=True  # Ensures one-to-one relationship with project
         ),
@@ -68,7 +69,7 @@ class Notebook(SQLModel, table=True):
     created_by: UUID = Field(
         sa_column=Column(
             UUID(as_uuid=True),
-            ForeignKey("users.id", ondelete="RESTRICT"),
+            ForeignKey("vault.users.id", ondelete="RESTRICT"),
             nullable=False
         ),
         description="User ID of notebook creator"
@@ -76,7 +77,7 @@ class Notebook(SQLModel, table=True):
     modified_by: UUID = Field(
         sa_column=Column(
             UUID(as_uuid=True),
-            ForeignKey("users.id", ondelete="RESTRICT"),
+            ForeignKey("vault.users.id", ondelete="RESTRICT"),
             nullable=False
         ),
         description="User ID of last modifier"

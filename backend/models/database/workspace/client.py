@@ -1,5 +1,6 @@
 # models/database/workspace/client.py
 
+from abc import ABC, abstractmethod
 from datetime import datetime
 from enum import Enum
 from typing import Optional, Dict, List
@@ -45,15 +46,18 @@ class ClientStatus(str, Enum):
     INACTIVE = "inactive"
 
 
-class Client(SQLModel, table=True):
+class ClientBase(SQLModel, ABC):
     """
-    Represents a client in the LegalVault system.
+    Abstract base class representing a client in the LegalVault system.
+    Serves as a template for tenant-specific client implementations.
     Contains core properties, contact information, and business details.
     """
     __tablename__ = "clients"
+    __abstract__ = True
 
     # Table configuration
     __table_args__ = (
+        {'schema': 'public'},
         Index("idx_client_name", "name"),
         Index("idx_client_status", "status"),
         Index("idx_client_entity_type", "legal_entity_type"),
@@ -201,7 +205,7 @@ class Client(SQLModel, table=True):
     created_by: UUID = Field(
         sa_column=Column(
             UUID(as_uuid=True),
-            ForeignKey("users.id", ondelete="RESTRICT"),
+            ForeignKey("vault.users.id", ondelete="RESTRICT"),
             nullable=False
         ),
         description="User ID of client creator"
@@ -209,7 +213,7 @@ class Client(SQLModel, table=True):
     modified_by: UUID = Field(
         sa_column=Column(
             UUID(as_uuid=True),
-            ForeignKey("users.id", ondelete="RESTRICT"),
+            ForeignKey("vault.users.id", ondelete="RESTRICT"),
             nullable=False
         ),
         description="User ID of last modifier"
@@ -219,17 +223,46 @@ class Client(SQLModel, table=True):
     projects: List["Project"] = Relationship(
         back_populates="clients",
         link_model=ProjectClient,
-        sa_relationship_kwargs={"lazy": "selectin"}
+        sa_relationship_kwargs={
+            "lazy": "selectin",
+            "primaryjoin": "and_(ClientBase.client_id==ProjectClient.client_id, "
+                          "ClientBase.__table__.schema==ProjectClient.__table__.schema)"
+        }
     )
     contacts: List["Contact"] = Relationship(
         back_populates="clients",
         link_model=ContactClient,
-        sa_relationship_kwargs={"lazy": "selectin"}
+        sa_relationship_kwargs={
+            "lazy": "selectin",
+            "primaryjoin": "and_(ClientBase.client_id==ContactClient.client_id, "
+                          "ClientBase.__table__.schema==ContactClient.__table__.schema)"
+        }
     )
 
-    # documents: List["Document"] = Relationship(back_populates="client")
-    # users: List["User"] = Relationship(back_populates="client")
+    @abstractmethod
+    def get_tenant_specific_preferences(self) -> Dict:
+        """Abstract method for retrieving tenant-specific client preferences"""
+        pass
+
+    @abstractmethod
+    def validate_tenant_specific_fields(self) -> bool:
+        """Abstract method for validating tenant-specific fields"""
+        pass
 
     def __repr__(self) -> str:
         """String representation of the Client"""
         return f"Client(id={self.client_id}, name={self.name}, status={self.status})"
+
+
+class Client(ClientBase):
+    """
+    Concrete implementation of the ClientBase template.
+    Tenant-specific implementations should inherit from ClientBase.
+    """
+    def get_tenant_specific_preferences(self) -> Dict:
+        """Implementation of tenant-specific preferences"""
+        return self.preferences
+
+    def validate_tenant_specific_fields(self) -> bool:
+        """Implementation of tenant-specific validation"""
+        return True

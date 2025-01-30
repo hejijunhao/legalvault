@@ -8,7 +8,6 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlmodel import Field, SQLModel, ForeignKey
 
 
-
 class ContactRole(str, Enum):
     """Role of the contact at the client organization"""
     PRIMARY = "primary"          # Main point of contact
@@ -27,6 +26,7 @@ class ContactClient(SQLModel, table=True):
     __tablename__ = "contact_clients"
 
     __table_args__ = (
+        {'schema': 'public'},
         Index("idx_contact_client_role", "role"),
         Index("idx_contact_client_created", "created_by")
     )
@@ -34,7 +34,7 @@ class ContactClient(SQLModel, table=True):
     contact_id: UUID = Field(
         default=None,
         sa_column=Column(
-            ForeignKey("contacts.contact_id", ondelete="CASCADE"),
+            ForeignKey("public.contacts.contact_id", ondelete="CASCADE"),
             primary_key=True,
             nullable=False
         )
@@ -42,7 +42,7 @@ class ContactClient(SQLModel, table=True):
     client_id: UUID = Field(
         default=None,
         sa_column=Column(
-            ForeignKey("clients.client_id", ondelete="CASCADE"),
+            ForeignKey("public.clients.client_id", ondelete="CASCADE"),
             primary_key=True,
             nullable=False
         )
@@ -69,7 +69,7 @@ class ContactClient(SQLModel, table=True):
     )
     created_by: UUID = Field(
         sa_column=Column(
-            ForeignKey("users.id", ondelete="SET NULL"),
+            ForeignKey("vault.users.id", ondelete="SET NULL"),
             nullable=True
         )
     )

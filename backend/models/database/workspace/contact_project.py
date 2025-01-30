@@ -27,6 +27,7 @@ class ContactProject(SQLModel, table=True):
     __tablename__ = "contact_projects"
 
     __table_args__ = (
+        {'schema': 'public'},
         Index("idx_contact_project_role", "role"),
         Index("idx_contact_project_created", "created_by")
     )
@@ -34,7 +35,7 @@ class ContactProject(SQLModel, table=True):
     contact_id: UUID = Field(
         default=None,
         sa_column=Column(
-            ForeignKey("contacts.contact_id", ondelete="CASCADE"),
+            ForeignKey("public.contacts.contact_id", ondelete="CASCADE"),
             primary_key=True,
             nullable=False
         )
@@ -42,7 +43,7 @@ class ContactProject(SQLModel, table=True):
     project_id: UUID = Field(
         default=None,
         sa_column=Column(
-            ForeignKey("projects.project_id", ondelete="CASCADE"),
+            ForeignKey("public.projects.project_id", ondelete="CASCADE"),
             primary_key=True,
             nullable=False
         )
@@ -76,7 +77,7 @@ class ContactProject(SQLModel, table=True):
     )
     created_by: UUID = Field(
         sa_column=Column(
-            ForeignKey("users.id", ondelete="SET NULL"),
+            ForeignKey("vault.users.id", ondelete="SET NULL"),
             nullable=True
         )
     )

@@ -1,5 +1,6 @@
 # models/domain/workspace/client.py
 
+from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import Optional, Dict, List, Any
 from uuid import UUID
@@ -12,9 +13,9 @@ class ClientStateError(Exception):
     pass
 
 
-class ClientDomain:
+class ClientDomainBase(ABC):
     """
-    Domain model for Client entities. Handles business logic, state management,
+    Abstract base domain model for Client entities. Handles business logic, state management,
     and behavior for clients in the LegalVault system.
     """
 
@@ -79,6 +80,16 @@ class ClientDomain:
         """Updates modification metadata"""
         self.modified_by = modified_by
         self.updated_at = datetime.utcnow()
+
+    @abstractmethod
+    def validate_tenant_specific_rules(self) -> bool:
+        """Validates tenant-specific business rules"""
+        pass
+
+    @abstractmethod
+    def get_tenant_specific_preferences(self) -> Dict[str, Any]:
+        """Retrieves tenant-specific preference configurations"""
+        pass
 
     def update_core_details(
             self,
@@ -303,3 +314,17 @@ class ClientDomain:
             'created_at': self.created_at,
             'updated_at': self.updated_at
         }
+
+class ClientDomain(ClientDomainBase):
+    """
+    Concrete implementation of the ClientDomainBase.
+    Tenant-specific implementations should inherit from ClientDomainBase.
+    """
+
+    def validate_tenant_specific_rules(self) -> bool:
+        """Default implementation of tenant-specific validation"""
+        return True
+
+    def get_tenant_specific_preferences(self) -> Dict[str, Any]:
+        """Default implementation of tenant-specific preferences"""
+        return self.preferences

@@ -38,6 +38,7 @@ class Project(SQLModel, table=True):
 
     # Table configuration
     __table_args__ = (
+        {'schema': 'public'},
         UniqueConstraint("name", name="uq_project_name"),
         Index("idx_project_status_practice", "status", "practice_area"),
         Index("idx_project_created_by", "created_by"),
@@ -94,7 +95,7 @@ class Project(SQLModel, table=True):
     created_by: UUID = Field(
         sa_column=Column(
             UUID(as_uuid=True),
-            ForeignKey("users.id", ondelete="RESTRICT"),
+            ForeignKey("vault.users.id", ondelete="RESTRICT"),
             nullable=False
         ),
         description="User ID of project creator"
@@ -102,7 +103,7 @@ class Project(SQLModel, table=True):
     modified_by: UUID = Field(
         sa_column=Column(
             UUID(as_uuid=True),
-            ForeignKey("users.id", ondelete="RESTRICT"),
+            ForeignKey("vault.users.id", ondelete="RESTRICT"),
             nullable=False
         ),
         description="User ID of last modifier"
@@ -153,7 +154,9 @@ class Project(SQLModel, table=True):
         sa_relationship_kwargs={
             "uselist": False,  # One-to-one relationship
             "cascade": "all, delete-orphan",  # Cascade deletion
-            "lazy": "selectin"  # Eager loading for better performance
+            "lazy": "selectin",  # Eager loading for better performance
+            "primaryjoin": "and_(Project.project_id==Notebook.project_id, "
+                           "Project.__table__.schema==Notebook.__table__.schema)"
         }
     )
 
@@ -161,7 +164,9 @@ class Project(SQLModel, table=True):
         back_populates="project",
         sa_relationship_kwargs={
             "cascade": "all, delete-orphan",
-            "lazy": "selectin"
+            "lazy": "selectin",
+            "primaryjoin": "and_(Project.project_id==Reminder.project_id, "
+                           "Project.__table__.schema==Reminder.__table__.schema)"
         }
     )
 
@@ -169,14 +174,20 @@ class Project(SQLModel, table=True):
         back_populates="project",
         sa_relationship_kwargs={
             "cascade": "all, delete-orphan",
-            "lazy": "selectin"
+            "lazy": "selectin",
+            "primaryjoin": "and_(Project.project_id==Task.project_id, "
+                           "Project.__table__.schema==Task.__table__.schema)"
         }
     )
 
     clients: List["Client"] = Relationship(
         back_populates="projects",
         link_model=ProjectClient,
-        sa_relationship_kwargs={"lazy": "selectin"}
+        sa_relationship_kwargs={
+            "lazy": "selectin",
+            "primaryjoin": "and_(Project.project_id==ProjectClient.project_id, "
+                           "Project.__table__.schema==ProjectClient.__table__.schema)"
+        }
     )
 
     def __repr__(self) -> str:

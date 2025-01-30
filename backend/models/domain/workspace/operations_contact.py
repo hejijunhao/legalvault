@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
 from sqlmodel import select, Session
+from sqlalchemy import text
 from models.database.workspace.contact import Contact as DBContact
 from models.database.workspace.contact_client import ContactClient, ContactRole
 from models.schemas.workspace.contact import ContactCreate, ContactUpdate

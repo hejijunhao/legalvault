@@ -13,11 +13,12 @@ class ProjectClient(SQLModel, table=True):
     Association table for the many-to-many relationship between Projects and Clients.
     """
     __tablename__ = "project_clients"
+    __table_args__={'schema': 'public'}
 
     project_id: UUID = Field(
         default=None,
         sa_column=Column(
-            ForeignKey("projects.project_id", ondelete="CASCADE"),
+            ForeignKey("public.projects.project_id", ondelete="CASCADE"),
             primary_key=True,
             nullable=False
         )
@@ -25,7 +26,7 @@ class ProjectClient(SQLModel, table=True):
     client_id: UUID = Field(
         default=None,
         sa_column=Column(
-            ForeignKey("clients.client_id", ondelete="CASCADE"),
+            ForeignKey("public.clients.client_id", ondelete="CASCADE"),
             primary_key=True,
             nullable=False
         )
@@ -38,7 +39,7 @@ class ProjectClient(SQLModel, table=True):
     created_by: UUID = Field(
         default=None,
         sa_column=Column(
-            ForeignKey("users.id", ondelete="SET NULL"),
+            ForeignKey("vault.users.id", ondelete="SET NULL"),
             nullable=True
         )
     )
