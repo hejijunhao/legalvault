@@ -5,7 +5,7 @@
 import { useRef, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import Link from "next/link"
-import { User, Settings, Building, LogOut } from "lucide-react"
+import { User, Settings, Building, LogOut, CreditCard } from "lucide-react"
 
 interface DropdownProfileMenuProps {
   isOpen: boolean
@@ -14,12 +14,12 @@ interface DropdownProfileMenuProps {
 
 const menuItems = [
   { icon: User, label: "Profile", href: "/profile" },
+  { icon: CreditCard, label: "Billing", href: "/billing" },
   { icon: Settings, label: "Settings", href: "/settings" },
   { icon: Building, label: "Company", href: "/company" },
-  { icon: LogOut, label: "Logout", href: "/logout" }, // Updated to use the logout route
+  { icon: LogOut, label: "Logout", href: "/logout" },
 ]
 
-// Rest of the component remains unchanged
 export function DropdownProfileMenu({ isOpen, onClose }: DropdownProfileMenuProps) {
   const dropdownRef = useRef<HTMLDivElement>(null)
 
