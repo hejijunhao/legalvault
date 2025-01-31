@@ -1,25 +1,24 @@
 // src/app/(app)/library/page.tsx
 
 import { SearchBar } from "@/components/library/search-bar"
-import { LiveProjects } from "@/components/library/live-projects"
-import { Collections } from "@/components/library/collections"
-import { RecentUpdates } from "@/components/library/recent-updates"
-import { Launchpad } from "@/components/library/launchpad"
+import { CollapsibleBlock } from "@/components/library/blocks/collapsible-block"
+import { LibrarianBlock } from "@/components/library/blocks/librarian-block"
+import { collectionsData, bookmarksData, subscriptionsData, sourcesData } from "@/components/library/blocks/block-data"
 
 export default function LibraryPage() {
   return (
-    <div className="space-y-8 py-6">
+    <div className="py-6">
       <SearchBar />
-      <div className="grid gap-8 lg:grid-cols-[1fr,320px]">
-        <div className="space-y-8">
-          <LiveProjects />
-          <Collections />
-        </div>
-        <div className="space-y-8">
-          <RecentUpdates />
-          <Launchpad />
+      <div className="mx-auto mt-6 max-w-[1440px] px-4">
+        <div className="space-y-3">
+          <CollapsibleBlock {...collectionsData} />
+          <CollapsibleBlock {...bookmarksData} />
+          <CollapsibleBlock {...subscriptionsData} />
+          <CollapsibleBlock {...sourcesData} />
+          <LibrarianBlock />
         </div>
       </div>
     </div>
   )
 }
+
