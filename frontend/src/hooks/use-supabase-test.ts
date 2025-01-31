@@ -1,3 +1,5 @@
+// src/hooks/use-supabase-test.ts
+
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 

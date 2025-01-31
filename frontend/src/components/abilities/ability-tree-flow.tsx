@@ -9,7 +9,6 @@ import { CustomNode } from "./custom-node"
 import type { AbilityTree, AbilityNode } from "@/lib/ability-data"
 
 const NODE_WIDTH = 300
-const NODE_HEIGHT = 150
 const LEVEL_HEIGHT = 250
 const HORIZONTAL_SPACING = 400
 

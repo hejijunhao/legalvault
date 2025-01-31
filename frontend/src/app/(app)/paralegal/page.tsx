@@ -1,4 +1,4 @@
-// app/(app)/paralegal/page.tsx
+// src/app/(app)/paralegal/page.tsx
 
 import { Profile } from "@/components/paralegal/profile"
 import { Abilities } from "@/components/paralegal/abilities"
@@ -23,6 +23,3 @@ export default function ParalegalPage() {
     </div>
   )
 }
-
-
-

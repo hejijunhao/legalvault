@@ -1,4 +1,5 @@
-// store/vp-store.ts
+// src/store/vp-store.ts
+
 import { create } from 'zustand'
 import type { VPState, VPProfile, VPAbility, VPBehavior, VPKnowledge, VPAccess } from '@/types/paralegal'
 

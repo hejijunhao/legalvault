@@ -1,4 +1,4 @@
-// app/integrations/page.tsx
+// app/(app)/integrations/page.tsx
 
 import { IntegrationsOverview } from "@/components/integrations/integrations-overview"
 import { Button } from "@/components/ui/button"

@@ -1,4 +1,4 @@
-// app/paralegal/layout.tsx
+// src/app/(app)/paralegal/layout.tsx
 
 import React from 'react'
 

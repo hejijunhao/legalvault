@@ -1,4 +1,4 @@
-// components/paralegal/integrations.tsx
+// src/components/paralegal/integrations.tsx
 
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import Link from "next/link"

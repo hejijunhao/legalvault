@@ -1,4 +1,4 @@
-// app/(app)/workspace/clients/[clientID]/page.tsx
+// src/app/(app)/workspace/clients/[clientID]/page.tsx
 
 import { ClientProfile } from "@/components/workspace/client/client-profile";
 import { ArrowLeft } from "lucide-react";

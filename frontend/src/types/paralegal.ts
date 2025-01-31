@@ -1,4 +1,4 @@
-// types/paralegal.ts
+// src/types/paralegal.ts
 
 export interface VPProfile {
   name: string;

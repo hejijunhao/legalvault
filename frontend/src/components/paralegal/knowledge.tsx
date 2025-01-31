@@ -1,4 +1,4 @@
-// components/paralegal/knowledge.tsx
+// src/components/paralegal/knowledge.tsx
 
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import Link from "next/link"

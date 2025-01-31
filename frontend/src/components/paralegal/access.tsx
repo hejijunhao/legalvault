@@ -1,4 +1,4 @@
-// components/paralegal/access.tsx
+// src/components/paralegal/access.tsx
 
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 

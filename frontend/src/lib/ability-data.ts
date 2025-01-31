@@ -1,4 +1,5 @@
-// placeholder for actual abilityTreeVisualiser class in lib/ability-data.ts
+// src/lib/ability-data.ts
+// placeholder for actual abilityTreeVisualiser class - to be linked with Backend later
 
 export type AbilityStatus = "active" | "locked" | "available"
 

@@ -1,4 +1,4 @@
-// components/paralegal/profile.tsx
+// src/components/paralegal/profile.tsx
 
 import { Card } from "@/components/ui/card"
 import Image from "next/image"

@@ -1,4 +1,4 @@
-// src/app/knowledge/page.tsx
+// src/app/(app)/knowledge/page.tsx
 
 "use client"
 

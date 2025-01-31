@@ -1,4 +1,4 @@
-// src/app/library/page.tsx
+// src/app/(app)/library/page.tsx
 
 import { SearchBar } from "@/components/library/search-bar"
 import { LiveProjects } from "@/components/library/live-projects"

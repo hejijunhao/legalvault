@@ -1,4 +1,4 @@
-// src/app/abilities/page.tsx
+// src/app/(app)/abilities/page.tsx
 
 "use client"
 
@@ -26,7 +26,7 @@ export default function AbilitiesPage() {
         </div>
         <div className="mb-8">
           <h1 className="mb-2 text-center text-2xl font-bold text-[#1C1C1C]">VP Abilities Overview</h1>
-          <p className="text-center text-sm text-[#525766]">Explore and unlock your Virtual Paralegal's capabilities</p>
+          <p className="text-center text-sm text-[#525766]">Explore and unlock your Virtual Paralegal&apos;s capabilities</p>
         </div>
       </div>
       <div className="w-full px-4">

@@ -15,7 +15,6 @@ interface CustomNodeProps {
 
 export function CustomNode({ data }: CustomNodeProps) {
   const isLocked = data.status === "locked"
-  const isActive = data.status === "active"
 
   return (
     <div
