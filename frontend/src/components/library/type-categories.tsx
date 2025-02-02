@@ -1,4 +1,4 @@
-// src/components/library/information-categories.tsx
+// src/components/library/type-categories.tsx
 
 "use client"
 
@@ -7,109 +7,94 @@ import { motion, AnimatePresence } from "framer-motion"
 import { Card } from "@/components/ui/card"
 import {
   FileText,
-  FileSignature,
-  FileCheck,
-  Scale,
-  Handshake,
-  Gavel,
-  Building2,
+  FileType,
+  FileTextIcon as TextFile,
+  FileCode,
+  Table2,
   FileSpreadsheet,
-  Users,
-  Search,
-  FileStack,
-  Send,
+  FileInput,
+  Image,
+  Video,
+  Camera,
+  Music,
+  Mail,
+  MessageSquare,
+  Phone,
+  StickyNote,
+  BookOpen,
+  Paperclip,
+  ClipboardList,
   Expand,
   Minimize2,
 } from "lucide-react"
 
 const categories = [
   {
-    name: "Contracts",
+    name: "Documents",
     icon: FileText,
     bgColor: "bg-blue-50",
     textColor: "text-blue-500",
-    description: "Manage and track legal agreements.",
+    description: "Document file formats",
+    types: [
+      { name: "Word/Pages", icon: FileType },
+      { name: "PDF", icon: FileText },
+      { name: "Text Files", icon: TextFile },
+      { name: "Markdown", icon: FileCode },
+    ],
   },
   {
-    name: "Agreements",
-    icon: FileSignature,
+    name: "Spreadsheets",
+    icon: Table2,
     bgColor: "bg-green-50",
     textColor: "text-green-500",
-    description: "Service and partnership documents.",
+    description: "Data and calculations",
+    types: [
+      { name: "Excel/Numbers", icon: FileSpreadsheet },
+      { name: "CSV", icon: Table2 },
+      { name: "Google Sheets", icon: FileInput },
+    ],
   },
   {
-    name: "NDAs",
-    icon: FileCheck,
-    bgColor: "bg-amber-50",
-    textColor: "text-amber-500",
-    description: "Confidentiality agreements.",
-  },
-  {
-    name: "Legal Claims",
-    icon: Scale,
-    bgColor: "bg-red-50",
-    textColor: "text-red-500",
-    description: "Track and manage legal proceedings.",
-  },
-  {
-    name: "Settlements",
-    icon: Handshake,
+    name: "Media",
+    icon: Image,
     bgColor: "bg-purple-50",
     textColor: "text-purple-500",
-    description: "Resolution and settlement docs.",
+    description: "Rich media content",
+    types: [
+      { name: "Images/Photos", icon: Image },
+      { name: "Videos", icon: Video },
+      { name: "Screenshots", icon: Camera },
+      { name: "Audio/Voice", icon: Music },
+    ],
   },
   {
-    name: "Court Filings",
-    icon: Gavel,
-    bgColor: "bg-indigo-50",
-    textColor: "text-indigo-500",
-    description: "Legal documentation and records.",
+    name: "Communications",
+    icon: MessageSquare,
+    bgColor: "bg-amber-50",
+    textColor: "text-amber-500",
+    description: "Communication records",
+    types: [
+      { name: "Emails", icon: Mail },
+      { name: "Chat Logs", icon: MessageSquare },
+      { name: "Call Records", icon: Phone },
+    ],
   },
   {
-    name: "Company Docs",
-    icon: Building2,
-    bgColor: "bg-pink-50",
-    textColor: "text-pink-500",
-    description: "Company related documents",
-  },
-  {
-    name: "Resolutions",
-    icon: FileSpreadsheet,
-    bgColor: "bg-teal-50",
-    textColor: "text-teal-500",
-    description: "Meeting resolutions and decisions",
-  },
-  {
-    name: "Board Minutes",
-    icon: Users,
-    bgColor: "bg-orange-50",
-    textColor: "text-orange-500",
-    description: "Records of board meetings",
-  },
-  {
-    name: "Due Diligence",
-    icon: Search,
-    bgColor: "bg-cyan-50",
-    textColor: "text-cyan-500",
-    description: "Information gathering and verification",
-  },
-  {
-    name: "Offers",
-    icon: FileStack,
-    bgColor: "bg-lime-50",
-    textColor: "text-lime-500",
-    description: "Proposals and offers",
-  },
-  {
-    name: "Term Sheets",
-    icon: Send,
-    bgColor: "bg-violet-50",
-    textColor: "text-violet-500",
-    description: "Preliminary agreements",
+    name: "Notes & Snippets",
+    icon: StickyNote,
+    bgColor: "bg-rose-50",
+    textColor: "text-rose-500",
+    description: "Quick information capture",
+    types: [
+      { name: "Meeting Notes", icon: BookOpen },
+      { name: "Research Notes", icon: Paperclip },
+      { name: "Web Clips", icon: ClipboardList },
+      { name: "Quick Notes", icon: StickyNote },
+    ],
   },
 ]
 
-export function InformationCategories() {
+export function TypeCategories() {
   const [isExpanded, setIsExpanded] = useState(false)
   const [activeIndex, setActiveIndex] = useState(0)
   const toggleExpansion = () => setIsExpanded(!isExpanded)
@@ -148,14 +133,14 @@ export function InformationCategories() {
                 transition={{ type: "spring", stiffness: 300, damping: 30 }}
                 className="text-lg font-medium text-[#1C1C1C]"
               >
-                Information Categories
+                Types
               </motion.h2>
               <motion.p
                 layout
                 transition={{ type: "spring", stiffness: 300, damping: 30 }}
                 className="text-sm text-[#8992A9]"
               >
-                {isExpanded ? "Browse all categories" : "Click to explore all categories"}
+                {isExpanded ? "Browse all file types" : "Click to explore all types"}
               </motion.p>
             </div>
             <button
@@ -204,6 +189,17 @@ export function InformationCategories() {
                         </div>
                         <h3 className="mb-2 text-base font-semibold">{category.name}</h3>
                         <p className="mb-4 text-sm text-gray-500">{category.description}</p>
+                        <div className="mb-4 grid grid-cols-2 gap-2">
+                          {category.types.map((type) => (
+                            <div
+                              key={type.name}
+                              className="flex items-center gap-2 rounded-lg bg-gray-50 p-2 text-xs text-gray-600"
+                            >
+                              <type.icon className="h-4 w-4" />
+                              <span>{type.name}</span>
+                            </div>
+                          ))}
+                        </div>
                         <button
                           className="mt-auto rounded-full bg-gray-900 px-4 py-2 text-sm text-white transition-colors hover:bg-gray-800"
                           onClick={(e) => e.stopPropagation()}
@@ -265,7 +261,7 @@ export function InformationCategories() {
                 animate={{ opacity: 1 }}
                 transition={{ delay: 0.5 }}
               >
-                +{categories.length - 9} more categories
+                +{categories.length - 9} more types
               </motion.div>
             </motion.div>
           )}

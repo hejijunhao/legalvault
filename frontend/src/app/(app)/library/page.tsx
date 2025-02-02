@@ -5,6 +5,7 @@ import { CollapsibleBlock } from "@/components/library/blocks/collapsible-block"
 import { LibrarianBlock } from "@/components/library/blocks/librarian-block"
 import { HighlightsBlock } from "@/components/library/blocks/highlights-block"
 import { InformationCategories } from "@/components/library/information-categories"
+import { TypeCategories } from "@/components/library/type-categories"
 import { collectionsData, bookmarksData, subscriptionsData, sourcesData } from "@/components/library/blocks/block-data"
 
 export default function LibraryPage() {
@@ -22,16 +23,23 @@ export default function LibraryPage() {
             <LibrarianBlock />
           </div>
 
-          {/* Right column - Highlights and Information Categories */}
-          <div className="flex-1 max-w-[calc(1440px-380px-1.5rem-2rem)]">
+          {/* Right column - Highlights and Categories */}
+          <div className="flex-1 space-y-6 flex flex-col">
             <HighlightsBlock />
-            <InformationCategories />
+            <div className="grid grid-cols-2 gap-6 flex-1">
+              <InformationCategories />
+              <TypeCategories />
+            </div>
           </div>
         </div>
       </div>
     </div>
   )
 }
+
+
+
+
 
 
 
