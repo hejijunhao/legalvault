@@ -19,7 +19,13 @@ const collectionData = {
   lastUpdated: "2 days ago",
 }
 
-// Mock sections data
+// Mock sections data with proper typing
+interface Section {
+  id: string
+  title: string
+  ref: React.RefObject<HTMLDivElement>
+}
+
 const SECTIONS = [
   { id: "confidentiality", title: "Confidentiality Clauses" },
   { id: "representations", title: "Representations & Warranties" },
@@ -28,13 +34,13 @@ const SECTIONS = [
   { id: "indemnification", title: "Indemnification" },
   { id: "termination", title: "Termination Rights" },
   { id: "miscellaneous", title: "Miscellaneous Provisions" },
-]
+] as const
 
 export default function CollectionPage() {
-  const params = useParams()
+  const { collectionID } = useParams() // Updated to match file name
 
   // Create refs for each section
-  const sectionRefs = SECTIONS.map((section) => ({
+  const sectionsWithRefs = SECTIONS.map((section) => ({
     ...section,
     ref: useRef<HTMLDivElement>(null),
   }))
@@ -43,7 +49,7 @@ export default function CollectionPage() {
   const HEADER_OFFSET = 100 // Adjust this value based on your header height
 
   // Use the section observer hook with the calculated offset
-  const { currentSectionId, scrollToSection } = useSectionObserver(sectionRefs, HEADER_OFFSET)
+  const { currentSectionId, scrollToSection } = useSectionObserver(sectionsWithRefs, HEADER_OFFSET)
 
   return (
     <div className="min-h-screen">
@@ -82,7 +88,7 @@ export default function CollectionPage() {
           <div className="relative">
             <div className="sticky top-[100px] max-h-[calc(100vh-100px)] overflow-y-auto">
               <SectionIndexer
-                sections={SECTIONS}
+                sections={sectionsWithRefs}
                 currentSectionId={currentSectionId}
                 onSectionClick={scrollToSection}
               />
@@ -91,7 +97,7 @@ export default function CollectionPage() {
 
           {/* Section Content */}
           <div className="space-y-24 pb-24">
-            {sectionRefs.map((section) => (
+            {sectionsWithRefs.map((section) => (
               <div
                 key={section.id}
                 id={section.id}
@@ -108,6 +114,16 @@ export default function CollectionPage() {
     </div>
   )
 }
+
+
+
+
+
+
+
+
+
+
 
 
 

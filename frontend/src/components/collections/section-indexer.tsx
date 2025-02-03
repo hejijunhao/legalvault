@@ -5,11 +5,12 @@
 import { useRef } from "react"
 import { motion } from "framer-motion"
 import { cn } from "@/lib/utils"
+import type React from "react" // Added import for React
 
 interface Section {
   id: string
   title: string
-  ref?: React.RefObject<HTMLElement>
+  ref: React.RefObject<HTMLDivElement>
 }
 
 interface SectionIndexerProps {
@@ -20,9 +21,6 @@ interface SectionIndexerProps {
 
 export function SectionIndexer({ sections, currentSectionId, onSectionClick }: SectionIndexerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
-
-  // Find the current section index
-  const currentIndex = sections.findIndex((section) => section.id === currentSectionId)
 
   return (
     <div ref={containerRef} className="w-full">
@@ -53,6 +51,10 @@ export function SectionIndexer({ sections, currentSectionId, onSectionClick }: S
     </div>
   )
 }
+
+
+
+
 
 
 

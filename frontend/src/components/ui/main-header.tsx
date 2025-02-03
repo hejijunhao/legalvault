@@ -8,7 +8,6 @@ import { usePathname } from "next/navigation"
 import Image from "next/image"
 import { ChatOverlay } from "@/components/chat/chat-overlay"
 import { DropdownProfileMenu } from "@/components/ui/dropdown-profile-menu"
-import { User, CreditCard, Settings, Building, LogOut } from "lucide-react"
 
 const navigation = [
   { name: "Workspace", href: "/workspace" },
