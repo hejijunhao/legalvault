@@ -8,6 +8,7 @@ import { usePathname } from "next/navigation"
 import Image from "next/image"
 import { ChatOverlay } from "@/components/chat/chat-overlay"
 import { DropdownProfileMenu } from "@/components/ui/dropdown-profile-menu"
+import { User, CreditCard, Settings, Building, LogOut } from "lucide-react"
 
 const navigation = [
   { name: "Workspace", href: "/workspace" },
@@ -29,10 +30,9 @@ export function MainHeader() {
               <Image
                 src="/images/legalvault-logo.svg"
                 alt="LegalVault Logo"
-                width={96}
+                width={32}
                 height={32}
-                priority
-                className="h-8 w-auto"
+                className="h-8 w-8"
               />
             </Link>
           </div>
@@ -164,7 +164,17 @@ export function MainHeader() {
                   />
                 </svg>
               </button>
-              <DropdownProfileMenu isOpen={isProfileDropdownOpen} onClose={() => setIsProfileDropdownOpen(false)} />
+              <DropdownProfileMenu
+                isOpen={isProfileDropdownOpen}
+                onClose={() => setIsProfileDropdownOpen(false)}
+                menuItems={[
+                  { icon: User, label: "Profile", href: "/profile" },
+                  { icon: CreditCard, label: "Billing", href: "/billing" },
+                  { icon: Settings, label: "Settings", href: "/settings" },
+                  { icon: Building, label: "Company", href: "/company" },
+                  { icon: LogOut, label: "Logout", href: "/logout" },
+                ]}
+              />
             </div>
           </div>
         </div>
@@ -174,3 +184,4 @@ export function MainHeader() {
     </>
   )
 }
+
