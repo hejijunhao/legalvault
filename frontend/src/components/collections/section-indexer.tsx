@@ -10,7 +10,7 @@ import type React from "react" // Added import for React
 interface Section {
   id: string
   title: string
-  ref: React.RefObject<HTMLDivElement>
+  ref: React.RefObject<HTMLDivElement | null>
 }
 
 interface SectionIndexerProps {
@@ -51,10 +51,6 @@ export function SectionIndexer({ sections, currentSectionId, onSectionClick }: S
     </div>
   )
 }
-
-
-
-
 
 
 

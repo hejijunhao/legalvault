@@ -7,7 +7,7 @@ import { useState, useEffect, type RefObject } from "react"
 interface Section {
   id: string
   title: string
-  ref: RefObject<HTMLDivElement>
+  ref: RefObject<HTMLDivElement | null> // Changed from HTMLDivElement
 }
 
 export function useSectionObserver(sections: Section[], offset = 0) {
@@ -16,12 +16,12 @@ export function useSectionObserver(sections: Section[], offset = 0) {
   useEffect(() => {
     const handleScroll = () => {
       const sectionElements = sections.filter(
-        (section): section is Section & { ref: { current: HTMLDivElement } } => section.ref.current !== null,
+        (section): section is Section & { ref: { current: HTMLDivElement | null } } => section.ref.current !== null
       )
 
       const currentSection = sectionElements.find((section) => {
-        const rect = section.ref.current.getBoundingClientRect()
-        return rect.top <= offset && rect.bottom > offset
+        const rect = section.ref.current?.getBoundingClientRect()
+        return rect !== undefined && rect.top <= offset && rect.bottom > offset
       })
 
       if (currentSection) {
@@ -54,7 +54,5 @@ export function useSectionObserver(sections: Section[], offset = 0) {
 
   return { currentSectionId, scrollToSection }
 }
-
-
 
 

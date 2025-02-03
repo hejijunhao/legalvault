@@ -29,9 +29,9 @@ export function MainHeader() {
               <Image
                 src="/images/legalvault-logo.svg"
                 alt="LegalVault Logo"
-                width={32}
+                width={0}
                 height={32}
-                className="h-8 w-8"
+                className="h-8 w-auto"
               />
             </Link>
           </div>

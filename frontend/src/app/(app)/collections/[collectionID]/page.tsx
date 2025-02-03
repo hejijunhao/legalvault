@@ -2,11 +2,12 @@
 
 "use client"
 
-import { useRef } from "react"
+import { useRef, createRef } from "react"
 import Link from "next/link"
 import { ChevronRight, FileText, Clock } from "lucide-react"
 import { SectionIndexer } from "@/components/collections/section-indexer"
 import { useSectionObserver } from "@/hooks/collections/use-section-observer"
+import type { RefObject } from "react"
 
 // Mock data for the collection
 const collectionData = {
@@ -18,13 +19,17 @@ const collectionData = {
   lastUpdated: "2 days ago",
 }
 
-// Define base section type
-type BaseSection = {
+// Define section types
+interface BaseSection {
   id: string
   title: string
 }
 
-// Mock sections data
+interface SectionWithRef extends BaseSection {
+  ref: RefObject<HTMLDivElement | null>
+}
+
+// Define the sections array
 const SECTIONS: BaseSection[] = [
   { id: "confidentiality", title: "Confidentiality Clauses" },
   { id: "representations", title: "Representations & Warranties" },
@@ -36,13 +41,20 @@ const SECTIONS: BaseSection[] = [
 ]
 
 export default function CollectionPage() {
-  // Create refs array outside the map function
-  const sectionRefs = SECTIONS.map(() => useRef<HTMLDivElement>(null))
+  // Create a ref for each section at the component level
+  const sectionRefs = useRef<{ [key: string]: RefObject<HTMLDivElement | null> }>(
+    Object.fromEntries(
+      SECTIONS.map((section) => [
+        section.id,
+        createRef<HTMLDivElement>()
+      ])
+    )
+  )
 
-  // Combine sections with refs
-  const sectionsWithRefs = SECTIONS.map((section, index) => ({
+  // Create sections with refs
+  const sectionsWithRefs: SectionWithRef[] = SECTIONS.map((section) => ({
     ...section,
-    ref: sectionRefs[index],
+    ref: sectionRefs.current[section.id],
   }))
 
   // Calculate the offset based on the header height plus some padding
@@ -114,9 +126,6 @@ export default function CollectionPage() {
     </div>
   )
 }
-
-
-
 
 
 
