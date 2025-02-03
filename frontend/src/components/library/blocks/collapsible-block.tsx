@@ -3,10 +3,12 @@
 "use client"
 
 import { useState } from "react"
-import { ChevronRight } from "lucide-react"
+import { ChevronRight, ArrowRight } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Card } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
+import Link from "next/link"
+import { Button } from "@/components/ui/button"
 
 interface BlockItem {
   id: string
@@ -19,9 +21,10 @@ interface CollapsibleBlockProps {
   title: string
   items: BlockItem[]
   iconUrls: string[]
+  viewAllLink?: string
 }
 
-export function CollapsibleBlock({ title, items, iconUrls }: CollapsibleBlockProps) {
+export function CollapsibleBlock({ title, items, iconUrls, viewAllLink }: CollapsibleBlockProps) {
   const [isExpanded, setIsExpanded] = useState(false)
 
   // Ensure we always have 3 icons
@@ -114,6 +117,24 @@ export function CollapsibleBlock({ title, items, iconUrls }: CollapsibleBlockPro
                     </motion.div>
                   ))}
                 </motion.div>
+                {viewAllLink && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: items.length * 0.1 + 0.3, duration: 0.3 }}
+                    className="mt-4 text-center"
+                  >
+                    <Link href={viewAllLink} className="inline-block w-full">
+                      <Button
+                        variant="ghost"
+                        className="w-full rounded-lg bg-[#F3F4F6] py-2 text-[#1C1C1C] transition-all duration-300 hover:bg-[#E5E7EB]"
+                      >
+                        View Collections
+                        <ArrowRight className="ml-2 h-4 w-4 opacity-50" />
+                      </Button>
+                    </Link>
+                  </motion.div>
+                )}
               </motion.div>
             )}
           </AnimatePresence>
@@ -122,4 +143,5 @@ export function CollapsibleBlock({ title, items, iconUrls }: CollapsibleBlockPro
     </motion.div>
   )
 }
+
 

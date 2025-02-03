@@ -16,7 +16,7 @@ export default function LibraryPage() {
         <div className="flex gap-6">
           {/* Left column - Collapsible blocks */}
           <div className="w-[380px] flex-shrink-0 space-y-3">
-            <CollapsibleBlock {...collectionsData} />
+            <CollapsibleBlock {...collectionsData} viewAllLink="/collections" />
             <CollapsibleBlock {...bookmarksData} />
             <CollapsibleBlock {...subscriptionsData} />
             <CollapsibleBlock {...sourcesData} />
@@ -36,6 +36,7 @@ export default function LibraryPage() {
     </div>
   )
 }
+
 
 
 
