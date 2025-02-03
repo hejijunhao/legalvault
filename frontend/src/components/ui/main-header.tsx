@@ -167,13 +167,6 @@ export function MainHeader() {
               <DropdownProfileMenu
                 isOpen={isProfileDropdownOpen}
                 onClose={() => setIsProfileDropdownOpen(false)}
-                menuItems={[
-                  { icon: User, label: "Profile", href: "/profile" },
-                  { icon: CreditCard, label: "Billing", href: "/billing" },
-                  { icon: Settings, label: "Settings", href: "/settings" },
-                  { icon: Building, label: "Company", href: "/company" },
-                  { icon: LogOut, label: "Logout", href: "/logout" },
-                ]}
               />
             </div>
           </div>
@@ -184,4 +177,5 @@ export function MainHeader() {
     </>
   )
 }
+
 
