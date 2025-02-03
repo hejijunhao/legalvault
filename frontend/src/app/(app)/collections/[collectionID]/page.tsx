@@ -3,7 +3,6 @@
 "use client"
 
 import { useRef } from "react"
-import { useParams } from "next/navigation"
 import Link from "next/link"
 import { ChevronRight, FileText, Clock } from "lucide-react"
 import { SectionIndexer } from "@/components/collections/section-indexer"
@@ -19,14 +18,14 @@ const collectionData = {
   lastUpdated: "2 days ago",
 }
 
-// Mock sections data with proper typing
-interface Section {
+// Define base section type
+type BaseSection = {
   id: string
   title: string
-  ref: React.RefObject<HTMLDivElement>
 }
 
-const SECTIONS = [
+// Mock sections data
+const SECTIONS: BaseSection[] = [
   { id: "confidentiality", title: "Confidentiality Clauses" },
   { id: "representations", title: "Representations & Warranties" },
   { id: "conditions", title: "Conditions Precedent" },
@@ -34,15 +33,16 @@ const SECTIONS = [
   { id: "indemnification", title: "Indemnification" },
   { id: "termination", title: "Termination Rights" },
   { id: "miscellaneous", title: "Miscellaneous Provisions" },
-] as const
+]
 
 export default function CollectionPage() {
-  const { collectionID } = useParams() // Updated to match file name
+  // Create refs array outside the map function
+  const sectionRefs = SECTIONS.map(() => useRef<HTMLDivElement>(null))
 
-  // Create refs for each section
-  const sectionsWithRefs = SECTIONS.map((section) => ({
+  // Combine sections with refs
+  const sectionsWithRefs = SECTIONS.map((section, index) => ({
     ...section,
-    ref: useRef<HTMLDivElement>(null),
+    ref: sectionRefs[index],
   }))
 
   // Calculate the offset based on the header height plus some padding
