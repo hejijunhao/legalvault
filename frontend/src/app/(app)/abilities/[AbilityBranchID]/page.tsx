@@ -11,7 +11,7 @@ import { abilityTrees } from "@/lib/ability-data"
 
 export default function AbilityBranchPage() {
   const params = useParams()
-  const branch = params.branch as string
+  const branch = params.AbilityBranchID as string
   const tree = abilityTrees[branch as keyof typeof abilityTrees]
 
   if (!tree) {
