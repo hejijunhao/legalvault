@@ -5,6 +5,7 @@
 import { useState } from "react"
 import { motion } from "framer-motion"
 import { Card } from "@/components/ui/card"
+import Link from "next/link"
 import {
   FileText,
   FileSignature,
@@ -105,49 +106,38 @@ export function InformationCategories() {
       </div>
       <div className="grid grid-cols-3 gap-4 p-4">
         {categories.map((category, index) => (
-          <motion.div
-            key={category.name}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: index * 0.05 }}
-            onHoverStart={() => setHoveredIndex(index)}
-            onHoverEnd={() => setHoveredIndex(null)}
-          >
-            <Card className="group relative h-full cursor-pointer overflow-hidden rounded-lg border border-[#dddddd] bg-white/60 p-4 transition-all duration-300 hover:shadow-lg backdrop-blur-sm">
-              <motion.div
-                className={`absolute inset-0 bg-gradient-to-br ${category.gradient} opacity-0 transition-opacity duration-300`}
-                animate={{ opacity: hoveredIndex === index ? 0.1 : 0 }}
-              />
-              <div className="relative z-10 flex h-full flex-col">
-                <div className="mb-4 flex items-center gap-3">
-                  <div
-                    className={`flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br ${category.gradient}`}
-                  >
-                    <category.icon className="h-5 w-5 text-white" />
-                  </div>
-                  <span className="text-sm font-medium text-[#1c1c1c]">{category.name}</span>
-                </div>
-                <p className="text-xs text-[#525766] flex-grow">{category.description}</p>
+          <Link href={`/library/${category.name.toLowerCase().replace(/\s+/g, "-")}`} key={category.name}>
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: index * 0.05 }}
+              onHoverStart={() => setHoveredIndex(index)}
+              onHoverEnd={() => setHoveredIndex(null)}
+            >
+              <Card className="group relative h-full cursor-pointer overflow-hidden rounded-lg border border-[#dddddd] bg-white/60 p-4 transition-all duration-300 hover:shadow-lg backdrop-blur-sm">
                 <motion.div
-                  className="mt-4 flex justify-end"
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: hoveredIndex === index ? 1 : 0, y: hoveredIndex === index ? 0 : 10 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  <button className="text-xs font-medium text-blue-600 hover:text-blue-800 transition-colors">
-                    View All
-                  </button>
-                </motion.div>
-              </div>
-            </Card>
-          </motion.div>
+                  className={`absolute inset-0 bg-gradient-to-br ${category.gradient} opacity-0 transition-opacity duration-300`}
+                  animate={{ opacity: hoveredIndex === index ? 0.1 : 0 }}
+                />
+                <div className="relative z-10 flex h-full flex-col">
+                  <div className="mb-4 flex items-center gap-3">
+                    <div
+                      className={`flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br ${category.gradient}`}
+                    >
+                      <category.icon className="h-5 w-5 text-white" />
+                    </div>
+                    <span className="text-sm font-medium text-[#1c1c1c]">{category.name}</span>
+                  </div>
+                  <p className="text-xs text-[#525766] flex-grow">{category.description}</p>
+                </div>
+              </Card>
+            </motion.div>
+          </Link>
         ))}
       </div>
     </div>
   )
 }
-
-
 
 
 
