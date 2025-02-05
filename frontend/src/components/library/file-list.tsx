@@ -1,16 +1,12 @@
 // src/components/library/file-list.tsx
 
-// src/components/library/file-list.tsx
-
 "use client"
 
-import { useState } from "react"
 import { motion } from "framer-motion"
 import { FileIcon, FileTextIcon, FileTypeIcon, FileSpreadsheetIcon, FileImageIcon } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
-import { FilePreview } from "./file-preview"
 
-interface File {
+export interface File {
   id: string
   name: string
   type: string
@@ -24,15 +20,18 @@ interface File {
   accessLevel?: string
   comments?: number
   aiInsights?: string
+  category: string
+  collection?: string
 }
 
 interface FileListProps {
-  files: File[]
+  groupedFiles: Record<string, File[]>
+  onFileHover: (file: File | null) => void
+  onFileSelect: (file: File) => void
+  selectedFileId: string | null
 }
 
-export function FileList({ files }: FileListProps) {
-  const [hoveredFile, setHoveredFile] = useState<File | null>(null)
-
+export function FileList({ groupedFiles, onFileHover, onFileSelect, selectedFileId }: FileListProps) {
   const getFileIcon = (type: string) => {
     const baseClass = "h-4 w-4 transition-colors duration-300"
     switch (type) {
@@ -49,58 +48,65 @@ export function FileList({ files }: FileListProps) {
     }
   }
 
-  // Enhanced mock data for the preview
-  const getEnhancedFileData = (file: File): File => ({
-    ...file,
-    size: "2.4 MB",
-    creator: "Sarah Chen",
-    collaborators: ["Michael Wong", "David Kim"],
-    tags: ["Contract", "TechCorp", "2023"],
-    linkedFiles: ["Meeting Notes - TechCorp", "Previous Version"],
-    version: "1.2",
-    accessLevel: "Full",
-    comments: 5,
-    aiInsights:
-      "This document contains standard service agreement terms with custom modifications in sections 3.4 and 5.2. Recent changes focus on liability caps and service level definitions.",
-  })
-
   return (
-    <div className="relative">
-      {files.map((file, index) => (
+    <div className="space-y-12 pt-6">
+      {Object.entries(groupedFiles).map(([category, files]) => (
         <motion.div
-          key={file.id}
+          key={category}
+          id={category.toLowerCase()}
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: index * 0.05 }}
-          onMouseEnter={() => setHoveredFile(file)}
-          onMouseLeave={() => setHoveredFile(null)}
+          transition={{ duration: 0.3 }}
+          className="space-y-6"
         >
-          <div className="group relative cursor-pointer overflow-hidden transition-all duration-300">
-            {/* Hover highlight effect */}
-            <div className="absolute inset-y-0 left-0 w-0.5 bg-gradient-to-b from-neutral-400/0 via-neutral-400/50 to-neutral-400/0 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
-
-            <div className="flex items-center px-6 py-4">
-              <div className="flex items-center space-x-4">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/80 transition-colors duration-300 group-hover:bg-white">
-                  {getFileIcon(file.type)}
+          <h3 className="mb-4 text-xl font-normal italic text-neutral-900 font-['Libre_Baskerville']">{category}</h3>
+          <div className="space-y-1">
+            {files.map((file, index) => (
+              <motion.div
+                key={file.id}
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{
+                  duration: 0.3,
+                  ease: [0.4, 0, 0.2, 1],
+                  delay: index * 0.05,
+                }}
+                onMouseEnter={() => onFileHover(file)}
+                onMouseLeave={() => onFileHover(null)}
+                onClick={() => onFileSelect(file)}
+              >
+                <div
+                  className={`group relative cursor-pointer overflow-hidden rounded-lg transition-all duration-300 ease-in-out ${
+                    selectedFileId === file.id ? "bg-blue-50" : "hover:bg-neutral-50"
+                  }`}
+                >
+                  <div className="flex items-center px-4 py-2">
+                    <div className="flex items-center space-x-3">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full">
+                        {getFileIcon(file.type)}
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="font-medium text-neutral-900 transition-colors duration-300 group-hover:text-blue-600">
+                          {file.name}
+                        </span>
+                        <span className="text-xs text-neutral-400">
+                          {file.type.toUpperCase()} •{" "}
+                          {formatDistanceToNow(new Date(file.lastModified), { addSuffix: true })}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <div className="flex flex-col">
-                  <span className="font-medium text-neutral-900 transition-colors duration-300 group-hover:text-blue-600">
-                    {file.name}
-                  </span>
-                  <span className="text-xs text-neutral-400">
-                    {file.type.toUpperCase()} • {formatDistanceToNow(new Date(file.lastModified), { addSuffix: true })}
-                  </span>
-                </div>
-              </div>
-            </div>
+              </motion.div>
+            ))}
           </div>
         </motion.div>
       ))}
-
-      <FilePreview file={hoveredFile ? getEnhancedFileData(hoveredFile) : null} isVisible={Boolean(hoveredFile)} />
     </div>
   )
 }
+
+
+
 
 
