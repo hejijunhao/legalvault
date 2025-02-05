@@ -4,17 +4,16 @@
 
 import { useState } from "react"
 import { motion } from "framer-motion"
+import Link from "next/link"
 import {
-  FileText,
   FileType,
+  FileText,
   FileTextIcon as TextFile,
-  FileCode,
   Table2,
   FileSpreadsheet,
   FileInput,
   Image,
   Video,
-  Camera,
   Music,
   Mail,
   MessageSquare,
@@ -22,27 +21,19 @@ import {
   StickyNote,
   BookOpen,
   Paperclip,
-  ClipboardList,
 } from "lucide-react"
 
 const categories = [
   {
     name: "Documents",
-    icon: FileText,
-    iconColor: "text-gray-600",
-    description: "Document file formats",
     types: [
       { name: "Word/Pages", icon: FileType },
       { name: "PDF", icon: FileText },
       { name: "Text Files", icon: TextFile },
-      { name: "Markdown", icon: FileCode },
     ],
   },
   {
     name: "Spreadsheets",
-    icon: Table2,
-    iconColor: "text-green-600",
-    description: "Data and calculations",
     types: [
       { name: "Excel/Numbers", icon: FileSpreadsheet },
       { name: "CSV", icon: Table2 },
@@ -51,21 +42,14 @@ const categories = [
   },
   {
     name: "Media",
-    icon: Image,
-    iconColor: "text-purple-600",
-    description: "Rich media content",
     types: [
       { name: "Images/Photos", icon: Image },
       { name: "Videos", icon: Video },
-      { name: "Screenshots", icon: Camera },
       { name: "Audio/Voice", icon: Music },
     ],
   },
   {
-    name: "Communications",
-    icon: MessageSquare,
-    iconColor: "text-amber-600",
-    description: "Communication records",
+    name: "Comms",
     types: [
       { name: "Emails", icon: Mail },
       { name: "Chat Logs", icon: MessageSquare },
@@ -73,82 +57,79 @@ const categories = [
     ],
   },
   {
-    name: "Notes & Snippets",
-    icon: StickyNote,
-    iconColor: "text-rose-600",
-    description: "Quick information capture",
+    name: "Notes",
     types: [
-      { name: "Meeting Notes", icon: BookOpen },
-      { name: "Research Notes", icon: Paperclip },
-      { name: "Web Clips", icon: ClipboardList },
-      { name: "Quick Notes", icon: StickyNote },
+      { name: "Minutes", icon: BookOpen },
+      { name: "Snippets", icon: Paperclip },
+      { name: "Notes", icon: StickyNote },
     ],
   },
 ]
+
+const getGradient = (index: number) => {
+  const gradients = [
+    "from-blue-400 via-purple-400 to-pink-400",
+    "from-green-400 via-teal-400 to-blue-400",
+    "from-yellow-400 via-orange-400 to-red-400",
+    "from-pink-400 via-rose-400 to-indigo-400",
+    "from-indigo-400 via-cyan-400 to-emerald-400",
+  ]
+  return gradients[index % gradients.length]
+}
 
 export function TypeCategories() {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
 
   return (
     <div className="w-full">
-      <div className="flex items-center justify-between border-b border-[#dddddd] p-4">
-        <div>
-          <h2 className="text-lg font-medium text-[#1C1C1C]">Types</h2>
-          <p className="text-sm text-[#8992A9]">Browse all file types</p>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-3 gap-4 p-4">
+      <div className="grid grid-cols-5 gap-4 p-4">
         {categories.map((category, index) => (
-          <motion.div
-            key={category.name}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: index * 0.05 }}
-            className="group relative"
-            onHoverStart={() => setHoveredIndex(index)}
-            onHoverEnd={() => setHoveredIndex(null)}
-          >
-            <div className="h-full cursor-pointer overflow-hidden rounded-lg border border-gray-200 bg-white p-4 transition-all duration-300 hover:shadow-md">
-              <motion.div
-                className="absolute inset-0 bg-gray-50 opacity-0 transition-opacity duration-300"
-                animate={{ opacity: hoveredIndex === index ? 1 : 0 }}
-              />
-              <div className="relative z-10 flex h-full flex-col">
-                <div className="mb-2 flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gray-100 shadow-sm">
-                    <category.icon className={`h-5 w-5 ${category.iconColor}`} />
-                  </div>
-                  <span className="text-sm font-medium text-[#1c1c1c]">{category.name}</span>
-                </div>
-                <p className="mb-2 text-xs text-[#525766]">{category.description}</p>
-                <div className="space-y-1">
-                  {category.types.map((type) => (
-                    <div key={type.name} className="flex items-center gap-2 text-xs text-[#525766]">
-                      <type.icon className="h-3 w-3" />
-                      <span>{type.name}</span>
-                    </div>
-                  ))}
-                </div>
+          <Link href={`/library/${category.name.toLowerCase()}`} key={category.name}>
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: index * 0.05 }}
+              className="group relative"
+              onHoverStart={() => setHoveredIndex(index)}
+              onHoverEnd={() => setHoveredIndex(null)}
+            >
+              <div
+                className={`h-full cursor-pointer overflow-hidden rounded-xl border border-white/20 bg-gradient-to-br ${getGradient(index)} p-6 transition-all duration-300 hover:shadow-lg`}
+              >
                 <motion.div
-                  className="mt-auto flex items-center justify-end"
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: hoveredIndex === index ? 1 : 0, y: hoveredIndex === index ? 0 : 10 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  <button className="text-xs font-medium text-blue-600 hover:text-blue-800 transition-colors">
-                    View All
-                  </button>
-                </motion.div>
+                  className="absolute inset-0 bg-white opacity-70 transition-opacity duration-300 rounded-xl"
+                  animate={{ opacity: hoveredIndex === index ? 0.6 : 0.7 }}
+                />
+                <div className="relative z-10 flex h-full flex-col items-start">
+                  <div className="mb-4">
+                    <span className="text-base font-medium text-black">{category.name}</span>
+                  </div>
+                  <div className="space-y-2 flex-grow text-left">
+                    {category.types.map((type) => (
+                      <div key={type.name} className="flex items-center gap-2 text-sm text-black/70">
+                        <type.icon className="h-4 w-4" />
+                        <span>{type.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <motion.div
+                    className="mt-4 pt-2 border-t border-black/10"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: hoveredIndex === index ? 1 : 0, y: hoveredIndex === index ? 0 : 10 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <span className="text-sm font-medium text-black/90 hover:text-black transition-colors">
+                      View All →
+                    </span>
+                  </motion.div>
+                </div>
               </div>
-            </div>
-          </motion.div>
+            </motion.div>
+          </Link>
         ))}
       </div>
     </div>
   )
 }
-
-
 
 
