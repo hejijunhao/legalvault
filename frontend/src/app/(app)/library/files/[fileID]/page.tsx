@@ -3,8 +3,13 @@
 "use client"
 
 import Link from "next/link"
+import Image from "next/image"
 import { ChevronLeft } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { VersionsPanel } from "@/components/library/file-viewer/versions-panel"
+import { InformationPanel } from "@/components/library/file-viewer/information-panel"
+import { ModePanel } from "@/components/library/file-viewer/mode-panel"
+import { ActionsPanel } from "@/components/library/file-viewer/actions-panel"
 
 // Custom SVG components for the metadata icons
 const DocumentIcon = () => (
@@ -133,7 +138,18 @@ const CalendarIcon = () => (
   </svg>
 )
 
-// Hardcoded data for now
+// Metadata for the file
+const fileMetadata = {
+  created: "20 Feb 2024",
+  modified: "24 Feb 2024",
+  size: "2.4 MB",
+  creator: "Sarah Chen",
+  collaborators: ["Michael Wong", "David Kim"],
+  tags: ["Term Sheet", "M&A", "Draft", "Greenbridge"],
+  source: "OneDrive",
+}
+
+// File data (same as before)
 const fileData = {
   id: "project-greenbridge",
   name: "Project Greenbridge Term Sheet",
@@ -151,38 +167,78 @@ export default function FileOverviewPage() {
   return (
     <div className="min-h-screen">
       <div className="mx-auto max-w-[1440px] px-4 py-6">
-        {/* Back Navigation */}
-        <Link
-          href="/library"
-          className="mb-6 inline-flex items-center text-sm text-[#525766] transition-colors hover:text-[#1c1c1c]"
-        >
-          <ChevronLeft className="mr-1 h-4 w-4" />
-          All Workspaces
-        </Link>
-
-        {/* Centered Title and Metadata Container */}
-        <div className="flex flex-col items-center space-y-4">
-          <h1
-            className={cn("text-[32px] font-normal italic leading-normal text-[#1c1c1c]", "font-['Libre_Baskerville']")}
+        {/* Header row with back button, title, and metadata */}
+        <div className="mb-8 flex items-center justify-between">
+          {/* Back Navigation */}
+          <Link
+            href="/library"
+            className="inline-flex items-center text-sm text-[#525766] transition-colors hover:text-[#1c1c1c]"
           >
-            {fileData.name}
-          </h1>
+            <ChevronLeft className="mr-1 h-4 w-4" />
+            All Workspaces
+          </Link>
 
-          {/* Metadata Tags */}
-          <div className="flex flex-wrap justify-center gap-2">
-            {fileData.metadata.map((item) => (
-              <div
-                key={item.id}
-                className="flex items-center gap-[6px] rounded-xl bg-[rgba(137,146,169,0.30)] px-2 py-1"
-              >
-                <item.icon />
-                <span className="text-sm text-[#1c1c1c]">{item.label}</span>
-              </div>
-            ))}
+          {/* Title and Metadata Container */}
+          <div className="flex flex-1 flex-col items-center">
+            <h1
+              className={cn(
+                "text-[32px] font-normal italic leading-normal text-[#1c1c1c]",
+                "font-['Libre_Baskerville']",
+              )}
+            >
+              {fileData.name}
+            </h1>
+
+            {/* Metadata Tags */}
+            <div className="mt-2 flex flex-wrap justify-center gap-2">
+              {fileData.metadata.map((item) => (
+                <div
+                  key={item.id}
+                  className="flex items-center gap-[6px] rounded-xl bg-[rgba(137,146,169,0.30)] px-2 py-1"
+                >
+                  <item.icon />
+                  <span className="text-sm text-[#1c1c1c]">{item.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Empty div to balance the layout */}
+          <div className="w-[100px]"></div>
+        </div>
+
+        {/* Main content with panels */}
+        <div className="relative mt-8 grid grid-cols-[280px_1fr_280px] gap-6">
+          {/* Left panels */}
+          <div className="space-y-6">
+            <div className="h-[120px]">
+              <VersionsPanel />
+            </div>
+            <div className="h-[calc(100%-136px)]">
+              <InformationPanel metadata={fileMetadata} />
+            </div>
+          </div>
+
+          {/* Center document preview */}
+          <div className="flex items-center justify-center px-8">
+            <div className="relative aspect-[3/4] w-full max-w-[400px]">
+              <Image src="/placeholder.svg" alt="Document Preview" fill className="object-contain" priority />
+            </div>
+          </div>
+
+          {/* Right panels */}
+          <div className="space-y-6">
+            <div className="h-[120px]">
+              <ModePanel />
+            </div>
+            <div className="h-[calc(100%-136px)]">
+              <ActionsPanel />
+            </div>
           </div>
         </div>
       </div>
     </div>
   )
 }
+
 
