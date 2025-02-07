@@ -27,7 +27,6 @@
     "**/*.ts",
     "**/*.tsx",
     ".next/types/**/*.ts",
-    "src/types/three-jsx.d.ts"
   ],
   "exclude": ["node_modules"]
 }
