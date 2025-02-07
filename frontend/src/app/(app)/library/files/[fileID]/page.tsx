@@ -2,14 +2,14 @@
 
 "use client"
 
-import Link from "next/link"
+import { useEffect, useState } from "react"
 import Image from "next/image"
-import { ChevronLeft } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { VersionsPanel } from "@/components/library/file-viewer/versions-panel"
 import { InformationPanel } from "@/components/library/file-viewer/information-panel"
 import { ModePanel } from "@/components/library/file-viewer/mode-panel"
 import { ActionsPanel } from "@/components/library/file-viewer/actions-panel"
+import { BackButton } from "@/components/ui/back-button"
 
 // Custom SVG components for the metadata icons
 const DocumentIcon = () => (
@@ -164,19 +164,23 @@ const fileData = {
 }
 
 export default function FileOverviewPage() {
+  const [isClient, setIsClient] = useState(false)
+
+  useEffect(() => {
+    setIsClient(true)
+  }, [])
+
+  if (!isClient) {
+    return null // or a loading spinner
+  }
+
   return (
     <div className="min-h-screen">
       <div className="mx-auto max-w-[1440px] px-4 py-6">
         {/* Header row with back button, title, and metadata */}
         <div className="mb-8 flex items-center justify-between">
           {/* Back Navigation */}
-          <Link
-            href="/library"
-            className="inline-flex items-center text-sm text-[#525766] transition-colors hover:text-[#1c1c1c]"
-          >
-            <ChevronLeft className="mr-1 h-4 w-4" />
-            All Workspaces
-          </Link>
+          <BackButton />
 
           {/* Title and Metadata Container */}
           <div className="flex flex-1 flex-col items-center">
@@ -208,7 +212,7 @@ export default function FileOverviewPage() {
         </div>
 
         {/* Main content with panels */}
-        <div className="relative mt-8 grid grid-cols-[280px_1fr_280px] gap-6">
+        <div className="relative mt-8 grid grid-cols-[320px_1fr_320px] gap-6">
           {/* Left panels */}
           <div className="space-y-6">
             <div className="h-[120px]">
@@ -218,14 +222,12 @@ export default function FileOverviewPage() {
               <InformationPanel metadata={fileMetadata} />
             </div>
           </div>
-
           {/* Center document preview */}
           <div className="flex items-center justify-center px-8">
             <div className="relative aspect-[3/4] w-full max-w-[400px]">
               <Image src="/placeholder.svg" alt="Document Preview" fill className="object-contain" priority />
             </div>
           </div>
-
           {/* Right panels */}
           <div className="space-y-6">
             <div className="h-[120px]">
@@ -240,5 +242,6 @@ export default function FileOverviewPage() {
     </div>
   )
 }
+
 
 
