@@ -2,11 +2,19 @@
 
 from datetime import datetime
 from enum import Enum
-from typing import List, Optional
+from typing import List, Optional, TYPE_CHECKING
 from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlmodel import Field, SQLModel, JSON, Column, UniqueConstraint, Index, ForeignKey, Relationship
-from .project_client import ProjectClient
+from abc import ABC
+
+if TYPE_CHECKING:
+    from .notebook import NotebookBase
+    from .reminder import ReminderBase
+    from .task import TaskBase
+    from .client import ClientBase
+    from .project_client import ProjectClientBase
+    from .contact_project import ContactProjectBase
 
 
 class ProjectStatus(str, Enum):
@@ -29,21 +37,22 @@ class ProjectKnowledge(SQLModel):
     last_updated: datetime
 
 
-class Project(SQLModel, table=True):
+class ProjectBase(SQLModel, ABC):
     """
-    Represents a project in the LegalVault system.
+    Abstract base class representing a project in the LegalVault system.
+    Serves as a template for tenant-specific project implementations.
     Contains core properties, metadata, and synthesized project knowledge.
     """
-    __tablename__ = "projects"
+    __abstract__ = True
 
     # Table configuration
     __table_args__ = (
-        {'schema': 'public'},
         UniqueConstraint("name", name="uq_project_name"),
         Index("idx_project_status_practice", "status", "practice_area"),
         Index("idx_project_created_by", "created_by"),
         Index("idx_project_modified", "modified_by", "updated_at"),
         Index("idx_project_tasks", "project_id"),
+        {'schema': 'public'}
     )
 
     model_config = {
@@ -149,47 +158,66 @@ class Project(SQLModel, table=True):
     )
 
     # Relationships
-    notebook: Optional["Notebook"] = Relationship(
+    notebook: Optional["NotebookBase"] = Relationship(
         back_populates="project",
         sa_relationship_kwargs={
             "uselist": False,  # One-to-one relationship
             "cascade": "all, delete-orphan",  # Cascade deletion
             "lazy": "selectin",  # Eager loading for better performance
-            "primaryjoin": "and_(Project.project_id==Notebook.project_id, "
-                           "Project.__table__.schema==Notebook.__table__.schema)"
+            "primaryjoin": "and_(ProjectBase.project_id==Notebook.project_id, "
+                           "ProjectBase.__table__.schema==Notebook.__table__.schema)"
         }
     )
 
-    reminders: List["Reminder"] = Relationship(
+    reminder: List["ReminderBase"] = Relationship(
         back_populates="project",
         sa_relationship_kwargs={
             "cascade": "all, delete-orphan",
             "lazy": "selectin",
-            "primaryjoin": "and_(Project.project_id==Reminder.project_id, "
-                           "Project.__table__.schema==Reminder.__table__.schema)"
+            "primaryjoin": "and_(ProjectBase.project_id==Reminder.project_id, "
+                           "ProjectBase.__table__.schema==Reminder.__table__.schema)"
         }
     )
 
-    tasks: List["Task"] = Relationship(
+    task: List["TaskBase"] = Relationship(
         back_populates="project",
         sa_relationship_kwargs={
             "cascade": "all, delete-orphan",
             "lazy": "selectin",
-            "primaryjoin": "and_(Project.project_id==Task.project_id, "
-                           "Project.__table__.schema==Task.__table__.schema)"
+            "primaryjoin": "and_(ProjectBase.project_id==Task.project_id, "
+                           "ProjectBase.__table__.schema==Task.__table__.schema)"
         }
     )
 
-    clients: List["Client"] = Relationship(
-        back_populates="projects",
-        link_model=ProjectClient,
+    client: List["ClientBase"] = Relationship(
+        back_populates="project",
+        link_model=ProjectClientBase,
         sa_relationship_kwargs={
             "lazy": "selectin",
-            "primaryjoin": "and_(Project.project_id==ProjectClient.project_id, "
-                           "Project.__table__.schema==ProjectClient.__table__.schema)"
+            "primaryjoin": "and_(ProjectBase.project_id==ProjectClient.project_id, "
+                           "ProjectBase.__table__.schema==ProjectClient.__table__.schema)"
         }
+    )
+
+    project_client: List["ProjectClientBase"] = Relationship(
+        back_populates="project",
+        sa_relationship_kwargs={"lazy": "selectin"}
+    )
+
+    contact_project: List["ContactProjectBase"] = Relationship(
+        back_populates="project",
+        link_model=ContactProjectBase,
+        sa_relationship_kwargs={"lazy": "selectin"}
     )
 
     def __repr__(self) -> str:
         """String representation of the Project"""
         return f"Project(id={self.project_id}, name={self.name}, status={self.status})"
+
+
+class Project(ProjectBase, table=True):
+    """
+    Concrete implementation of the ProjectBase template.
+    Tenant-specific implementations should inherit from ProjectBase.
+    """
+    __tablename__ = "projects"

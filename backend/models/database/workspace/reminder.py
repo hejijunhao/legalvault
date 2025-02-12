@@ -2,10 +2,11 @@
 
 from datetime import datetime
 from enum import Enum
-from typing import Optional
 from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlmodel import Field, SQLModel, Index, Column, ForeignKey, Relationship
+from .project import Project
+from abc import ABC
 
 
 class ReminderStatus(str, Enum):
@@ -14,21 +15,22 @@ class ReminderStatus(str, Enum):
     COMPLETED = "completed"
 
 
-class Reminder(SQLModel, table=True):
+class ReminderBase(SQLModel, ABC):
     """
-    Represents a reminder in the LegalVault system.
+    Abstract base class representing a reminder in the LegalVault system.
+    Serves as a template for tenant-specific reminder implementations.
     Contains core properties and metadata for reminder functionality.
     """
-    __tablename__ = "reminders"
+    __abstract__ = True
 
     # Table configuration
     __table_args__ = (
-        {'schema': 'public'},
         Index("idx_reminder_project", "project_id"),
         Index("idx_reminder_status", "status"),
         Index("idx_reminder_due_date", "due_date"),
         Index("idx_reminder_created_by", "created_by"),
-        Index("idx_reminder_modified", "modified_by", "updated_at")
+        Index("idx_reminder_modified", "modified_by", "updated_at"),
+        {'schema': 'public'}
     )
 
     model_config = {
@@ -58,7 +60,7 @@ class Reminder(SQLModel, table=True):
     project_id: UUID = Field(
         sa_column=Column(
             UUID(as_uuid=True),
-            ForeignKey("public.projects.project_id", ondelete="CASCADE"),
+            ForeignKey("{schema}.projects.project_id", ondelete="CASCADE"),
             nullable=False
         ),
         description="ID of the associated project"
@@ -116,12 +118,22 @@ class Reminder(SQLModel, table=True):
 
     # Relationships
     project: "Project" = Relationship(
-        back_populates="reminders",
+        back_populates="reminder",
         sa_relationship_kwargs={
-            "lazy": "selectin"  # Eager loading for better performance
+            "lazy": "selectin",  # Eager loading for better performance
+            "primaryjoin": "and_(ReminderBase.project_id==Project.project_id, "
+                          "ReminderBase.__table__.schema==Project.__table__.schema)"
         }
     )
 
     def __repr__(self) -> str:
         """String representation of the Reminder"""
         return f"Reminder(id={self.reminder_id}, title={self.title}, status={self.status})"
+
+
+class Reminder(ReminderBase, table=True):
+    """
+    Concrete implementation of the ReminderBase template.
+    Tenant-specific implementations should inherit from ReminderBase.
+    """
+    __tablename__ = "reminders"

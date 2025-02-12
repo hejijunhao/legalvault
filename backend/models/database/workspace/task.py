@@ -6,7 +6,8 @@ from typing import Optional
 from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlmodel import Field, SQLModel, Index, Column, ForeignKey, Relationship
-
+from .project import Project
+from abc import ABC
 
 class TaskStatus(str, Enum):
     """Status options for tasks"""
@@ -14,22 +15,23 @@ class TaskStatus(str, Enum):
     COMPLETED = "completed"
 
 
-class Task(SQLModel, table=True):
+class TaskBase(SQLModel, ABC):
     """
-    Represents a task in the LegalVault system.
+    Abstract base class representing a task in the LegalVault system.
+    Serves as a template for tenant-specific task implementations.
     Contains core properties and metadata for task functionality.
     """
-    __tablename__ = "tasks"
+    __abstract__ = True
 
     # Table configuration
     __table_args__ = (
-        {'schema': 'public'},
         Index("idx_task_project", "project_id"),
         Index("idx_task_status", "status"),
         Index("idx_task_due_date", "due_date"),
         Index("idx_task_assigned", "assigned_to"),
         Index("idx_task_created_by", "created_by"),
-        Index("idx_task_modified", "modified_by", "updated_at")
+        Index("idx_task_modified", "modified_by", "updated_at"),
+        {'schema': 'public'}
     )
 
     model_config = {
@@ -59,7 +61,7 @@ class Task(SQLModel, table=True):
     project_id: UUID = Field(
         sa_column=Column(
             UUID(as_uuid=True),
-            ForeignKey("public.projects.project_id", ondelete="CASCADE"),
+            ForeignKey("{schema}.projects.project_id", ondelete="CASCADE"),
             nullable=False
         ),
         description="ID of the associated project"
@@ -130,12 +132,22 @@ class Task(SQLModel, table=True):
 
     # Relationships
     project: "Project" = Relationship(
-        back_populates="tasks",
+        back_populates="task",
         sa_relationship_kwargs={
-            "lazy": "selectin"  # Eager loading for better performance
+            "lazy": "selectin",  # Eager loading for better performance
+            "primaryjoin": "and_(TaskBase.project_id==Project.project_id, "
+                          "TaskBase.__table__.schema==Project.__table__.schema)"
         }
     )
 
     def __repr__(self) -> str:
         """String representation of the Task"""
         return f"Task(id={self.task_id}, title={self.title}, status={self.status})"
+
+
+class Task(TaskBase, table=True):
+    """
+    Concrete implementation of the TaskBase template.
+    Tenant-specific implementations should inherit from TaskBase.
+    """
+    __tablename__ = "tasks"

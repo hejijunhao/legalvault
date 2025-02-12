@@ -3,14 +3,16 @@
 from abc import ABC, abstractmethod
 from datetime import datetime
 from enum import Enum
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, TYPE_CHECKING
 from sqlalchemy import text, JSON
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlmodel import Field, SQLModel, Index, Column, ForeignKey, Relationship
-from .project_client import ProjectClient
-from .contact import Contact
-from .contact_client import ContactClient
 
+if TYPE_CHECKING:
+    from .project import ProjectBase
+    from .contact import ContactBase
+    from .project_client import ProjectClientBase
+    from .contact_client import ContactClientBase
 
 class LegalEntityType(str, Enum):
     """Legal entity types for clients"""
@@ -52,18 +54,17 @@ class ClientBase(SQLModel, ABC):
     Serves as a template for tenant-specific client implementations.
     Contains core properties, contact information, and business details.
     """
-    __tablename__ = "clients"
     __abstract__ = True
 
     # Table configuration
     __table_args__ = (
-        {'schema': 'public'},
         Index("idx_client_name", "name"),
         Index("idx_client_status", "status"),
         Index("idx_client_entity_type", "legal_entity_type"),
         Index("idx_client_join_date", "client_join_date"),
         Index("idx_client_created", "created_by"),
-        Index("idx_client_modified", "modified_by", "updated_at")
+        Index("idx_client_modified", "modified_by", "updated_at"),
+        {'schema': 'public'}
     )
 
     model_config = {
@@ -219,50 +220,49 @@ class ClientBase(SQLModel, ABC):
         description="User ID of last modifier"
     )
 
-    # Relationships to other models & tables
-    projects: List["Project"] = Relationship(
-        back_populates="clients",
-        link_model=ProjectClient,
+    # Relationships
+    project_client: List[ProjectClientBase] = Relationship(
+        back_populates="client",
         sa_relationship_kwargs={
             "lazy": "selectin",
-            "primaryjoin": "and_(ClientBase.client_id==ProjectClient.client_id, "
-                          "ClientBase.__table__.schema==ProjectClient.__table__.schema)"
+            "primaryjoin": "and_(ProjectClientBase.client_id==ClientBase.client_id, ProjectClientBase.__table__.schema==ClientBase.__table__.schema)"
         }
     )
-    contacts: List["Contact"] = Relationship(
-        back_populates="clients",
-        link_model=ContactClient,
+    contact_client: List[ContactClientBase] = Relationship(
+        back_populates="client",
         sa_relationship_kwargs={
             "lazy": "selectin",
-            "primaryjoin": "and_(ClientBase.client_id==ContactClient.client_id, "
-                          "ClientBase.__table__.schema==ContactClient.__table__.schema)"
+            "primaryjoin": "and_(ContactClientBase.client_id==ClientBase.client_id, ContactClientBase.__table__.schema==ClientBase.__table__.schema)"
         }
     )
-
-    @abstractmethod
-    def get_tenant_specific_preferences(self) -> Dict:
-        """Abstract method for retrieving tenant-specific client preferences"""
-        pass
-
-    @abstractmethod
-    def validate_tenant_specific_fields(self) -> bool:
-        """Abstract method for validating tenant-specific fields"""
-        pass
+    project: Optional[List["ProjectBase"]] = Relationship(
+        back_populates="client",
+        link_model=ProjectClientBase,
+        sa_relationship_kwargs={
+            "lazy": "selectin",
+            "primaryjoin": "and_(ClientBase.client_id==ProjectClientBase.client_id, ClientBase.__table__.schema==ProjectClientBase.__table__.schema)",
+            "secondaryjoin": "and_(ProjectClientBase.project_id==ProjectBase.project_id, ProjectClientBase.__table__.schema==ProjectBase.__table__.schema)"
+        }
+    )
+    contact: Optional[List["ContactBase"]] = Relationship(
+        back_populates="client",
+        link_model=ContactClientBase,  # Required for many-to-many relationships
+        sa_relationship_kwargs={
+            "lazy": "selectin",
+            "primaryjoin": "and_(ClientBase.client_id==ContactClientBase.client_id, ClientBase.__table__.schema==ContactClientBase.__table__.schema)",
+            "secondaryjoin": "and_(ContactClientBase.contact_id==ContactBase.contact_id, ContactClientBase.__table__.schema==ContactBase.__table__.schema)"
+        }
+    )
 
     def __repr__(self) -> str:
         """String representation of the Client"""
         return f"Client(id={self.client_id}, name={self.name}, status={self.status})"
 
 
-class Client(ClientBase):
+class Client(ClientBase, table=True):
     """
     Concrete implementation of the ClientBase template.
     Tenant-specific implementations should inherit from ClientBase.
     """
-    def get_tenant_specific_preferences(self) -> Dict:
-        """Implementation of tenant-specific preferences"""
-        return self.preferences
 
-    def validate_tenant_specific_fields(self) -> bool:
-        """Implementation of tenant-specific validation"""
-        return True
+    __tablename__ = "clients"

@@ -5,23 +5,26 @@ from typing import List, Optional, TYPE_CHECKING
 from sqlalchemy import text, Text, JSON
 from sqlalchemy.dialects.postgresql import UUID
 from sqlmodel import Field, SQLModel, Column, ForeignKey, Index, Relationship
+from abc import ABC
 
 if TYPE_CHECKING:
-    from models.database.workspace.project import Project
+    from .project import Project
 
-class Notebook(SQLModel, table=True):
+
+class NotebookBase(SQLModel, ABC):
     """
-    Represents a notebook in the LegalVault system.
+    Abstract base class representing a notebook in the LegalVault system.
+    Serves as a template for tenant-specific notebook implementations.
     Contains rich text content and is associated with a single project.
     """
-    __tablename__ = "notebooks"
+    __abstract__ = True
 
     # Table configuration
     __table_args__ = (
-        {'schema': 'public'},
         Index("idx_notebook_project", "project_id"),
         Index("idx_notebook_modified", "modified_by", "updated_at"),
-        Index("idx_notebook_created", "created_by")
+        Index("idx_notebook_created", "created_by"),
+        {'schema': 'public'}
     )
 
     model_config = {
@@ -49,7 +52,7 @@ class Notebook(SQLModel, table=True):
     project_id: UUID = Field(
         sa_column=Column(
             UUID(as_uuid=True),
-            ForeignKey("public.projects.project_id", ondelete="CASCADE"),
+            ForeignKey("{schema}.projects.project_id", ondelete="CASCADE"),
             nullable=False,
             unique=True  # Ensures one-to-one relationship with project
         ),
@@ -85,7 +88,7 @@ class Notebook(SQLModel, table=True):
 
     # Content
     content: str = Field(
-        sa_column=Column(Text),  # Changed from JSON to Text
+        sa_column=Column(Text),
         default="",
         description="Rich text content of the notebook"
     )
@@ -114,11 +117,25 @@ class Notebook(SQLModel, table=True):
         description="Flag indicating if the notebook is archived"
     )
 
+
+    # Relationships
     project: "Project" = Relationship(
         back_populates="notebook",
-        sa_relationship_kwargs={"uselist": False}
+        sa_relationship_kwargs={
+            "uselist": False,
+            "primaryjoin": "and_(NotebookBase.project_id==Project.project_id, "
+                          "NotebookBase.__table__.schema==Project.__table__.schema)"
+        }
     )
 
     def __repr__(self) -> str:
         """String representation of the Notebook"""
         return f"Notebook(id={self.notebook_id}, project_id={self.project_id}, title={self.title or 'Untitled'})"
+
+
+class Notebook(NotebookBase, table=True):
+    """
+    Concrete implementation of the NotebookBase template.
+    Tenant-specific implementations should inherit from NotebookBase.
+    """
+    __tablename__ = "notebooks"

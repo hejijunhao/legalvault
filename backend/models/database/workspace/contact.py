@@ -2,13 +2,17 @@
 
 from datetime import datetime
 from enum import Enum
-from typing import Optional, List
+from typing import Optional, List, TYPE_CHECKING
 from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlmodel import Field, SQLModel, Index, Column, ForeignKey, Relationship
-from .contact_client import ContactClient
-from .contact_project import ContactProject
+from abc import ABC
 
+if TYPE_CHECKING:
+        from .project import ProjectBase
+        from .client import ClientBase
+        from .contact_client import ContactClientBase
+        from .contact_project import ContactProjectBase
 
 class ContactType(str, Enum):
     """Types of contacts"""
@@ -24,20 +28,22 @@ class ContactStatus(str, Enum):
     ARCHIVED = "archived"
 
 
-class Contact(SQLModel, table=True):
+class ContactBase(SQLModel, ABC):
     """
-    Represents a contact in the LegalVault system.
+    Abstract base class representing a contact in the LegalVault system.
+    Serves as a template for tenant-specific contact implementations.
     Contains personal information and professional details.
     """
-    __tablename__ = "contacts"
+    __abstract__ = True
+
     __table_args__ = (
-        {'schema': 'public'},
         Index("idx_contact_name", "first_name", "last_name"),
         Index("idx_contact_email", "email"),
         Index("idx_contact_type", "contact_type"),
         Index("idx_contact_status", "status"),
         Index("idx_contact_created", "created_by"),
-        Index("idx_contact_modified", "modified_by", "updated_at")
+        Index("idx_contact_modified", "modified_by", "updated_at"),
+        {'schema': 'public'}
     )
 
     model_config = {
@@ -145,26 +151,50 @@ class Contact(SQLModel, table=True):
     )
 
     # Relationships
-    clients: List["Client"] = Relationship(
-        back_populates="contacts",
-        link_model=ContactClient,
+    client: List["ClientBase"] = Relationship(
+        back_populates="contact",
+        link_model=ContactClientBase,
         sa_relationship_kwargs={
             "lazy": "selectin",
-            "primaryjoin": "and_(Contact.contact_id==ContactClient.contact_id, "
-                           "Contact.__table__.schema==ContactClient.__table__.schema)"
+            "primaryjoin": "and_(ContactBase.contact_id==ContactClientBase.contact_id, ContactBase.__table__.schema==ContactClientBase.__table__.schema)",
+            "secondaryjoin": "and_(ContactClientBase.client_id==ClientBase.client_id, ContactClientBase.__table__.schema==ClientBase.__table__.schema)"
         }
     )
 
-    projects: List["Project"] = Relationship(
-        back_populates="contacts",
-        link_model=ContactProject,
+    project: List["ProjectBase"] = Relationship(
+        back_populates="contact",
+        link_model=ContactProjectBase,
         sa_relationship_kwargs={
             "lazy": "selectin",
-            "primaryjoin": "and_(Contact.contact_id==ContactProject.contact_id, "
-                           "Contact.__table__.schema==ContactProject.__table__.schema)"
+            "primaryjoin": "and_(ContactBase.contact_id==ContactProjectBase.contact_id, ContactBase.__table__.schema==ContactProjectBase.__table__.schema)",
+            "secondaryjoin": "and_(ContactProjectBase.project_id==ProjectBase.project_id, ContactProjectBase.__table__.schema==ProjectBase.__table__.schema)"
+        }
+    )
+
+    contact_client: List[ContactClientBase] = Relationship(
+        back_populates="contact",
+        sa_relationship_kwargs={
+            "lazy": "selectin",
+            "primaryjoin": "and_(ContactClientBase.contact_id==ContactBase.contact_id, ContactClientBase.__table__.schema==ContactBase.__table__.schema)"
+        }
+    )
+
+    contact_project: List[ContactProjectBase] = Relationship(
+        back_populates="contact",
+        sa_relationship_kwargs={
+            "lazy": "selectin",
+            "primaryjoin": "and_(ContactProjectBase.contact_id==ContactBase.contact_id, ContactProjectBase.__table__.schema==ContactBase.__table__.schema)"
         }
     )
 
     def __repr__(self) -> str:
         """String representation of the Contact"""
         return f"Contact(id={self.contact_id}, name={self.first_name} {self.last_name})"
+
+
+class Contact(ContactBase, table=True):
+    """
+    Concrete implementation of the ContactBase template.
+    Tenant-specific implementations should inherit from ContactBase.
+    """
+    __tablename__ = "contacts"

@@ -13,6 +13,46 @@ from alembic import context
 from dotenv import load_dotenv
 from sqlmodel import SQLModel
 
+# Model Imports - Vault Schema
+from models.database.user import User
+from models.database.enterprise import Enterprise
+from models.database.paralegal import VirtualParalegal
+from models.database.abilities.ability import Ability
+from models.database.abilities.ability_taskmanagement import TaskManagementAbility
+from models.database.abilities.ability_receive_email import ReceiveEmailAbility
+from models.database.profile_picture import VPProfilePicture
+from models.database.behaviours import behaviour
+from models.database.integrations import Integration, Credentials, integration_ability
+
+# Model Imports - Public Schema (Concrete Implementations)
+# Longterm Memory
+from models.database.longterm_memory import (
+    ActionsHistory,
+    ConversationalHistory,
+    EducationalKnowledge,
+    GlobalKnowledge,
+    SelfIdentity
+)
+
+# Workspace
+from models.database.workspace import (
+    Client,
+    Contact,
+    ContactClient,
+    ContactProject,
+    Notebook,
+    Project,
+    ProjectClient,
+    Reminder,
+    Task
+)
+
+# Library
+from models.database.library import (
+    Collection,
+    MasterFileDatabase
+)
+
 # Load environment variables
 load_dotenv()
 

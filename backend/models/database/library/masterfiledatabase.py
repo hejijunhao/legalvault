@@ -4,10 +4,12 @@ from datetime import datetime
 from typing import Dict, List, Optional, Any
 from uuid import UUID, uuid4
 from enum import Enum
-from sqlmodel import Field, SQLModel, Relationship
-from sqlalchemy import Column, JSON, Index, CheckConstraint, ForeignKey, text
+from sqlmodel import Field, SQLModel
+from sqlalchemy import Column, Index, CheckConstraint, ForeignKey
 from pydantic import validator
-from sqlalchemy.dialects.postgresql import JSONB, UUID as SQLAlchemyUUID
+from sqlalchemy.dialects.postgresql import UUID as SQLAlchemyUUID, JSONB
+from abc import ABC
+
 
 class FileStatus(str, Enum):
     AVAILABLE = "available"
@@ -49,19 +51,43 @@ class DocumentType(str, Enum):
     OTHER = "other"
 
 
-class MasterFileDatabase(SQLModel, table=True):
-    __tablename__ = "master_file_database"
+class MasterFileDatabaseBase(SQLModel, ABC):
+    """
+    Abstract base class representing a master file record in the LegalVault system.
+    Serves as a template for tenant-specific master file implementations.
+    Contains comprehensive file metadata, content details, and relationships.
+    """
+    __abstract__ = True
 
     __table_args__ = (
-        {'schema': 'public'},
-        Index("idx_file_status", "file_attributes", postgresql_using='gin'),
-        Index("idx_document_type", "file_attributes", postgresql_using='gin'),
-        Index("idx_owner_source", "owner_id", "source"),
-        Index("idx_owner_status", "owner_id", "file_attributes"),
+        Index("ix_masterfile_file_status", "file_attributes", postgresql_using='gin'),
+        Index("ix_masterfile_document_type", "file_attributes", postgresql_using='gin'),
+        Index("ix_masterfile_owner_source", "owner_id", "source"),
+        Index("ix_masterfile_owner_status", "owner_id", "file_attributes"),
         CheckConstraint("file_attributes::jsonb ? 'status'", name="check_file_status"),
-        CheckConstraint("file_attributes::jsonb ? 'document_type'", name="check_document_type")
+        CheckConstraint("file_attributes::jsonb ? 'document_type'", name="check_document_type"),
+        {'schema': 'public'}
     )
 
+    model_config = {
+        "arbitrary_types_allowed": True,
+        "json_schema_extra": {
+            "example": {
+                "source": "onedrive",
+                "external_url": "https://onedrive.live.com/123456789",
+                "directory": "/client_files/2024/",
+                "import_action": "automatic_sync",
+                "file_attributes": {
+                    "file_title": "Service Agreement - Client A",
+                    "file_name": "service_agreement_client_a_v1.docx",
+                    "document_type": "contract",
+                    "status": "available"
+                }
+            }
+        }
+    }
+
+    # Core Properties
     file_id: UUID = Field(
         default_factory=uuid4,
         primary_key=True,
@@ -142,8 +168,18 @@ class MasterFileDatabase(SQLModel, table=True):
     )
 
     # Timestamps
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(
+        default_factory=datetime.utcnow,
+        nullable=False,
+        sa_column_kwargs={"server_default": "now()"},
+        description="Timestamp when the record was created"
+    )
+    updated_at: datetime = Field(
+        default_factory=datetime.utcnow,
+        nullable=False,
+        sa_column_kwargs={"server_default": "now()", "onupdate": "now()"},
+        description="Timestamp when the record was last updated"
+    )
 
     @validator("file_attributes")
     def validate_file_attributes(cls, v):
@@ -181,19 +217,14 @@ class MasterFileDatabase(SQLModel, table=True):
 
         return v
 
-    class Config:
-        arbitrary_types_allowed = True
-        json_schema_extra = {  # Note: schema_extra is deprecated in Pydantic v2
-            "example": {
-                "source": "onedrive",
-                "external_url": "https://onedrive.live.com/123456789",
-                "directory": "/client_files/2024/",
-                "import_action": "automatic_sync",
-                "file_attributes": {
-                    "file_title": "Service Agreement - Client A",
-                    "file_name": "service_agreement_client_a_v1.docx",
-                    "document_type": "contract",
-                    "status": "available"
-                }
-            }
-        }
+    def __repr__(self) -> str:
+        """String representation of the Master File"""
+        return f"MasterFile(id={self.file_id}, source={self.source})"
+
+
+class MasterFileDatabase(MasterFileDatabaseBase):
+    """
+    Concrete implementation of the MasterFileDatabaseBase template.
+    Tenant-specific implementations should inherit from MasterFileDatabaseBase.
+    """
+    __tablename__ = "master_file_database"

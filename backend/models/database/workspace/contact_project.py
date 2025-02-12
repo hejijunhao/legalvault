@@ -2,11 +2,15 @@
 
 from datetime import datetime
 from enum import Enum
-from typing import Optional
-from sqlalchemy import Column, Index
+from typing import Optional, TYPE_CHECKING
+from sqlalchemy import Column, Index, Relationship
 from sqlalchemy.dialects.postgresql import UUID
 from sqlmodel import Field, SQLModel, ForeignKey
+from abc import ABC
 
+if TYPE_CHECKING:
+    from .contact import ContactBase
+    from .project import ProjectBase
 
 class ProjectRole(str, Enum):
     """Role of the contact in the project"""
@@ -20,22 +24,23 @@ class ProjectRole(str, Enum):
     OTHER = "other"          # Other project role
 
 
-class ContactProject(SQLModel, table=True):
+class ContactProjectBase(SQLModel, ABC):
     """
-    Association table for the many-to-many relationship between Contacts and Projects.
+    Abstract base class for the many-to-many relationship between Contacts and Projects.
+    Serves as a template for tenant-specific implementations.
     """
-    __tablename__ = "contact_projects"
+    __abstract__ = True
 
     __table_args__ = (
-        {'schema': 'public'},
         Index("idx_contact_project_role", "role"),
-        Index("idx_contact_project_created", "created_by")
+        Index("idx_contact_project_created", "created_by"),
+        {'schema': 'public'}
     )
     
     contact_id: UUID = Field(
         default=None,
         sa_column=Column(
-            ForeignKey("public.contacts.contact_id", ondelete="CASCADE"),
+            ForeignKey("{schema}.contacts.contact_id", ondelete="CASCADE"),
             primary_key=True,
             nullable=False
         )
@@ -43,7 +48,7 @@ class ContactProject(SQLModel, table=True):
     project_id: UUID = Field(
         default=None,
         sa_column=Column(
-            ForeignKey("public.projects.project_id", ondelete="CASCADE"),
+            ForeignKey("{schema}.projects.project_id", ondelete="CASCADE"),
             primary_key=True,
             nullable=False
         )
@@ -81,6 +86,40 @@ class ContactProject(SQLModel, table=True):
             nullable=True
         )
     )
+    modified_by: UUID = Field(
+        sa_column=Column(
+            ForeignKey("vault.users.id", ondelete="SET NULL"),
+            nullable=True
+        )
+    )
 
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = {
+        "arbitrary_types_allowed": True
+    }
+
+    # Relationships
+    contact: Optional["ContactBase"] = Relationship(
+        back_populates="contact_project",
+        sa_relationship_kwargs={
+            "lazy": "selectin",
+            "primaryjoin": "and_(ContactProjectBase.contact_id==ContactBase.contact_id, "
+                           "ContactProjectBase.__table__.schema==ContactBase.__table__.schema)"
+        }
+    )
+
+    project: Optional["ProjectBase"] = Relationship(
+        back_populates="contact_project",
+        sa_relationship_kwargs={
+            "lazy": "selectin",
+            "primaryjoin": "and_(ContactProjectBase.project_id==ProjectBase.project_id, "
+                           "ContactProjectBase.__table__.schema==ProjectBase.__table__.schema)"
+        }
+    )
+
+
+class ContactProject(ContactProjectBase, table=True):
+    """
+    Concrete implementation of the ContactProjectBase template.
+    Tenant-specific implementations should inherit from ContactProjectBase.
+    """
+    __tablename__ = "contact_projects"

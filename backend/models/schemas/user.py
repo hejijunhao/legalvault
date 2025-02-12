@@ -1,5 +1,9 @@
 # models/schemas/user.py
 
+from pydantic import BaseModel
+from typing import Optional
+from uuid import UUID
+
 class UserCreate(BaseModel):
     email: str
     name: str

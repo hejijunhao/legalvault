@@ -9,8 +9,8 @@ from sqlalchemy.dialects.postgresql import JSONB
 class ReceiveEmailAbility(SQLModel, table=True):
     __tablename__ = "ability_receive_email"
     __table_args__ = (
-        {'schema': 'vault'},
-        Index("ix_ability_receive_email_operation_name", "operation_name")
+        Index("ix_ability_receive_email_operation_name", "operation_name"),
+        {"schema": "vault"}
     )
 
     id: int = Field(default=None, primary_key=True)

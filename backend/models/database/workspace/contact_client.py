@@ -2,11 +2,15 @@
 
 from datetime import datetime
 from enum import Enum
-from typing import Optional
-from sqlalchemy import Column, Index
+from typing import Optional, TYPE_CHECKING
+from sqlalchemy import Column, Index, Relationship
 from sqlalchemy.dialects.postgresql import UUID
 from sqlmodel import Field, SQLModel, ForeignKey
+from abc import ABC
 
+if TYPE_CHECKING:
+    from .client import ClientBase
+    from .contact import ContactBase
 
 class ContactRole(str, Enum):
     """Role of the contact at the client organization"""
@@ -19,22 +23,23 @@ class ContactRole(str, Enum):
     OTHER = "other"             # Other role
 
 
-class ContactClient(SQLModel, table=True):
+class ContactClientBase(SQLModel, ABC):
     """
-    Association table for the many-to-many relationship between Contacts and Clients.
+    Abstract base class for the many-to-many relationship between Contacts and Clients.
+    Serves as a template for tenant-specific implementations.
     """
-    __tablename__ = "contact_clients"
+    __abstract__ = True
 
     __table_args__ = (
-        {'schema': 'public'},
         Index("idx_contact_client_role", "role"),
-        Index("idx_contact_client_created", "created_by")
+        Index("idx_contact_client_created", "created_by"),
+        {'schema': 'public'}
     )
     
     contact_id: UUID = Field(
         default=None,
         sa_column=Column(
-            ForeignKey("public.contacts.contact_id", ondelete="CASCADE"),
+            ForeignKey("{schema}.contacts.contact_id", ondelete="CASCADE"),
             primary_key=True,
             nullable=False
         )
@@ -42,7 +47,7 @@ class ContactClient(SQLModel, table=True):
     client_id: UUID = Field(
         default=None,
         sa_column=Column(
-            ForeignKey("public.clients.client_id", ondelete="CASCADE"),
+            ForeignKey("{schema}.clients.client_id", ondelete="CASCADE"),
             primary_key=True,
             nullable=False
         )
@@ -73,6 +78,37 @@ class ContactClient(SQLModel, table=True):
             nullable=True
         )
     )
+    modified_by: UUID = Field(
+        sa_column=Column(
+            ForeignKey("vault.users.id", ondelete="SET NULL"),
+            nullable=True
+        )
+    )
 
-    class Config:
-        arbitrary_types_allowed = True
+    # Linkages
+    client: Optional["ClientBase"] = Relationship(
+        back_populates="contact_client",
+        sa_relationship_kwargs={
+            "lazy": "selectin",
+            "primaryjoin": "and_(ContactClientBase.client_id==ClientBase.client_id, ContactClientBase.__table__.schema==ClientBase.__table__.schema)"
+        }
+    )
+    contact: Optional["ContactBase"] = Relationship(
+        back_populates="contact_client",
+        sa_relationship_kwargs={
+            "lazy": "selectin",
+            "primaryjoin": "and_(ContactClientBase.contact_id==ContactBase.contact_id, ContactClientBase.__table__.schema==ContactBase.__table__.schema)"
+        }
+    )
+
+    model_config = {
+        "arbitrary_types_allowed": True
+    }
+
+
+class ContactClient(ContactClientBase, table=True):
+    """
+    Concrete implementation of the ContactClientBase template.
+    Tenant-specific implementations should inherit from ContactClientBase.
+    """
+    __tablename__ = "contact_clients"

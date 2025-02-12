@@ -1,11 +1,14 @@
 # models/database/longterm_memory/global_knowledge.py
 
-import sqlmodel
-from sqlmodel import SQLModel, Field
-from sqlalchemy import Column, Text, Enum as SQLEnum
+from sqlmodel import SQLModel, Field, Index
+from sqlalchemy import TIMESTAMP, Column, Text, ForeignKey, Enum as SQLEnum, UniqueConstraint
 from typing import Optional
-import uuid
+from datetime import datetime
+from uuid import uuid4
+from sqlalchemy.dialects.postgresql import UUID
 from enum import Enum
+from abc import ABC
+
 
 class KnowledgeType(str, Enum):
     """Enumeration of possible knowledge types."""
@@ -15,20 +18,74 @@ class KnowledgeType(str, Enum):
     PROJECT_OVERVIEW = "project_overview"
     INTEGRATION_ACCESS = "integration_access"
 
-class GlobalKnowledge(SQLModel, table=True):
-    """Database model for VP global knowledge system prompts."""
-    __tablename__ = "longterm_memory_global_knowledge"
 
-    id: Optional[int] = Field(default=None, primary_key=True)
-    vp_id: uuid.UUID = Field(foreign_key="vault.virtual_paralegals.id")
-    knowledge_type: KnowledgeType = Field(sa_column=Column(SQLEnum(KnowledgeType)))
-    prompt: str = Field(sa_column=Column(Text))
-
-    class Config:
-        arbitrary_types_allowed = True
+class GlobalKnowledgeBase(SQLModel, ABC):
+    """
+    Abstract base class representing a VP's global knowledge in the LegalVault system.
+    Serves as a template for tenant-specific global knowledge implementations.
+    Contains system-wide awareness and general domain knowledge.
+    """
+    __abstract__ = True
 
     __table_args__ = (
-        # Ensure each VP has only one prompt per knowledge type
-        sqlmodel.UniqueConstraint('vp_id', 'knowledge_type'),
+        UniqueConstraint('vp_id', 'knowledge_type'),
+        Index("ix_global_knowledge_vp_id", "vp_id"),
+        Index("ix_global_knowledge_last_updated", "last_updated"),
         {'schema': 'public'}
     )
+
+    model_config = {
+        "arbitrary_types_allowed": True,
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "knowledge_type": "system_stats",
+                    "prompt": "System-wide statistics and metrics..."
+                }
+            ]
+        }
+    }
+
+    # Core Properties
+    id: UUID = Field(
+        default_factory=uuid4,
+        primary_key=True,
+        description="Unique identifier for the global knowledge record"
+    )
+    vp_id: UUID = Field(
+        sa_column=Column(
+            UUID(as_uuid=True),
+            ForeignKey("vault.virtual_paralegals.id"),
+            nullable=False
+        ),
+        description="Foreign key to the Virtual Paralegal"
+    )
+
+    # Knowledge Content
+    knowledge_type: KnowledgeType = Field(
+        sa_column=Column(SQLEnum(KnowledgeType)),
+        description="Type of global knowledge"
+    )
+    prompt: str = Field(
+        sa_column=Column(Text),
+        description="Global knowledge prompt"
+    )
+
+    # Metadata
+    last_updated: datetime = Field(
+        sa_column=Column(TIMESTAMP(timezone=True)),
+        default_factory=datetime.utcnow,
+        description="Timestamp of last update"
+    )
+
+    def __repr__(self) -> str:
+        """String representation of the Global Knowledge"""
+        return f"GlobalKnowledge(id={self.id}, vp_id={self.vp_id}, type={self.knowledge_type})"
+
+
+class GlobalKnowledge(GlobalKnowledgeBase):
+    """
+    Concrete implementation of the GlobalKnowledgeBase template.
+    Tenant-specific implementations should inherit from GlobalKnowledgeBase.
+    """
+    __tablename__ = "longterm_memory_global_knowledge"
