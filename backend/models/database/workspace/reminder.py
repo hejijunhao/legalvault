@@ -2,6 +2,7 @@
 
 from datetime import datetime
 from enum import Enum
+from typing import Optional, List, TYPE_CHECKING
 from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlmodel import Field, SQLModel, Index, Column, ForeignKey, Relationship
@@ -29,8 +30,7 @@ class ReminderBase(SQLModel, ABC):
         Index("idx_reminder_status", "status"),
         Index("idx_reminder_due_date", "due_date"),
         Index("idx_reminder_created_by", "created_by"),
-        Index("idx_reminder_modified", "modified_by", "updated_at"),
-        {'schema': 'public'}
+        Index("idx_reminder_modified", "modified_by", "updated_at")
     )
 
     model_config = {
@@ -60,7 +60,7 @@ class ReminderBase(SQLModel, ABC):
     project_id: UUID = Field(
         sa_column=Column(
             UUID(as_uuid=True),
-            ForeignKey("{schema}.projects.project_id", ondelete="CASCADE"),
+            ForeignKey("enterprise_schema.projects.project_id", ondelete="CASCADE"),
             nullable=False
         ),
         description="ID of the associated project"
@@ -131,9 +131,24 @@ class ReminderBase(SQLModel, ABC):
         return f"Reminder(id={self.reminder_id}, title={self.title}, status={self.status})"
 
 
-class Reminder(ReminderBase, table=True):
+class ReminderBlueprint(ReminderBase):
     """
-    Concrete implementation of the ReminderBase template.
-    Tenant-specific implementations should inherit from ReminderBase.
+    Concrete implementation of ReminderBase for the public schema blueprint.
+    Serves as a reference for tenant-specific implementations.
+    """
+    __tablename__ = "reminder_blueprint"
+    __table_args__ = (
+        Index("idx_reminder_project", "project_id"),
+        Index("idx_reminder_status", "status"),
+        Index("idx_reminder_due", "due_date"),
+        Index("idx_reminder_created_by", "created_by"),
+        Index("idx_reminder_modified", "modified_by", "updated_at"),
+        {'schema': 'public'}
+    )
+
+
+class Reminder(ReminderBase):
+    """
+    Concrete implementation of ReminderBase for enterprise schemas.
     """
     __tablename__ = "reminders"

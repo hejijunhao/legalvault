@@ -2,8 +2,8 @@
 
 from datetime import datetime
 from typing import Optional
-from uuid import uuid4
-from sqlalchemy.dialects.postgresql import UUID
+from uuid import UUID, uuid4
+from sqlalchemy.dialects.postgresql import UUID as SQLAlchemyUUID
 from sqlalchemy import Column, Text, TIMESTAMP, ForeignKey
 from sqlmodel import SQLModel, Field, Index
 from abc import ABC
@@ -19,8 +19,7 @@ class ConversationalHistoryBase(SQLModel, ABC):
 
     __table_args__ = (
         Index("ix_conversational_history_vp_id", "vp_id"),
-        Index("ix_conversational_history_last_updated", "last_updated"),
-        {'schema': 'public'}
+        Index("ix_conversational_history_last_updated", "last_updated")
     )
 
     model_config = {
@@ -40,15 +39,15 @@ class ConversationalHistoryBase(SQLModel, ABC):
     id: UUID = Field(
         default_factory=uuid4,
         primary_key=True,
+        sa_type=SQLAlchemyUUID,
         description="Unique identifier for the conversation history record"
     )
     vp_id: UUID = Field(
         sa_column=Column(
-            UUID(as_uuid=True),
+            SQLAlchemyUUID,
             ForeignKey("vault.virtual_paralegals.id"),
             nullable=False
-        ),
-        description="Foreign key to the Virtual Paralegal"
+        )
     )
     
     # Conversation Details
@@ -77,9 +76,21 @@ class ConversationalHistoryBase(SQLModel, ABC):
         return f"ConversationalHistory(id={self.id}, vp_id={self.vp_id}, interaction_count={self.interaction_count})"
 
 
-class ConversationalHistory(ConversationalHistoryBase, table=True):
+class ConversationalHistoryBlueprint(ConversationalHistoryBase):
     """
-    Concrete implementation of the ConversationalHistoryBase template.
-    Tenant-specific implementations should inherit from ConversationalHistoryBase.
+    Concrete implementation of ConversationalHistoryBase for the public schema blueprint.
+    Serves as a reference for tenant-specific implementations.
+    """
+    __tablename__ = "longterm_memory_conversational_history_blueprint"
+    __table_args__ = (
+        Index("ix_conversational_history_vp_id", "vp_id"),
+        Index("ix_conversational_history_last_updated", "last_updated"),
+        {'schema': 'public'}
+    )
+
+
+class ConversationalHistory(ConversationalHistoryBase):
+    """
+    Concrete implementation of ConversationalHistoryBase for enterprise schemas.
     """
     __tablename__ = "longterm_memory_conversational_history"

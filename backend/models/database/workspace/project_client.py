@@ -2,10 +2,10 @@
 
 from datetime import datetime
 from enum import Enum
-from typing import Optional, TYPE_CHECKING
-from sqlalchemy import Column, Index, Relationship
+from typing import Optional, List, TYPE_CHECKING
+from sqlalchemy import Column, Index
 from sqlalchemy.dialects.postgresql import UUID
-from sqlmodel import Field, SQLModel, ForeignKey
+from sqlmodel import Field, SQLModel, Relationship, ForeignKey
 from abc import ABC
 
 if TYPE_CHECKING:
@@ -30,14 +30,13 @@ class ProjectClientBase(SQLModel, ABC):
 
     __table_args__ = (
         Index("idx_project_client_role", "role"),
-        Index("idx_project_client_created", "created_by"),
-        {'schema': 'public'}
+        Index("idx_project_client_created", "created_by")
     )
 
     project_id: UUID = Field(
         default=None,
         sa_column=Column(
-            ForeignKey("{schema}.projects.project_id", ondelete="CASCADE"),
+            ForeignKey("enterprise_schema.projects.project_id", ondelete="CASCADE"),
             primary_key=True,
             nullable=False
         )
@@ -45,7 +44,7 @@ class ProjectClientBase(SQLModel, ABC):
     client_id: UUID = Field(
         default=None,
         sa_column=Column(
-            ForeignKey("{schema}.clients.client_id", ondelete="CASCADE"),
+            ForeignKey("enterprise_schema.clients.client_id", ondelete="CASCADE"),
             primary_key=True,
             nullable=False
         )
@@ -79,19 +78,19 @@ class ProjectClientBase(SQLModel, ABC):
     )
 
     # Class Linkages
-    project: Optional["ProjectBase"] = Relationship(
+    project: "ProjectBase" = Relationship(
         back_populates="project_client",
         sa_relationship_kwargs={
             "lazy": "selectin",
-            "primaryjoin": "and_(ProjectClientBase.project_id==ProjectBase.project_id, ProjectClientBase.__table__.schema==ProjectBase.__table__.schema)"
+            "primaryjoin": "and_(foreign(ProjectClientBase.project_id)==ProjectBase.project_id, ProjectClientBase.__table__.schema==ProjectBase.__table__.schema)"
         }
     )
 
-    client: Optional["ClientBase"] = Relationship(
+    client: "ClientBase" = Relationship(
         back_populates="project_client",
         sa_relationship_kwargs={
             "lazy": "selectin",
-            "primaryjoin": "and_(ProjectClientBase.client_id==ClientBase.client_id, ProjectClientBase.__table__.schema==ClientBase.__table__.schema)"
+            "primaryjoin": "and_(foreign(ProjectClientBase.client_id)==ClientBase.client_id, ProjectClientBase.__table__.schema==ClientBase.__table__.schema)"
         }
     )
 
@@ -99,9 +98,20 @@ class ProjectClientBase(SQLModel, ABC):
         "arbitrary_types_allowed": True
     }
 
-class ProjectClient(ProjectClientBase, table=True):
+class ProjectClientBlueprint(ProjectClientBase):
     """
-    Concrete implementation of the ProjectClientBase template.
-    Tenant-specific implementations should inherit from ProjectClientBase.
+    Concrete implementation of ProjectClientBase for the public schema blueprint.
+    Serves as a reference for tenant-specific implementations.
+    """
+    __tablename__ = "project_client_blueprint"
+    __table_args__ = (
+        Index("idx_project_client_role", "role"),
+        Index("idx_project_client_created", "created_by"),
+        {'schema': 'public'}
+    )
+
+class ProjectClient(ProjectClientBase):
+    """
+    Concrete implementation of ProjectClientBase for enterprise schemas.
     """
     __tablename__ = "project_clients"

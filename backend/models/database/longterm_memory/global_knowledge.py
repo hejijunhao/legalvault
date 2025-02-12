@@ -4,8 +4,8 @@ from sqlmodel import SQLModel, Field, Index
 from sqlalchemy import TIMESTAMP, Column, Text, ForeignKey, Enum as SQLEnum, UniqueConstraint
 from typing import Optional
 from datetime import datetime
-from uuid import uuid4
-from sqlalchemy.dialects.postgresql import UUID
+from uuid import UUID, uuid4
+from sqlalchemy.dialects.postgresql import UUID as SQLAlchemyUUID
 from enum import Enum
 from abc import ABC
 
@@ -30,8 +30,7 @@ class GlobalKnowledgeBase(SQLModel, ABC):
     __table_args__ = (
         UniqueConstraint('vp_id', 'knowledge_type'),
         Index("ix_global_knowledge_vp_id", "vp_id"),
-        Index("ix_global_knowledge_last_updated", "last_updated"),
-        {'schema': 'public'}
+        Index("ix_global_knowledge_last_updated", "last_updated")
     )
 
     model_config = {
@@ -50,15 +49,15 @@ class GlobalKnowledgeBase(SQLModel, ABC):
     id: UUID = Field(
         default_factory=uuid4,
         primary_key=True,
+        sa_type=SQLAlchemyUUID,
         description="Unique identifier for the global knowledge record"
     )
     vp_id: UUID = Field(
         sa_column=Column(
-            UUID(as_uuid=True),
+            SQLAlchemyUUID,
             ForeignKey("vault.virtual_paralegals.id"),
             nullable=False
-        ),
-        description="Foreign key to the Virtual Paralegal"
+        )
     )
 
     # Knowledge Content
@@ -83,9 +82,22 @@ class GlobalKnowledgeBase(SQLModel, ABC):
         return f"GlobalKnowledge(id={self.id}, vp_id={self.vp_id}, type={self.knowledge_type})"
 
 
-class GlobalKnowledge(GlobalKnowledgeBase, table=True):
+class GlobalKnowledgeBlueprint(GlobalKnowledgeBase):
     """
-    Concrete implementation of the GlobalKnowledgeBase template.
-    Tenant-specific implementations should inherit from GlobalKnowledgeBase.
+    Concrete implementation of GlobalKnowledgeBase for the public schema blueprint.
+    Serves as a reference for tenant-specific implementations.
+    """
+    __tablename__ = "longterm_memory_global_knowledge_blueprint"
+    __table_args__ = (
+        UniqueConstraint('vp_id', 'knowledge_type'),
+        Index("ix_global_knowledge_vp_id", "vp_id"),
+        Index("ix_global_knowledge_last_updated", "last_updated"),
+        {'schema': 'public'}
+    )
+
+
+class GlobalKnowledge(GlobalKnowledgeBase):
+    """
+    Concrete implementation of GlobalKnowledgeBase for enterprise schemas.
     """
     __tablename__ = "longterm_memory_global_knowledge"

@@ -65,8 +65,7 @@ class MasterFileDatabaseBase(SQLModel, ABC):
         Index("ix_masterfile_owner_source", "owner_id", "source"),
         Index("ix_masterfile_owner_status", "owner_id", "file_attributes"),
         CheckConstraint("file_attributes::jsonb ? 'status'", name="check_file_status"),
-        CheckConstraint("file_attributes::jsonb ? 'document_type'", name="check_document_type"),
-        {'schema': 'public'}
+        CheckConstraint("file_attributes::jsonb ? 'document_type'", name="check_document_type")
     )
 
     model_config = {
@@ -222,9 +221,25 @@ class MasterFileDatabaseBase(SQLModel, ABC):
         return f"MasterFile(id={self.file_id}, source={self.source})"
 
 
-class MasterFileDatabase(MasterFileDatabaseBase, table=True):
+class MasterFileDatabaseBlueprint(MasterFileDatabaseBase):
     """
-    Concrete implementation of the MasterFileDatabaseBase template.
-    Tenant-specific implementations should inherit from MasterFileDatabaseBase.
+    Concrete implementation of MasterFileDatabaseBase for the public schema blueprint.
+    Serves as a reference for tenant-specific implementations.
+    """
+    __tablename__ = "master_file_database_blueprint"
+    __table_args__ = (
+        Index("ix_masterfile_file_status", "file_attributes", postgresql_using='gin'),
+        Index("ix_masterfile_document_type", "file_attributes", postgresql_using='gin'),
+        Index("ix_masterfile_owner_source", "owner_id", "source"),
+        Index("ix_masterfile_owner_status", "owner_id", "file_attributes"),
+        CheckConstraint("file_attributes::jsonb ? 'status'", name="check_file_status"),
+        CheckConstraint("file_attributes::jsonb ? 'document_type'", name="check_document_type"),
+        {'schema': 'public'}
+    )
+
+
+class MasterFileDatabase(MasterFileDatabaseBase):
+    """
+    Concrete implementation of MasterFileDatabaseBase for enterprise schemas.
     """
     __tablename__ = "master_file_database"

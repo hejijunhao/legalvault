@@ -9,10 +9,10 @@ from sqlmodel import Field, SQLModel, Index, Column, ForeignKey, Relationship
 from abc import ABC
 
 if TYPE_CHECKING:
-        from .project import ProjectBase
-        from .client import ClientBase
-        from .contact_client import ContactClientBase
-        from .contact_project import ContactProjectBase
+    from .project import ProjectBase
+    from .client import ClientBase
+    from .contact_client import ContactClientBase
+    from .contact_project import ContactProjectBase
 
 class ContactType(str, Enum):
     """Types of contacts"""
@@ -42,8 +42,7 @@ class ContactBase(SQLModel, ABC):
         Index("idx_contact_type", "contact_type"),
         Index("idx_contact_status", "status"),
         Index("idx_contact_created", "created_by"),
-        Index("idx_contact_modified", "modified_by", "updated_at"),
-        {'schema': 'public'}
+        Index("idx_contact_modified", "modified_by", "updated_at")
     )
 
     model_config = {
@@ -136,7 +135,7 @@ class ContactBase(SQLModel, ABC):
     created_by: UUID = Field(
         sa_column=Column(
             UUID(as_uuid=True),
-            ForeignKey("vault.users.id", ondelete="RESTRICT"),
+            ForeignKey("enterprise_schema.users.id", ondelete="RESTRICT"),
             nullable=False
         ),
         description="User ID of contact creator"
@@ -144,7 +143,7 @@ class ContactBase(SQLModel, ABC):
     modified_by: UUID = Field(
         sa_column=Column(
             UUID(as_uuid=True),
-            ForeignKey("vault.users.id", ondelete="RESTRICT"),
+            ForeignKey("enterprise_schema.users.id", ondelete="RESTRICT"),
             nullable=False
         ),
         description="User ID of last modifier"
@@ -153,38 +152,21 @@ class ContactBase(SQLModel, ABC):
     # Relationships
     client: List["ClientBase"] = Relationship(
         back_populates="contact",
-        link_model=ContactClientBase,
-        sa_relationship_kwargs={
-            "lazy": "selectin",
-            "primaryjoin": "and_(ContactBase.contact_id==ContactClientBase.contact_id, ContactBase.__table__.schema==ContactClientBase.__table__.schema)",
-            "secondaryjoin": "and_(ContactClientBase.client_id==ClientBase.client_id, ContactClientBase.__table__.schema==ClientBase.__table__.schema)"
-        }
+        link_model="ContactClientBase",
+        sa_relationship_kwargs={"lazy": "selectin"}
     )
-
     project: List["ProjectBase"] = Relationship(
         back_populates="contact",
-        link_model=ContactProjectBase,
-        sa_relationship_kwargs={
-            "lazy": "selectin",
-            "primaryjoin": "and_(ContactBase.contact_id==ContactProjectBase.contact_id, ContactBase.__table__.schema==ContactProjectBase.__table__.schema)",
-            "secondaryjoin": "and_(ContactProjectBase.project_id==ProjectBase.project_id, ContactProjectBase.__table__.schema==ProjectBase.__table__.schema)"
-        }
+        link_model="ContactProjectBase",
+        sa_relationship_kwargs={"lazy": "selectin"}
     )
-
-    contact_client: List[ContactClientBase] = Relationship(
+    contact_client: List["ContactClientBase"] = Relationship(
         back_populates="contact",
-        sa_relationship_kwargs={
-            "lazy": "selectin",
-            "primaryjoin": "and_(ContactClientBase.contact_id==ContactBase.contact_id, ContactClientBase.__table__.schema==ContactBase.__table__.schema)"
-        }
+        sa_relationship_kwargs={"lazy": "selectin"}
     )
-
-    contact_project: List[ContactProjectBase] = Relationship(
+    contact_project: List["ContactProjectBase"] = Relationship(
         back_populates="contact",
-        sa_relationship_kwargs={
-            "lazy": "selectin",
-            "primaryjoin": "and_(ContactProjectBase.contact_id==ContactBase.contact_id, ContactProjectBase.__table__.schema==ContactBase.__table__.schema)"
-        }
+        sa_relationship_kwargs={"lazy": "selectin"}
     )
 
     def __repr__(self) -> str:
@@ -192,9 +174,23 @@ class ContactBase(SQLModel, ABC):
         return f"Contact(id={self.contact_id}, name={self.first_name} {self.last_name})"
 
 
-class Contact(ContactBase, table=True):
+class ContactBlueprint(ContactBase):
     """
-    Concrete implementation of the ContactBase template.
-    Tenant-specific implementations should inherit from ContactBase.
+    Concrete implementation of ContactBase for the public schema blueprint.
+    Serves as a reference for tenant-specific implementations.
+    """
+    __tablename__ = "contact_blueprint"
+    __table_args__ = (
+        Index("idx_contact_name", "first_name", "last_name"),
+        Index("idx_contact_email", "email"),
+        Index("idx_contact_created_by", "created_by"),
+        Index("idx_contact_modified", "modified_by", "updated_at"),
+        {'schema': 'public'}
+    )
+
+
+class Contact(ContactBase):
+    """
+    Concrete implementation of ContactBase for enterprise schemas.
     """
     __tablename__ = "contacts"

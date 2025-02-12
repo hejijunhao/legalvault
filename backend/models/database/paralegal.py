@@ -1,7 +1,7 @@
 # models/database/paralegal.py
 
 from sqlmodel import SQLModel, Field, Relationship
-from typing import Optional, Dict, List, TYPE_CHECKING
+from typing import Optional, Dict, TYPE_CHECKING
 from uuid import UUID, uuid4
 from datetime import datetime
 from sqlalchemy import JSON, Column
@@ -20,7 +20,7 @@ class VirtualParalegal(SQLModel, table=True):
     phone: Optional[str] = None
     whatsapp: Optional[str] = None
     profile_picture_id: Optional[int] = Field(default=None, foreign_key="vault.vp_profile_pictures.id")
-    abilities: List = Field(sa_column=Column(JSON), default=[])
+    abilities: list = Field(sa_column=Column(JSON), default=[])
     behaviors: Dict = Field(sa_column=Column(JSON), default={})
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)

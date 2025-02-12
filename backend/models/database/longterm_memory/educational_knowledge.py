@@ -4,8 +4,8 @@ from sqlmodel import SQLModel, Field, Index
 from datetime import datetime
 from sqlalchemy import TIMESTAMP, Column, Text, ForeignKey, Enum as SQLEnum, UniqueConstraint
 from typing import Optional
-from uuid import uuid4
-from sqlalchemy.dialects.postgresql import UUID
+from uuid import UUID, uuid4
+from sqlalchemy.dialects.postgresql import UUID as SQLAlchemyUUID
 from enum import Enum
 from abc import ABC
 
@@ -29,10 +29,9 @@ class EducationalKnowledgeBase(SQLModel, ABC):
     __abstract__ = True
 
     __table_args__ = (
-        UniqueConstraint('vp_id', 'knowledge_type'),
+        UniqueConstraint('vp_id', 'education_type'),
         Index("ix_educational_knowledge_vp_id", "vp_id"),
-        Index("ix_educational_knowledge_last_updated", "last_updated"),
-        {'schema': 'public'}
+        Index("ix_educational_knowledge_last_updated", "last_updated")
     )
 
     model_config = {
@@ -51,15 +50,15 @@ class EducationalKnowledgeBase(SQLModel, ABC):
     id: UUID = Field(
         default_factory=uuid4,
         primary_key=True,
+        sa_type=SQLAlchemyUUID,
         description="Unique identifier for the educational knowledge record"
     )
     vp_id: UUID = Field(
         sa_column=Column(
-            UUID(as_uuid=True),
+            SQLAlchemyUUID,
             ForeignKey("vault.virtual_paralegals.id"),
             nullable=False
-        ),
-        description="Foreign key to the Virtual Paralegal"
+        )
     )
 
     # Knowledge Content
@@ -84,9 +83,22 @@ class EducationalKnowledgeBase(SQLModel, ABC):
         return f"EducationalKnowledge(id={self.id}, vp_id={self.vp_id}, type={self.education_type})"
 
 
-class EducationalKnowledge(EducationalKnowledgeBase, table=True):
+class EducationalKnowledgeBlueprint(EducationalKnowledgeBase):
     """
-    Concrete implementation of the EducationalKnowledgeBase template.
-    Tenant-specific implementations should inherit from EducationalKnowledgeBase.
+    Concrete implementation of EducationalKnowledgeBase for the public schema blueprint.
+    Serves as a reference for tenant-specific implementations.
+    """
+    __tablename__ = "longterm_memory_educational_knowledge_blueprint"
+    __table_args__ = (
+        UniqueConstraint('vp_id', 'education_type'),
+        Index("ix_educational_knowledge_vp_id", "vp_id"),
+        Index("ix_educational_knowledge_last_updated", "last_updated"),
+        {'schema': 'public'}
+    )
+
+
+class EducationalKnowledge(EducationalKnowledgeBase):
+    """
+    Concrete implementation of EducationalKnowledgeBase for enterprise schemas.
     """
     __tablename__ = "longterm_memory_educational_knowledge"

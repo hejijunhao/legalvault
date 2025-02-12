@@ -2,10 +2,10 @@
 
 from datetime import datetime
 from enum import Enum
-from typing import List, Optional, TYPE_CHECKING
-from sqlalchemy import text
+from typing import Optional, List, Dict, TYPE_CHECKING
+from sqlalchemy import text, ARRAY, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
-from sqlmodel import Field, SQLModel, JSON, Column, UniqueConstraint, Index, ForeignKey, Relationship
+from sqlmodel import Field, SQLModel, JSON, Column, Index, ForeignKey, Relationship
 from abc import ABC
 
 if TYPE_CHECKING:
@@ -51,8 +51,7 @@ class ProjectBase(SQLModel, ABC):
         Index("idx_project_status_practice", "status", "practice_area"),
         Index("idx_project_created_by", "created_by"),
         Index("idx_project_modified", "modified_by", "updated_at"),
-        Index("idx_project_tasks", "project_id"),
-        {'schema': 'public'}
+        Index("idx_project_tasks", "project_id")
     )
 
     model_config = {
@@ -135,9 +134,12 @@ class ProjectBase(SQLModel, ABC):
         index=True,
         description="Project start date"
     )
-    tags: List[str] = Field(
-        sa_column=Column(JSON),
-        default=[],
+    tags: list[str] = Field(
+        sa_column=Column(
+            ARRAY(String),
+            nullable=False,
+            default=list
+        ),
         description="List of tags associated with the project"
     )
 
@@ -163,9 +165,7 @@ class ProjectBase(SQLModel, ABC):
         sa_relationship_kwargs={
             "uselist": False,  # One-to-one relationship
             "cascade": "all, delete-orphan",  # Cascade deletion
-            "lazy": "selectin",  # Eager loading for better performance
-            "primaryjoin": "and_(ProjectBase.project_id==Notebook.project_id, "
-                           "ProjectBase.__table__.schema==Notebook.__table__.schema)"
+            "lazy": "selectin"  # Eager loading for better performance
         }
     )
 
@@ -173,9 +173,7 @@ class ProjectBase(SQLModel, ABC):
         back_populates="project",
         sa_relationship_kwargs={
             "cascade": "all, delete-orphan",
-            "lazy": "selectin",
-            "primaryjoin": "and_(ReminderBase.project_id==Reminder.project_id, "
-                           "Reminder.__table__.schema==Reminder.__table__.schema)"
+            "lazy": "selectin"
         }
     )
 
@@ -183,30 +181,17 @@ class ProjectBase(SQLModel, ABC):
         back_populates="project",
         sa_relationship_kwargs={
             "cascade": "all, delete-orphan",
-            "lazy": "selectin",
-            "primaryjoin": "and_(ProjectBase.project_id==Task.project_id, "
-                           "ProjectBase.__table__.schema==Task.__table__.schema)"
+            "lazy": "selectin"
         }
-    )
-
-    client: List["ClientBase"] = Relationship(
-        back_populates="project",
-        link_model=ProjectClientBase,
-        sa_relationship_kwargs={
-            "lazy": "selectin",
-            "primaryjoin": "and_(ProjectBase.project_id==ProjectClient.project_id, "
-                           "ProjectBase.__table__.schema==ProjectClient.__table__.schema)"
-        }
-    )
-
-    project_client: List["ProjectClientBase"] = Relationship(
-        back_populates="project",
-        sa_relationship_kwargs={"lazy": "selectin"}
     )
 
     contact_project: List["ContactProjectBase"] = Relationship(
         back_populates="project",
-        link_model=ContactProjectBase,
+        sa_relationship_kwargs={"lazy": "selectin"}
+    )
+
+    project_client: List["ProjectClientBase"] = Relationship(
+        back_populates="project",
         sa_relationship_kwargs={"lazy": "selectin"}
     )
 
@@ -215,9 +200,24 @@ class ProjectBase(SQLModel, ABC):
         return f"Project(id={self.project_id}, name={self.name}, status={self.status})"
 
 
-class Project(ProjectBase, table=True):
+class ProjectBlueprint(ProjectBase):
     """
-    Concrete implementation of the ProjectBase template.
-    Tenant-specific implementations should inherit from ProjectBase.
+    Concrete implementation of ProjectBase for the public schema blueprint.
+    Serves as a reference for tenant-specific implementations.
+    """
+    __tablename__ = "project_blueprint"
+    __table_args__ = (
+        UniqueConstraint("name", name="uq_project_name"),
+        Index("idx_project_status_practice", "status", "practice_area"),
+        Index("idx_project_created_by", "created_by"),
+        Index("idx_project_modified", "modified_by", "updated_at"),
+        Index("idx_project_tasks", "project_id"),
+        {'schema': 'public'}
+    )
+
+
+class Project(ProjectBase):
+    """
+    Concrete implementation of ProjectBase for enterprise schemas.
     """
     __tablename__ = "projects"

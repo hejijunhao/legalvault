@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from enum import Enum
-from typing import Optional
+from typing import Optional, List
 from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlmodel import Field, SQLModel, Index, Column, ForeignKey, Relationship
@@ -30,8 +30,7 @@ class TaskBase(SQLModel, ABC):
         Index("idx_task_due_date", "due_date"),
         Index("idx_task_assigned", "assigned_to"),
         Index("idx_task_created_by", "created_by"),
-        Index("idx_task_modified", "modified_by", "updated_at"),
-        {'schema': 'public'}
+        Index("idx_task_modified", "modified_by", "updated_at")
     )
 
     model_config = {
@@ -61,7 +60,7 @@ class TaskBase(SQLModel, ABC):
     project_id: UUID = Field(
         sa_column=Column(
             UUID(as_uuid=True),
-            ForeignKey("{schema}.projects.project_id", ondelete="CASCADE"),
+            ForeignKey("enterprise_schema.projects.project_id", ondelete="CASCADE"),
             nullable=False
         ),
         description="ID of the associated project"
@@ -90,7 +89,7 @@ class TaskBase(SQLModel, ABC):
     assigned_to: UUID = Field(
         sa_column=Column(
             UUID(as_uuid=True),
-            ForeignKey("vault.users.id", ondelete="RESTRICT"),
+            ForeignKey("enterprise_schema.users.id", ondelete="RESTRICT"),
             nullable=False
         ),
         description="User ID of task assignee"
@@ -111,7 +110,7 @@ class TaskBase(SQLModel, ABC):
     created_by: UUID = Field(
         sa_column=Column(
             UUID(as_uuid=True),
-            ForeignKey("vault.users.id", ondelete="RESTRICT"),
+            ForeignKey("enterprise_schema.users.id", ondelete="RESTRICT"),
             nullable=False
         ),
         description="User ID of task creator"
@@ -119,7 +118,7 @@ class TaskBase(SQLModel, ABC):
     modified_by: UUID = Field(
         sa_column=Column(
             UUID(as_uuid=True),
-            ForeignKey("vault.users.id", ondelete="RESTRICT"),
+            ForeignKey("enterprise_schema.users.id", ondelete="RESTRICT"),
             nullable=False
         ),
         description="User ID of last modifier"
@@ -145,9 +144,25 @@ class TaskBase(SQLModel, ABC):
         return f"Task(id={self.task_id}, title={self.title}, status={self.status})"
 
 
-class Task(TaskBase, table=True):
+class TaskBlueprint(TaskBase):
     """
-    Concrete implementation of the TaskBase template.
-    Tenant-specific implementations should inherit from TaskBase.
+    Concrete implementation of TaskBase for the public schema blueprint.
+    Serves as a reference for tenant-specific implementations.
+    """
+    __tablename__ = "task_blueprint"
+    __table_args__ = (
+        Index("idx_task_project", "project_id"),
+        Index("idx_task_status", "status"),
+        Index("idx_task_due_date", "due_date"),
+        Index("idx_task_assigned", "assigned_to"),
+        Index("idx_task_created_by", "created_by"),
+        Index("idx_task_modified", "modified_by", "updated_at"),
+        {'schema': 'public'}
+    )
+
+
+class Task(TaskBase):
+    """
+    Concrete implementation of TaskBase for enterprise schemas.
     """
     __tablename__ = "tasks"

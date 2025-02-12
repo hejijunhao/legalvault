@@ -28,8 +28,7 @@ class CollectionBase(SQLModel, ABC):
     __table_args__ = (
         Index("ix_collections_owner_id", "owner_id"),
         Index("ix_collections_name", "name"),
-        Index("ix_collections_type", "collection_type"),
-        {'schema': 'public'}
+        Index("ix_collections_type", "collection_type")
     )
 
     model_config = {
@@ -99,9 +98,22 @@ class CollectionBase(SQLModel, ABC):
         return f"Collection(id={self.id}, name={self.name}, type={self.collection_type})"
 
 
-class Collection(CollectionBase, table=True):
+class CollectionBlueprint(CollectionBase):
     """
-    Concrete implementation of the CollectionBase template.
-    Tenant-specific implementations should inherit from CollectionBase.
+    Concrete implementation of CollectionBase for the public schema blueprint.
+    Serves as a reference for tenant-specific implementations.
+    """
+    __tablename__ = "collections_blueprint"
+    __table_args__ = (
+        Index("ix_collections_owner_id", "owner_id"),
+        Index("ix_collections_name", "name"),
+        Index("ix_collections_type", "collection_type"),
+        {'schema': 'public'}
+    )
+
+
+class Collection(CollectionBase):
+    """
+    Concrete implementation of CollectionBase for enterprise schemas.
     """
     __tablename__ = "collections"

@@ -2,10 +2,10 @@
 
 from datetime import datetime
 from enum import Enum
-from typing import Optional, TYPE_CHECKING
-from sqlalchemy import Column, Index, Relationship
+from typing import Optional, List, TYPE_CHECKING
+from sqlalchemy import Column, Index
 from sqlalchemy.dialects.postgresql import UUID
-from sqlmodel import Field, SQLModel, ForeignKey
+from sqlmodel import Field, SQLModel, Relationship, ForeignKey
 from abc import ABC
 
 if TYPE_CHECKING:
@@ -32,14 +32,13 @@ class ContactClientBase(SQLModel, ABC):
 
     __table_args__ = (
         Index("idx_contact_client_role", "role"),
-        Index("idx_contact_client_created", "created_by"),
-        {'schema': 'public'}
+        Index("idx_contact_client_created", "created_by")
     )
     
     contact_id: UUID = Field(
         default=None,
         sa_column=Column(
-            ForeignKey("{schema}.contacts.contact_id", ondelete="CASCADE"),
+            ForeignKey("enterprise_schema.contacts.contact_id", ondelete="CASCADE"),
             primary_key=True,
             nullable=False
         )
@@ -47,7 +46,7 @@ class ContactClientBase(SQLModel, ABC):
     client_id: UUID = Field(
         default=None,
         sa_column=Column(
-            ForeignKey("{schema}.clients.client_id", ondelete="CASCADE"),
+            ForeignKey("enterprise_schema.clients.client_id", ondelete="CASCADE"),
             primary_key=True,
             nullable=False
         )
@@ -106,9 +105,21 @@ class ContactClientBase(SQLModel, ABC):
     }
 
 
-class ContactClient(ContactClientBase, table=True):
+class ContactClientBlueprint(ContactClientBase):
     """
-    Concrete implementation of the ContactClientBase template.
-    Tenant-specific implementations should inherit from ContactClientBase.
+    Concrete implementation of ContactClientBase for the public schema blueprint.
+    Serves as a reference for tenant-specific implementations.
+    """
+    __tablename__ = "contact_client_blueprint"
+    __table_args__ = (
+        Index("idx_contact_client_role", "role"),
+        Index("idx_contact_client_created", "created_by"),
+        {'schema': 'public'}
+    )
+
+
+class ContactClient(ContactClientBase):
+    """
+    Concrete implementation of ContactClientBase for enterprise schemas.
     """
     __tablename__ = "contact_clients"

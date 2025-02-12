@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from enum import Enum
 from typing import Optional, Dict, List, TYPE_CHECKING
-from sqlalchemy import text, JSON
+from sqlalchemy import text, JSON, String, ARRAY, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlmodel import Field, SQLModel, Index, Column, ForeignKey, Relationship
 
@@ -63,8 +63,7 @@ class ClientBase(SQLModel, ABC):
         Index("idx_client_entity_type", "legal_entity_type"),
         Index("idx_client_join_date", "client_join_date"),
         Index("idx_client_created", "created_by"),
-        Index("idx_client_modified", "modified_by", "updated_at"),
-        {'schema': 'public'}
+        Index("idx_client_modified", "modified_by", "updated_at")
     )
 
     model_config = {
@@ -183,9 +182,9 @@ class ClientBase(SQLModel, ABC):
     )
 
     # Tags
-    tags: List[str] = Field(
+    tags: list[str] = Field(
         sa_column=Column(
-            JSONB,
+            ARRAY(String),
             nullable=False,
             default=list
         ),
@@ -206,7 +205,7 @@ class ClientBase(SQLModel, ABC):
     created_by: UUID = Field(
         sa_column=Column(
             UUID(as_uuid=True),
-            ForeignKey("vault.users.id", ondelete="RESTRICT"),
+            ForeignKey("enterprise_schema.users.id", ondelete="RESTRICT"),
             nullable=False
         ),
         description="User ID of client creator"
@@ -214,44 +213,30 @@ class ClientBase(SQLModel, ABC):
     modified_by: UUID = Field(
         sa_column=Column(
             UUID(as_uuid=True),
-            ForeignKey("vault.users.id", ondelete="RESTRICT"),
+            ForeignKey("enterprise_schema.users.id", ondelete="RESTRICT"),
             nullable=False
         ),
         description="User ID of last modifier"
     )
 
     # Relationships
-    project_client: List[ProjectClientBase] = Relationship(
+    project_client: List["ProjectClientBase"] = Relationship(
         back_populates="client",
-        sa_relationship_kwargs={
-            "lazy": "selectin",
-            "primaryjoin": "and_(ProjectClientBase.client_id==ClientBase.client_id, ProjectClientBase.__table__.schema==ClientBase.__table__.schema)"
-        }
+        sa_relationship_kwargs={"lazy": "selectin"}
     )
-    contact_client: List[ContactClientBase] = Relationship(
+    contact_client: List["ContactClientBase"] = Relationship(
         back_populates="client",
-        sa_relationship_kwargs={
-            "lazy": "selectin",
-            "primaryjoin": "and_(ContactClientBase.client_id==ClientBase.client_id, ContactClientBase.__table__.schema==ClientBase.__table__.schema)"
-        }
+        sa_relationship_kwargs={"lazy": "selectin"}
     )
     project: Optional[List["ProjectBase"]] = Relationship(
         back_populates="client",
-        link_model=ProjectClientBase,
-        sa_relationship_kwargs={
-            "lazy": "selectin",
-            "primaryjoin": "and_(ClientBase.client_id==ProjectClientBase.client_id, ClientBase.__table__.schema==ProjectClientBase.__table__.schema)",
-            "secondaryjoin": "and_(ProjectClientBase.project_id==ProjectBase.project_id, ProjectClientBase.__table__.schema==ProjectBase.__table__.schema)"
-        }
+        link_model="ProjectClientBase",
+        sa_relationship_kwargs={"lazy": "selectin"}
     )
     contact: Optional[List["ContactBase"]] = Relationship(
         back_populates="client",
-        link_model=ContactClientBase,  # Required for many-to-many relationships
-        sa_relationship_kwargs={
-            "lazy": "selectin",
-            "primaryjoin": "and_(ClientBase.client_id==ContactClientBase.client_id, ClientBase.__table__.schema==ContactClientBase.__table__.schema)",
-            "secondaryjoin": "and_(ContactClientBase.contact_id==ContactBase.contact_id, ContactClientBase.__table__.schema==ContactBase.__table__.schema)"
-        }
+        link_model="ContactClientBase",
+        sa_relationship_kwargs={"lazy": "selectin"}
     )
 
     def __repr__(self) -> str:
@@ -259,10 +244,24 @@ class ClientBase(SQLModel, ABC):
         return f"Client(id={self.client_id}, name={self.name}, status={self.status})"
 
 
-class Client(ClientBase, table=True):
+class ClientBlueprint(ClientBase):
     """
-    Concrete implementation of the ClientBase template.
-    Tenant-specific implementations should inherit from ClientBase.
+    Concrete implementation of ClientBase for the public schema blueprint.
+    Serves as a reference for tenant-specific implementations.
     """
+    __tablename__ = "client_blueprint"
+    __table_args__ = (
+        UniqueConstraint("name", "legal_entity_type", name="uq_client_name_type"),
+        Index("idx_client_name", "name"),
+        Index("idx_client_type", "legal_entity_type"),
+        Index("idx_client_created_by", "created_by"),
+        Index("idx_client_modified", "modified_by", "updated_at"),
+        {'schema': 'public'}
+    )
 
+
+class Client(ClientBase):
+    """
+    Concrete implementation of ClientBase for enterprise schemas.
+    """
     __tablename__ = "clients"

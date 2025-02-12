@@ -4,8 +4,8 @@ from sqlmodel import SQLModel, Field, Index
 from sqlalchemy import TIMESTAMP, Column, Text, ForeignKey
 from typing import Optional
 from datetime import datetime
-from uuid import uuid4
-from sqlalchemy.dialects.postgresql import UUID
+from uuid import UUID, uuid4
+from sqlalchemy.dialects.postgresql import UUID as SQLAlchemyUUID
 from abc import ABC
 
 
@@ -19,8 +19,7 @@ class SelfIdentityBase(SQLModel, ABC):
 
     __table_args__ = (
         Index("ix_self_identity_vp_id", "vp_id"),
-        Index("ix_self_identity_last_updated", "last_updated"),
-        {'schema': 'public'}
+        Index("ix_self_identity_last_updated", "last_updated")
     )
 
     model_config = {
@@ -38,15 +37,15 @@ class SelfIdentityBase(SQLModel, ABC):
     id: UUID = Field(
         default_factory=uuid4,
         primary_key=True,
+        sa_type=SQLAlchemyUUID,
         description="Unique identifier for the self-identity record"
     )
     vp_id: UUID = Field(
         sa_column=Column(
-            UUID(as_uuid=True),
+            SQLAlchemyUUID,
             ForeignKey("vault.virtual_paralegals.id"),
             nullable=False
-        ),
-        description="Foreign key to the Virtual Paralegal"
+        )
     )
 
     # Identity Content
@@ -67,9 +66,21 @@ class SelfIdentityBase(SQLModel, ABC):
         return f"SelfIdentity(id={self.id}, vp_id={self.vp_id})"
 
 
-class SelfIdentity(SelfIdentityBase, table=True):
+class SelfIdentityBlueprint(SelfIdentityBase):
     """
-    Concrete implementation of the SelfIdentityBase template.
-    Tenant-specific implementations should inherit from SelfIdentityBase.
+    Concrete implementation of SelfIdentityBase for the public schema blueprint.
+    Serves as a reference for tenant-specific implementations.
+    """
+    __tablename__ = "longterm_memory_self_identity_blueprint"
+    __table_args__ = (
+        Index("ix_self_identity_vp_id", "vp_id"),
+        Index("ix_self_identity_last_updated", "last_updated"),
+        {'schema': 'public'}
+    )
+
+
+class SelfIdentity(SelfIdentityBase):
+    """
+    Concrete implementation of SelfIdentityBase for enterprise schemas.
     """
     __tablename__ = "longterm_memory_self_identity"

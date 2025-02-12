@@ -2,10 +2,10 @@
 
 from datetime import datetime
 from enum import Enum
-from typing import Optional, TYPE_CHECKING
-from sqlalchemy import Column, Index, Relationship
+from typing import Optional, List, TYPE_CHECKING
+from sqlalchemy import Column, Index
 from sqlalchemy.dialects.postgresql import UUID
-from sqlmodel import Field, SQLModel, ForeignKey
+from sqlmodel import Field, SQLModel, Relationship, ForeignKey
 from abc import ABC
 
 if TYPE_CHECKING:
@@ -33,14 +33,13 @@ class ContactProjectBase(SQLModel, ABC):
 
     __table_args__ = (
         Index("idx_contact_project_role", "role"),
-        Index("idx_contact_project_created", "created_by"),
-        {'schema': 'public'}
+        Index("idx_contact_project_created", "created_by")
     )
     
     contact_id: UUID = Field(
         default=None,
         sa_column=Column(
-            ForeignKey("{schema}.contacts.contact_id", ondelete="CASCADE"),
+            ForeignKey("enterprise_schema.contacts.contact_id", ondelete="CASCADE"),
             primary_key=True,
             nullable=False
         )
@@ -48,7 +47,7 @@ class ContactProjectBase(SQLModel, ABC):
     project_id: UUID = Field(
         default=None,
         sa_column=Column(
-            ForeignKey("{schema}.projects.project_id", ondelete="CASCADE"),
+            ForeignKey("enterprise_schema.projects.project_id", ondelete="CASCADE"),
             primary_key=True,
             nullable=False
         )
@@ -117,9 +116,21 @@ class ContactProjectBase(SQLModel, ABC):
     )
 
 
-class ContactProject(ContactProjectBase, table=True):
+class ContactProjectBlueprint(ContactProjectBase):
     """
-    Concrete implementation of the ContactProjectBase template.
-    Tenant-specific implementations should inherit from ContactProjectBase.
+    Concrete implementation of ContactProjectBase for the public schema blueprint.
+    Serves as a reference for tenant-specific implementations.
+    """
+    __tablename__ = "contact_project_blueprint"
+    __table_args__ = (
+        Index("idx_contact_project_role", "role"),
+        Index("idx_contact_project_created", "created_by"),
+        {'schema': 'public'}
+    )
+
+
+class ContactProject(ContactProjectBase):
+    """
+    Concrete implementation of ContactProjectBase for enterprise schemas.
     """
     __tablename__ = "contact_projects"

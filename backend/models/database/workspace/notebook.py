@@ -1,8 +1,8 @@
 # backend/models/database/workspace/notebook.py
 
 from datetime import datetime
-from typing import List, Optional, TYPE_CHECKING
-from sqlalchemy import text, Text, JSON
+from typing import Optional, TYPE_CHECKING
+from sqlalchemy import text, Text, JSON, String, ARRAY
 from sqlalchemy.dialects.postgresql import UUID
 from sqlmodel import Field, SQLModel, Column, ForeignKey, Index, Relationship
 from abc import ABC
@@ -14,16 +14,15 @@ class NotebookBase(SQLModel, ABC):
     """
     Abstract base class representing a notebook in the LegalVault system.
     Serves as a template for tenant-specific notebook implementations.
-    Contains rich text content and is associated with a single project.
+    Contains core properties and metadata for notebook functionality.
     """
     __abstract__ = True
 
     # Table configuration
     __table_args__ = (
         Index("idx_notebook_project", "project_id"),
-        Index("idx_notebook_modified", "modified_by", "updated_at"),
-        Index("idx_notebook_created", "created_by"),
-        {'schema': 'public'}
+        Index("idx_notebook_created_by", "created_by"),
+        Index("idx_notebook_modified", "modified_by", "updated_at")
     )
 
     model_config = {
@@ -51,11 +50,10 @@ class NotebookBase(SQLModel, ABC):
     project_id: UUID = Field(
         sa_column=Column(
             UUID(as_uuid=True),
-            ForeignKey("{schema}.projects.project_id", ondelete="CASCADE"),
-            nullable=False,
-            unique=True  # Ensures one-to-one relationship with project
+            ForeignKey("enterprise_schema.projects.project_id", ondelete="CASCADE"),
+            nullable=False
         ),
-        description="Associated project ID"
+        description="ID of the associated project"
     )
     created_at: datetime = Field(
         default_factory=datetime.utcnow,
@@ -71,7 +69,7 @@ class NotebookBase(SQLModel, ABC):
     created_by: UUID = Field(
         sa_column=Column(
             UUID(as_uuid=True),
-            ForeignKey("vault.users.id", ondelete="RESTRICT"),
+            ForeignKey("enterprise_schema.users.id", ondelete="RESTRICT"),
             nullable=False
         ),
         description="User ID of notebook creator"
@@ -79,7 +77,7 @@ class NotebookBase(SQLModel, ABC):
     modified_by: UUID = Field(
         sa_column=Column(
             UUID(as_uuid=True),
-            ForeignKey("vault.users.id", ondelete="RESTRICT"),
+            ForeignKey("enterprise_schema.users.id", ondelete="RESTRICT"),
             nullable=False
         ),
         description="User ID of last modifier"
@@ -97,10 +95,13 @@ class NotebookBase(SQLModel, ABC):
         index=True,
         description="Optional title for the notebook"
     )
-    tags: List[str] = Field(
-        sa_column=Column(JSON),
-        default=[],
-        description="List of tags for categorization"
+    tags: list[str] = Field(
+        sa_column=Column(
+            ARRAY(String),
+            nullable=False,
+            default=[]
+        ),
+        description="Tags for categorizing and filtering notebooks"
     )
 
     # Metadata
@@ -132,9 +133,22 @@ class NotebookBase(SQLModel, ABC):
         return f"Notebook(id={self.notebook_id}, project_id={self.project_id}, title={self.title or 'Untitled'})"
 
 
-class Notebook(NotebookBase, table=True):
+class NotebookBlueprint(NotebookBase):
     """
-    Concrete implementation of the NotebookBase template.
-    Tenant-specific implementations should inherit from NotebookBase.
+    Concrete implementation of NotebookBase for the public schema blueprint.
+    Serves as a reference for tenant-specific implementations.
+    """
+    __tablename__ = "notebook_blueprint"
+    __table_args__ = (
+        Index("idx_notebook_project", "project_id"),
+        Index("idx_notebook_created_by", "created_by"),
+        Index("idx_notebook_modified", "modified_by", "updated_at"),
+        {'schema': 'public'}
+    )
+
+
+class Notebook(NotebookBase):
+    """
+    Concrete implementation of NotebookBase for enterprise schemas.
     """
     __tablename__ = "notebooks"
