@@ -1,9 +1,15 @@
 # backend/tests/test_models.py
+
+import sys
+from pathlib import Path
+project_root = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(project_root))
+
 import pytest
 import json
 from sqlalchemy import text
-from backend.models.database import Ability, TaskManagementAbility, ReceiveEmailAbility
-from backend.core.database import get_session
+from core.database import get_session
+from models.database.abilities import Ability, TaskManagementAbility, ReceiveEmailAbility
 
 def test_model_imports():
     """Test that models can be imported without circular dependency errors"""

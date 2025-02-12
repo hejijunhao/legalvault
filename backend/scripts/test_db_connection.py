@@ -1,4 +1,5 @@
 # backend/scripts/test_db_connection.py
+
 from pathlib import Path
 from urllib.parse import urlparse
 import os
@@ -10,7 +11,7 @@ current_dir = Path(__file__).resolve()
 project_root = str(current_dir.parent.parent.parent)
 sys.path.append(project_root)
 
-from backend.core.database import get_session
+from core.database import get_session
 
 def debug_database_url():
     """Debug function to check DATABASE_URL configuration"""

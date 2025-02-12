@@ -24,7 +24,7 @@ class Ability(SQLModel, table=True):
     task_management_abilities: List["TaskManagementAbility"] = Relationship(
         sa_relationship_kwargs={
             "lazy": "selectin",
-            "primaryjoin": "vault.Ability.id == vault.TaskManagementAbility.ability_id"
+            "primaryjoin": "vault.abilities.c.id == vault.task_management_abilities.c.ability_id"
         },
         back_populates="ability"
     )
@@ -32,7 +32,7 @@ class Ability(SQLModel, table=True):
     receive_email_abilities: List["ReceiveEmailAbility"] = Relationship(
         sa_relationship_kwargs={
             "lazy": "selectin",
-            "primaryjoin": "vault.Ability.id == vault.ReceiveEmailAbility.ability_id"
+            "primaryjoin": "vault.abilities.c.id == vault.ability_receive_email.c.ability_id"
         },
         back_populates="ability"
     )

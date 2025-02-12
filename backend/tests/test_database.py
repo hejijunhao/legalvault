@@ -1,7 +1,13 @@
 # backend/tests/test_database.py
+
+import sys
+from pathlib import Path
+project_root = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(project_root))
+
 import pytest
 from sqlalchemy import text
-from backend.core.database import get_session
+from core.database import get_session
 
 def test_database_connection():
     """Test database connection with more detailed error handling"""
@@ -14,7 +20,6 @@ def test_database_connection():
 
             # Test another simple query
             session.execute(text("SELECT 1"))
-
     except Exception as e:
         pytest.fail(f"Database connection failed with error: {str(e)}\n"
                     f"Error type: {type(e)}\n"
