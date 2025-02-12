@@ -10,7 +10,6 @@ from abc import ABC
 if TYPE_CHECKING:
     from .project import Project
 
-
 class NotebookBase(SQLModel, ABC):
     """
     Abstract base class representing a notebook in the LegalVault system.

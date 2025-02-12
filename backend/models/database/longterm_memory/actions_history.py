@@ -76,7 +76,7 @@ class ActionsHistoryBase(SQLModel, ABC):
         return f"ActionsHistory(id={self.id}, vp_id={self.vp_id}, action_count={self.action_count})"
 
 
-class ActionsHistory(ActionsHistoryBase):
+class ActionsHistory(ActionsHistoryBase, table=True):
     """
     Concrete implementation of the ActionsHistoryBase template.
     Tenant-specific implementations should inherit from ActionsHistoryBase.

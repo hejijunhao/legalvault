@@ -138,7 +138,7 @@ class MasterFileDatabaseBase(SQLModel, ABC):
         sa_column=Column(
             "client_id",
             SQLAlchemyUUID,
-            ForeignKey("public.clients.client_id", ondelete="SET NULL"),
+            ForeignKey("{schema}.clients.client_id", ondelete="SET NULL"),
             nullable=True
         )
     )
@@ -148,7 +148,7 @@ class MasterFileDatabaseBase(SQLModel, ABC):
         sa_column=Column(
             "project_id",
             SQLAlchemyUUID,
-            ForeignKey("public.projects.project_id", ondelete="SET NULL"),
+            ForeignKey("{schema}.projects.project_id", ondelete="SET NULL"),
             nullable=True
         )
     )
@@ -222,7 +222,7 @@ class MasterFileDatabaseBase(SQLModel, ABC):
         return f"MasterFile(id={self.file_id}, source={self.source})"
 
 
-class MasterFileDatabase(MasterFileDatabaseBase):
+class MasterFileDatabase(MasterFileDatabaseBase, table=True):
     """
     Concrete implementation of the MasterFileDatabaseBase template.
     Tenant-specific implementations should inherit from MasterFileDatabaseBase.

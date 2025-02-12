@@ -99,7 +99,7 @@ class CollectionBase(SQLModel, ABC):
         return f"Collection(id={self.id}, name={self.name}, type={self.collection_type})"
 
 
-class Collection(CollectionBase):
+class Collection(CollectionBase, table=True):
     """
     Concrete implementation of the CollectionBase template.
     Tenant-specific implementations should inherit from CollectionBase.

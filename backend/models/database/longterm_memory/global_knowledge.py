@@ -83,7 +83,7 @@ class GlobalKnowledgeBase(SQLModel, ABC):
         return f"GlobalKnowledge(id={self.id}, vp_id={self.vp_id}, type={self.knowledge_type})"
 
 
-class GlobalKnowledge(GlobalKnowledgeBase):
+class GlobalKnowledge(GlobalKnowledgeBase, table=True):
     """
     Concrete implementation of the GlobalKnowledgeBase template.
     Tenant-specific implementations should inherit from GlobalKnowledgeBase.

@@ -174,8 +174,8 @@ class ProjectBase(SQLModel, ABC):
         sa_relationship_kwargs={
             "cascade": "all, delete-orphan",
             "lazy": "selectin",
-            "primaryjoin": "and_(ProjectBase.project_id==Reminder.project_id, "
-                           "ProjectBase.__table__.schema==Reminder.__table__.schema)"
+            "primaryjoin": "and_(ReminderBase.project_id==Reminder.project_id, "
+                           "Reminder.__table__.schema==Reminder.__table__.schema)"
         }
     )
 

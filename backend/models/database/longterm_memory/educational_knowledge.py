@@ -84,7 +84,7 @@ class EducationalKnowledgeBase(SQLModel, ABC):
         return f"EducationalKnowledge(id={self.id}, vp_id={self.vp_id}, type={self.education_type})"
 
 
-class EducationalKnowledge(EducationalKnowledgeBase):
+class EducationalKnowledge(EducationalKnowledgeBase, table=True):
     """
     Concrete implementation of the EducationalKnowledgeBase template.
     Tenant-specific implementations should inherit from EducationalKnowledgeBase.

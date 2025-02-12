@@ -77,7 +77,7 @@ class ConversationalHistoryBase(SQLModel, ABC):
         return f"ConversationalHistory(id={self.id}, vp_id={self.vp_id}, interaction_count={self.interaction_count})"
 
 
-class ConversationalHistory(ConversationalHistoryBase):
+class ConversationalHistory(ConversationalHistoryBase, table=True):
     """
     Concrete implementation of the ConversationalHistoryBase template.
     Tenant-specific implementations should inherit from ConversationalHistoryBase.

@@ -67,7 +67,7 @@ class SelfIdentityBase(SQLModel, ABC):
         return f"SelfIdentity(id={self.id}, vp_id={self.vp_id})"
 
 
-class SelfIdentity(SelfIdentityBase):
+class SelfIdentity(SelfIdentityBase, table=True):
     """
     Concrete implementation of the SelfIdentityBase template.
     Tenant-specific implementations should inherit from SelfIdentityBase.
