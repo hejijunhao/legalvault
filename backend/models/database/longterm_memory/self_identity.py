@@ -66,7 +66,7 @@ class SelfIdentityBase(SQLModel, ABC):
         return f"SelfIdentity(id={self.id}, vp_id={self.vp_id})"
 
 
-class SelfIdentityBlueprint(SelfIdentityBase):
+class SelfIdentityBlueprint(SelfIdentityBase, table=True):
     """
     Concrete implementation of SelfIdentityBase for the public schema blueprint.
     Serves as a reference for tenant-specific implementations.

@@ -221,7 +221,7 @@ class MasterFileDatabaseBase(SQLModel, ABC):
         return f"MasterFile(id={self.file_id}, source={self.source})"
 
 
-class MasterFileDatabaseBlueprint(MasterFileDatabaseBase):
+class MasterFileDatabaseBlueprint(MasterFileDatabaseBase, table=True):
     """
     Concrete implementation of MasterFileDatabaseBase for the public schema blueprint.
     Serves as a reference for tenant-specific implementations.

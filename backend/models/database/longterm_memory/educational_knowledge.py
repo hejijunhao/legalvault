@@ -2,11 +2,12 @@
 
 from sqlmodel import SQLModel, Field, Index
 from datetime import datetime
-from sqlalchemy import TIMESTAMP, Column, Text, ForeignKey, Enum as SQLEnum, UniqueConstraint
+from sqlalchemy import TIMESTAMP, Column, Text, ForeignKey, Enum as SQLEnum, UniqueConstraint, String
 from typing import Optional
 from uuid import UUID, uuid4
 from sqlalchemy.dialects.postgresql import UUID as SQLAlchemyUUID
 from enum import Enum
+from pydantic import validator
 from abc import ABC
 
 
@@ -62,10 +63,19 @@ class EducationalKnowledgeBase(SQLModel, ABC):
     )
 
     # Knowledge Content
-    education_type: EducationType = Field(
-        sa_column=Column(SQLEnum(EducationType)),
+    education_type: str = Field(
+        sa_column=Column(String, nullable=False),
         description="Type of educational content"
     )
+
+    @validator("education_type")
+    def validate_education_type(cls, v):
+        if isinstance(v, EducationType):
+            return v.value
+        if v not in [e.value for e in EducationType]:
+            raise ValueError(f"Invalid education type: {v}")
+        return v
+
     prompt: str = Field(
         sa_column=Column(Text),
         description="Educational content prompt"
@@ -83,7 +93,7 @@ class EducationalKnowledgeBase(SQLModel, ABC):
         return f"EducationalKnowledge(id={self.id}, vp_id={self.vp_id}, type={self.education_type})"
 
 
-class EducationalKnowledgeBlueprint(EducationalKnowledgeBase):
+class EducationalKnowledgeBlueprint(EducationalKnowledgeBase, table=True):
     """
     Concrete implementation of EducationalKnowledgeBase for the public schema blueprint.
     Serves as a reference for tenant-specific implementations.

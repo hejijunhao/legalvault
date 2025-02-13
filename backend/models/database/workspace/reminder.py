@@ -3,9 +3,10 @@
 from datetime import datetime
 from enum import Enum
 from typing import Optional, List, TYPE_CHECKING
-from sqlalchemy import text
-from sqlalchemy.dialects.postgresql import UUID
-from sqlmodel import Field, SQLModel, Index, Column, ForeignKey, Relationship
+from sqlalchemy import text, String, DateTime, Column, ForeignKey, Index
+from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlmodel import Field, SQLModel, Relationship
+from pydantic import validator
 from .project import Project
 from abc import ABC
 
@@ -14,6 +15,21 @@ class ReminderStatus(str, Enum):
     """Status options for reminders"""
     PENDING = "pending"
     COMPLETED = "completed"
+
+
+class ReminderMetadata(SQLModel):
+    """Additional metadata for reminders"""
+    priority: str = Field(default="medium", description="Priority level of the reminder")
+    recurrence: Optional[dict] = Field(
+        default=None,
+        description="Recurrence pattern if reminder repeats"
+    )
+    notifications: list[dict] = Field(
+        default_factory=list,
+        description="List of notification settings"
+    )
+    completion_notes: str = Field(default="", description="Notes upon completion")
+    tags: list[str] = Field(default_factory=list, description="Reminder tags")
 
 
 class ReminderBase(SQLModel, ABC):
@@ -66,38 +82,53 @@ class ReminderBase(SQLModel, ABC):
         description="ID of the associated project"
     )
     title: str = Field(
-        max_length=255,
-        nullable=False,
+        sa_column=Column(String(255), nullable=False),
         description="Title of the reminder"
     )
     description: str = Field(
-        max_length=1000,
-        nullable=True,
+        sa_column=Column(String(1000), nullable=True),
         description="Detailed description of the reminder"
     )
-    status: ReminderStatus = Field(
-        default=ReminderStatus.PENDING,
-        nullable=False,
-        index=True,
+    status: str = Field(
+        sa_column=Column(String, nullable=False),
+        default=ReminderStatus.PENDING.value,
         description="Current status of the reminder"
     )
+
+    @validator("status")
+    def validate_status(cls, v):
+        if isinstance(v, ReminderStatus):
+            return v.value
+        if v not in [e.value for e in ReminderStatus]:
+            raise ValueError(f"Invalid status: {v}")
+        return v
+
     due_date: datetime = Field(
-        nullable=False,
-        index=True,
+        sa_column=Column(DateTime, nullable=False, index=True),
         description="Due date for the reminder"
+    )
+
+    completed_at: Optional[datetime] = Field(
+        sa_column=Column(DateTime, nullable=True),
+        description="When the reminder was completed"
+    )
+
+    metadata: ReminderMetadata = Field(
+        sa_column=Column(JSONB, nullable=False),
+        default_factory=ReminderMetadata,
+        description="Additional reminder metadata and settings"
     )
 
     # Metadata
     created_at: datetime = Field(
+        sa_column=Column(DateTime, nullable=False),
         default_factory=datetime.utcnow,
-        nullable=False,
-        description="Timestamp when the reminder was created"
+        description="When the reminder was created"
     )
     updated_at: datetime = Field(
+        sa_column=Column(DateTime, nullable=False),
         default_factory=datetime.utcnow,
-        nullable=False,
-        index=True,
-        description="Timestamp when the reminder was last updated"
+        description="When the reminder was last updated"
     )
     created_by: UUID = Field(
         sa_column=Column(
@@ -117,12 +148,13 @@ class ReminderBase(SQLModel, ABC):
     )
 
     # Relationships
-    project: "Project" = Relationship(
-        back_populates="reminder",
+    project: Optional["Project"] = None
+
+    _project = Relationship(
+        back_populates="_reminder",
         sa_relationship_kwargs={
-            "lazy": "selectin",  # Eager loading for better performance
-            "primaryjoin": "and_(ReminderBase.project_id==Project.project_id, "
-                          "ReminderBase.__table__.schema==Project.__table__.schema)"
+            "lazy": "selectin",
+            "primaryjoin": "and_(foreign(ReminderBase.project_id)==ProjectBase.project_id, ReminderBase.__table__.schema==ProjectBase.__table__.schema)"
         }
     )
 
@@ -131,7 +163,7 @@ class ReminderBase(SQLModel, ABC):
         return f"Reminder(id={self.reminder_id}, title={self.title}, status={self.status})"
 
 
-class ReminderBlueprint(ReminderBase):
+class ReminderBlueprint(ReminderBase, table=True):
     """
     Concrete implementation of ReminderBase for the public schema blueprint.
     Serves as a reference for tenant-specific implementations.

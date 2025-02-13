@@ -3,10 +3,11 @@
 from datetime import datetime
 from enum import Enum
 from typing import Optional, List, Dict, TYPE_CHECKING
-from sqlalchemy import text, ARRAY, String, UniqueConstraint
+from sqlalchemy import text, ARRAY, String, UniqueConstraint, DateTime
 from sqlalchemy.dialects.postgresql import UUID
 from sqlmodel import Field, SQLModel, JSON, Column, Index, ForeignKey, Relationship
 from abc import ABC
+from pydantic import validator
 
 if TYPE_CHECKING:
     from .notebook import NotebookBase
@@ -24,6 +25,7 @@ class ProjectStatus(str, Enum):
 
 
 class ConfidentialityLevel(str, Enum):
+    """Confidentiality levels for projects"""
     PUBLIC = "public"
     CONFIDENTIAL = "confidential"
 
@@ -33,8 +35,10 @@ class ProjectKnowledge(SQLModel):
     Represents the synthesized knowledge about a project, combining LLM-generated insights
     and manual user input in rich text format.
     """
-    content: str  # Rich text content containing project knowledge
-    last_updated: datetime
+    content: str = Field(default="", description="Rich text content containing project knowledge")
+    last_updated: datetime = Field(default_factory=datetime.utcnow)
+    summary: str = Field(default="", description="Brief summary of the project knowledge")
+    tags: list[str] = Field(default_factory=list, description="Knowledge tags for categorization")
 
 
 class ProjectBase(SQLModel, ABC):
@@ -78,27 +82,23 @@ class ProjectBase(SQLModel, ABC):
         description="Unique identifier for the project"
     )
     name: str = Field(
-        max_length=255,
-        index=True,
-        nullable=False,
+        sa_column=Column(String(255), nullable=False, index=True),
         description="Name of the project"
     )
-    status: ProjectStatus = Field(
-        default=ProjectStatus.ACTIVE,
-        nullable=False,
-        index=True,
+    status: str = Field(
+        sa_column=Column(String, nullable=False),
+        default=ProjectStatus.ACTIVE.value,
         description="Current status of the project"
     )
     created_at: datetime = Field(
+        sa_column=Column(DateTime, nullable=False),
         default_factory=datetime.utcnow,
-        nullable=False,
-        description="Timestamp when the project was created"
+        description="When the project was created"
     )
     updated_at: datetime = Field(
+        sa_column=Column(DateTime, nullable=False),
         default_factory=datetime.utcnow,
-        nullable=False,
-        index=True,
-        description="Timestamp when the project was last updated"
+        description="When the project was last updated"
     )
     created_by: UUID = Field(
         sa_column=Column(
@@ -119,39 +119,35 @@ class ProjectBase(SQLModel, ABC):
 
     # Metadata
     practice_area: str = Field(
-        max_length=100,
-        nullable=True,
-        index=True,
+        sa_column=Column(String(100), nullable=True, index=True),
         description="Area of legal practice this project belongs to"
     )
-    confidentiality: ConfidentialityLevel = Field(
-        default=ConfidentialityLevel.CONFIDENTIAL,
-        nullable=False,
+    confidentiality: str = Field(
+        sa_column=Column(String, nullable=False),
+        default=ConfidentialityLevel.CONFIDENTIAL.value,
         description="Confidentiality level of the project"
     )
-    start_date: datetime = Field(
-        nullable=True,
-        index=True,
+    start_date: Optional[datetime] = Field(
+        sa_column=Column(DateTime, nullable=True),
         description="Project start date"
     )
+    end_date: Optional[datetime] = Field(
+        sa_column=Column(DateTime, nullable=True),
+        description="Project end date"
+    )
     tags: list[str] = Field(
-        sa_column=Column(
-            ARRAY(String),
-            nullable=False,
-            default=list
-        ),
+        sa_column=Column(ARRAY(String), nullable=False, default=list),
         description="List of tags associated with the project"
     )
 
     # Project Knowledge and Summary
     knowledge: ProjectKnowledge = Field(
-        sa_column=Column(JSON),
-        default=None,
-        description="Synthesized project knowledge combining LLM insights and user input in rich text format"
+        sa_column=Column(JSON, nullable=True),
+        default_factory=ProjectKnowledge,
+        description="Synthesized project knowledge combining LLM insights and user input"
     )
     summary: str = Field(
-        max_length=2000,  # Match schema validation
-        nullable=True,
+        sa_column=Column(String(2000), nullable=True),
         description="Condensed project summary for LLM context and quick reference"
     )
     summary_updated_at: datetime = Field(
@@ -160,47 +156,80 @@ class ProjectBase(SQLModel, ABC):
     )
 
     # Relationships
-    notebook: Optional["NotebookBase"] = Relationship(
+    notebook: Optional["NotebookBase"] = None
+    reminder: Optional[List["ReminderBase"]] = None
+    task: Optional[List["TaskBase"]] = None
+    contact_project: Optional[List["ContactProjectBase"]] = None
+    project_client: Optional[List["ProjectClientBase"]] = None
+
+    _notebook = Relationship(
         back_populates="project",
         sa_relationship_kwargs={
-            "uselist": False,  # One-to-one relationship
-            "cascade": "all, delete-orphan",  # Cascade deletion
-            "lazy": "selectin"  # Eager loading for better performance
+            "uselist": False,
+            "cascade": "all, delete-orphan",
+            "lazy": "selectin",
+            "primaryjoin": "and_(foreign(ProjectBase.project_id)==NotebookBase.project_id, ProjectBase.__table__.schema==NotebookBase.__table__.schema)"
         }
     )
 
-    reminder: List["ReminderBase"] = Relationship(
+    _reminder = Relationship(
         back_populates="project",
         sa_relationship_kwargs={
             "cascade": "all, delete-orphan",
-            "lazy": "selectin"
+            "lazy": "selectin",
+            "primaryjoin": "and_(foreign(ProjectBase.project_id)==ReminderBase.project_id, ProjectBase.__table__.schema==ReminderBase.__table__.schema)"
         }
     )
 
-    task: List["TaskBase"] = Relationship(
+    _task = Relationship(
         back_populates="project",
         sa_relationship_kwargs={
             "cascade": "all, delete-orphan",
-            "lazy": "selectin"
+            "lazy": "selectin",
+            "primaryjoin": "and_(foreign(ProjectBase.project_id)==TaskBase.project_id, ProjectBase.__table__.schema==TaskBase.__table__.schema)"
         }
     )
 
-    contact_project: List["ContactProjectBase"] = Relationship(
+    _contact_project = Relationship(
         back_populates="project",
-        sa_relationship_kwargs={"lazy": "selectin"}
+        sa_relationship_kwargs={
+            "cascade": "all, delete-orphan",
+            "lazy": "selectin",
+            "primaryjoin": "and_(foreign(ProjectBase.project_id)==ContactProjectBase.project_id, ProjectBase.__table__.schema==ContactProjectBase.__table__.schema)"
+        }
     )
 
-    project_client: List["ProjectClientBase"] = Relationship(
+    _project_client = Relationship(
         back_populates="project",
-        sa_relationship_kwargs={"lazy": "selectin"}
+        sa_relationship_kwargs={
+            "cascade": "all, delete-orphan",
+            "lazy": "selectin",
+            "primaryjoin": "and_(foreign(ProjectBase.project_id)==ProjectClientBase.project_id, ProjectBase.__table__.schema==ProjectClientBase.__table__.schema)"
+        }
     )
+
+    @validator("status")
+    def validate_status(cls, v):
+        if isinstance(v, ProjectStatus):
+            return v.value
+        if v not in [e.value for e in ProjectStatus]:
+            raise ValueError(f"Invalid status: {v}")
+        return v
+
+    @validator("confidentiality")
+    def validate_confidentiality(cls, v):
+        if isinstance(v, ConfidentialityLevel):
+            return v.value
+        if v not in [e.value for e in ConfidentialityLevel]:
+            raise ValueError(f"Invalid confidentiality level: {v}")
+        return v
 
     def __repr__(self) -> str:
         """String representation of the Project"""
         return f"Project(id={self.project_id}, name={self.name}, status={self.status})"
 
 
-class ProjectBlueprint(ProjectBase):
+class ProjectBlueprint(ProjectBase, table=True):
     """
     Concrete implementation of ProjectBase for the public schema blueprint.
     Serves as a reference for tenant-specific implementations.

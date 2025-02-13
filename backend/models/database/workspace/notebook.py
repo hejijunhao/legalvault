@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from typing import Optional, TYPE_CHECKING
-from sqlalchemy import text, Text, JSON, String, ARRAY
+from sqlalchemy import text, Text, JSONB, String, ARRAY, DateTime
 from sqlalchemy.dialects.postgresql import UUID
 from sqlmodel import Field, SQLModel, Column, ForeignKey, Index, Relationship
 from abc import ABC
@@ -56,14 +56,13 @@ class NotebookBase(SQLModel, ABC):
         description="ID of the associated project"
     )
     created_at: datetime = Field(
+        sa_column=Column(DateTime, nullable=False),
         default_factory=datetime.utcnow,
-        nullable=False,
         description="Timestamp when the notebook was created"
     )
     updated_at: datetime = Field(
+        sa_column=Column(DateTime, nullable=False, index=True),
         default_factory=datetime.utcnow,
-        nullable=False,
-        index=True,
         description="Timestamp when the notebook was last updated"
     )
     created_by: UUID = Field(
@@ -84,24 +83,23 @@ class NotebookBase(SQLModel, ABC):
     )
 
     # Content
+    title: str = Field(
+        sa_column=Column(String(255), nullable=True, index=True),
+        description="Optional title for the notebook"
+    )
     content: str = Field(
-        sa_column=Column(Text),
+        sa_column=Column(Text, nullable=False),
         default="",
         description="Rich text content of the notebook"
     )
-    title: Optional[str] = Field(
-        max_length=255,
-        nullable=True,
-        index=True,
-        description="Optional title for the notebook"
+    metadata: NotebookMetadata = Field(
+        sa_column=Column(JSONB, nullable=False),
+        default_factory=NotebookMetadata,
+        description="Additional notebook metadata"
     )
     tags: list[str] = Field(
-        sa_column=Column(
-            ARRAY(String),
-            nullable=False,
-            default=[]
-        ),
-        description="Tags for categorizing and filtering notebooks"
+        sa_column=Column(ARRAY(String), nullable=False, default=list),
+        description="List of tags for categorization"
     )
 
     # Metadata
@@ -119,12 +117,13 @@ class NotebookBase(SQLModel, ABC):
 
 
     # Relationships
-    project: "Project" = Relationship(
-        back_populates="notebook",
+    project: Optional["Project"] = None
+
+    _project = Relationship(
+        back_populates="_notebook",
         sa_relationship_kwargs={
-            "uselist": False,
-            "primaryjoin": "and_(NotebookBase.project_id==Project.project_id, "
-                          "NotebookBase.__table__.schema==Project.__table__.schema)"
+            "lazy": "selectin",
+            "primaryjoin": "and_(foreign(NotebookBase.project_id)==ProjectBase.project_id, NotebookBase.__table__.schema==ProjectBase.__table__.schema)"
         }
     )
 
@@ -133,7 +132,29 @@ class NotebookBase(SQLModel, ABC):
         return f"Notebook(id={self.notebook_id}, project_id={self.project_id}, title={self.title or 'Untitled'})"
 
 
-class NotebookBlueprint(NotebookBase):
+class NotebookMetadata(SQLModel):
+    """Additional metadata for notebooks"""
+    version: int = Field(default=1, description="Version number of the notebook")
+    revision_history: list[dict] = Field(
+        default_factory=list,
+        description="History of notebook revisions"
+    )
+    contributors: list[UUID] = Field(
+        default_factory=list,
+        description="List of users who have contributed"
+    )
+    last_viewed: Optional[datetime] = Field(default=None)
+    references: list[dict] = Field(
+        default_factory=list,
+        description="External references and citations"
+    )
+    attachments: list[dict] = Field(
+        default_factory=list,
+        description="List of attached files"
+    )
+
+
+class NotebookBlueprint(NotebookBase, table=True):
     """
     Concrete implementation of NotebookBase for the public schema blueprint.
     Serves as a reference for tenant-specific implementations.

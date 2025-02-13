@@ -76,7 +76,7 @@ class ActionsHistoryBase(SQLModel, ABC):
         return f"ActionsHistory(id={self.id}, vp_id={self.vp_id}, action_count={self.action_count})"
 
 
-class ActionsHistoryBlueprint(ActionsHistoryBase):
+class ActionsHistoryBlueprint(ActionsHistoryBase, table=True):
     """
     Concrete implementation of ActionsHistoryBase for the public schema blueprint.
     Serves as a reference for tenant-specific implementations.

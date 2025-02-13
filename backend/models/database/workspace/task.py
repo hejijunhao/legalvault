@@ -3,9 +3,10 @@
 from datetime import datetime
 from enum import Enum
 from typing import Optional, List
-from sqlalchemy import text
+from sqlalchemy import text, String, DateTime, JSONB
 from sqlalchemy.dialects.postgresql import UUID
 from sqlmodel import Field, SQLModel, Index, Column, ForeignKey, Relationship
+from pydantic import validator
 from .project import Project
 from abc import ABC
 
@@ -66,24 +67,29 @@ class TaskBase(SQLModel, ABC):
         description="ID of the associated project"
     )
     title: str = Field(
-        max_length=255,
-        nullable=False,
+        sa_column=Column(String(255), nullable=False),
         description="Title of the task"
     )
-    description: Optional[str] = Field(
-        max_length=1000,
-        nullable=True,
+    description: str = Field(
+        sa_column=Column(String(1000), nullable=True),
         description="Detailed description of the task"
     )
-    status: TaskStatus = Field(
-        default=TaskStatus.TODO,
-        nullable=False,
-        index=True,
+    status: str = Field(
+        sa_column=Column(String, nullable=False),
+        default=TaskStatus.TODO.value,
         description="Current status of the task"
     )
+
+    @validator("status")
+    def validate_status(cls, v):
+        if isinstance(v, TaskStatus):
+            return v.value
+        if v not in [e.value for e in TaskStatus]:
+            raise ValueError(f"Invalid status: {v}")
+        return v
+
     due_date: datetime = Field(
-        nullable=False,
-        index=True,
+        sa_column=Column(DateTime, nullable=False, index=True),
         description="Due date for the task"
     )
     assigned_to: UUID = Field(
@@ -97,14 +103,13 @@ class TaskBase(SQLModel, ABC):
 
     # Metadata
     created_at: datetime = Field(
+        sa_column=Column(DateTime, nullable=False),
         default_factory=datetime.utcnow,
-        nullable=False,
         description="Timestamp when the task was created"
     )
     updated_at: datetime = Field(
+        sa_column=Column(DateTime, nullable=False),
         default_factory=datetime.utcnow,
-        nullable=False,
-        index=True,
         description="Timestamp when the task was last updated"
     )
     created_by: UUID = Field(
@@ -124,18 +129,23 @@ class TaskBase(SQLModel, ABC):
         description="User ID of last modifier"
     )
     completed_at: Optional[datetime] = Field(
-        nullable=True,
-        index=True,
+        sa_column=Column(DateTime, nullable=True),
         description="Timestamp when the task was completed"
+    )
+    metadata: TaskMetadata = Field(
+        sa_column=Column(JSONB, nullable=False),
+        default_factory=TaskMetadata,
+        description="Additional task metadata and settings"
     )
 
     # Relationships
-    project: "Project" = Relationship(
-        back_populates="task",
+    project: Optional["Project"] = None
+
+    _project = Relationship(
+        back_populates="_task",
         sa_relationship_kwargs={
-            "lazy": "selectin",  # Eager loading for better performance
-            "primaryjoin": "and_(TaskBase.project_id==Project.project_id, "
-                          "TaskBase.__table__.schema==Project.__table__.schema)"
+            "lazy": "selectin",
+            "primaryjoin": "and_(foreign(TaskBase.project_id)==ProjectBase.project_id, TaskBase.__table__.schema==ProjectBase.__table__.schema)"
         }
     )
 
@@ -144,7 +154,21 @@ class TaskBase(SQLModel, ABC):
         return f"Task(id={self.task_id}, title={self.title}, status={self.status})"
 
 
-class TaskBlueprint(TaskBase):
+class TaskMetadata(SQLModel):
+    """Additional metadata for tasks"""
+    priority: str = Field(default="medium", description="Priority level of the task")
+    estimated_hours: Optional[float] = Field(default=None, description="Estimated hours to complete")
+    actual_hours: Optional[float] = Field(default=None, description="Actual hours spent")
+    dependencies: list[UUID] = Field(default_factory=list, description="IDs of dependent tasks")
+    checklist: list[dict] = Field(
+        default_factory=lambda: [],
+        description="List of subtasks or checklist items"
+    )
+    completion_notes: str = Field(default="", description="Notes upon completion")
+    tags: list[str] = Field(default_factory=list, description="Task tags")
+
+
+class TaskBlueprint(TaskBase, table=True):
     """
     Concrete implementation of TaskBase for the public schema blueprint.
     Serves as a reference for tenant-specific implementations.

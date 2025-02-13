@@ -98,7 +98,7 @@ class CollectionBase(SQLModel, ABC):
         return f"Collection(id={self.id}, name={self.name}, type={self.collection_type})"
 
 
-class CollectionBlueprint(CollectionBase):
+class CollectionBlueprint(CollectionBase, table=True):
     """
     Concrete implementation of CollectionBase for the public schema blueprint.
     Serves as a reference for tenant-specific implementations.

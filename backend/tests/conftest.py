@@ -1,27 +1,42 @@
 # backend/tests/conftest.py
+
 import pytest
 from pathlib import Path
 import sys
+from sqlmodel import SQLModel
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
-# Add project root to Python path
-current_dir = Path(__file__).resolve()
-project_root = str(current_dir.parent.parent.parent)
-sys.path.append(project_root)
+# Add backend directory to Python path
+current_dir = Path(__file__).resolve().parent
+backend_dir = current_dir.parent
+sys.path.insert(0, str(backend_dir))
 
-@pytest.fixture(scope="session", autouse=True)
-def setup_test_environment():
-    """Setup any test environment variables or configurations"""
-    # You can add any test setup here
-    pass
-
-# Usage Example:
-if __name__ == "__main__":
-    # Run the database connection test directly
-    from backend.scripts.test_db_connection import debug_database_url, test_connection
+@pytest.fixture(scope="session")
+def engine():
+    """Create a test database engine"""
+    # Use PostgreSQL instead of SQLite for JSONB support
+    DATABASE_URL = "postgresql://philippholke@localhost:5432/test_db"
     
-    print("Running database connection tests...")
-    debug_database_url()
-    test_connection()
+    engine = create_engine(
+        DATABASE_URL,
+        echo=True  # Set to True to see SQL statements
+    )
+    
+    # Create all tables
+    SQLModel.metadata.create_all(engine)
+    
+    yield engine
+    
+    # Clean up - drop all tables after tests
+    SQLModel.metadata.drop_all(engine)
 
-    # Run pytest tests
-    pytest.main(["-v", "backend/tests/"])
+@pytest.fixture
+def session(engine):
+    """Create a new database session for a test"""
+    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    session = SessionLocal()
+    try:
+        yield session
+    finally:
+        session.close()

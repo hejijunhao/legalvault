@@ -3,9 +3,10 @@
 from datetime import datetime
 from enum import Enum
 from typing import Optional, List, TYPE_CHECKING
-from sqlalchemy import Column, Index
+from sqlalchemy import Column, Index, String, JSONB
 from sqlalchemy.dialects.postgresql import UUID
 from sqlmodel import Field, SQLModel, Relationship, ForeignKey
+from pydantic import validator
 from abc import ABC
 
 if TYPE_CHECKING:
@@ -53,23 +54,33 @@ class ContactClientBase(SQLModel, ABC):
     )
 
     # Additional metadata
-    role: ContactRole = Field(
-        default=ContactRole.OTHER,
-        nullable=False,
+    role: str = Field(
+        sa_column=Column(String, nullable=False),
+        default=ContactRole.OTHER.value,
         description="Role of the contact at the client"
     )
-    department: Optional[str] = Field(
-        max_length=100,
-        nullable=True,
+
+    @validator("role")
+    def validate_role(cls, v):
+        if isinstance(v, ContactRole):
+            return v.value
+        if v not in [e.value for e in ContactRole]:
+            raise ValueError(f"Invalid role: {v}")
+        return v
+
+    department: str = Field(
+        sa_column=Column(String(100), nullable=True),
         description="Department within the client organization"
     )
     created_at: datetime = Field(
         default_factory=datetime.utcnow,
-        nullable=False
+        nullable=False,
+        sa_column=Column(nullable=False)
     )
     updated_at: datetime = Field(
         default_factory=datetime.utcnow,
-        nullable=False
+        nullable=False,
+        sa_column=Column(nullable=False)
     )
     created_by: UUID = Field(
         sa_column=Column(
@@ -84,19 +95,30 @@ class ContactClientBase(SQLModel, ABC):
         )
     )
 
+    metadata: ContactClientMetadata = Field(
+        sa_column=Column(JSONB, nullable=False),
+        default_factory=ContactClientMetadata,
+        description="Additional metadata about the contact-client relationship"
+    )
+
     # Linkages
-    client: Optional["ClientBase"] = Relationship(
-        back_populates="contact_client",
+    client: Optional["ClientBase"] = None
+    contact: Optional["ContactBase"] = None
+
+    _client = Relationship(
+        back_populates="_contact_client",
         sa_relationship_kwargs={
             "lazy": "selectin",
-            "primaryjoin": "and_(ContactClientBase.client_id==ClientBase.client_id, ContactClientBase.__table__.schema==ClientBase.__table__.schema)"
+            "primaryjoin": "and_(foreign(ContactClientBase.client_id)==ClientBase.client_id, ContactClientBase.__table__.schema==ClientBase.__table__.schema)",
+            "cascade": "all, delete"
         }
     )
-    contact: Optional["ContactBase"] = Relationship(
-        back_populates="contact_client",
+    _contact = Relationship(
+        back_populates="_contact_client",
         sa_relationship_kwargs={
             "lazy": "selectin",
-            "primaryjoin": "and_(ContactClientBase.contact_id==ContactBase.contact_id, ContactClientBase.__table__.schema==ContactBase.__table__.schema)"
+            "primaryjoin": "and_(foreign(ContactClientBase.contact_id)==ContactBase.contact_id, ContactClientBase.__table__.schema==ContactBase.__table__.schema)",
+            "cascade": "all, delete"
         }
     )
 
@@ -105,7 +127,15 @@ class ContactClientBase(SQLModel, ABC):
     }
 
 
-class ContactClientBlueprint(ContactClientBase):
+class ContactClientMetadata(SQLModel):
+    """Additional metadata for contact-client relationship"""
+    notes: str = Field(default="", description="Additional notes about the relationship")
+    last_interaction: Optional[datetime] = Field(default=None)
+    interaction_frequency: str = Field(default="as-needed")
+    preferred_contact_method: str = Field(default="email")
+
+
+class ContactClientBlueprint(ContactClientBase, table=True):
     """
     Concrete implementation of ContactClientBase for the public schema blueprint.
     Serves as a reference for tenant-specific implementations.

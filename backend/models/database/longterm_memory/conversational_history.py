@@ -76,7 +76,7 @@ class ConversationalHistoryBase(SQLModel, ABC):
         return f"ConversationalHistory(id={self.id}, vp_id={self.vp_id}, interaction_count={self.interaction_count})"
 
 
-class ConversationalHistoryBlueprint(ConversationalHistoryBase):
+class ConversationalHistoryBlueprint(ConversationalHistoryBase, table=True):
     """
     Concrete implementation of ConversationalHistoryBase for the public schema blueprint.
     Serves as a reference for tenant-specific implementations.

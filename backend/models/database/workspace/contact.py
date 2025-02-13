@@ -3,8 +3,8 @@
 from datetime import datetime
 from enum import Enum
 from typing import Optional, List, TYPE_CHECKING
-from sqlalchemy import text
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy import text, String, ARRAY, JSONB, DateTime
+from sqlalchemy.dialects.postgresql import UUID
 from sqlmodel import Field, SQLModel, Index, Column, ForeignKey, Relationship
 from abc import ABC
 
@@ -26,6 +26,21 @@ class ContactStatus(str, Enum):
     ACTIVE = "active"
     INACTIVE = "inactive"
     ARCHIVED = "archived"
+
+
+class ContactMetadata(SQLModel):
+    """Contact metadata and additional information"""
+    notes: str = Field(default="", description="Additional notes about the contact")
+    last_interaction: Optional[datetime] = Field(default=None)
+    preferred_language: str = Field(default="en")
+    timezone: str = Field(default="UTC")
+    communication_preferences: dict = Field(
+        default_factory=lambda: {
+            "email": True,
+            "phone": True,
+            "mail": False
+        }
+    )
 
 
 class ContactBase(SQLModel, ABC):
@@ -72,65 +87,67 @@ class ContactBase(SQLModel, ABC):
     
     # Personal Information
     first_name: str = Field(
-        max_length=100,
-        nullable=False,
+        sa_column=Column(String(100), nullable=False),
         description="Contact's first name"
     )
     last_name: str = Field(
-        max_length=100,
-        nullable=False,
+        sa_column=Column(String(100), nullable=False),
         description="Contact's last name"
     )
     email: str = Field(
-        max_length=255,
-        nullable=False,
-        index=True,
+        sa_column=Column(String(255), nullable=False, index=True),
         description="Primary email address"
     )
     phone: Optional[str] = Field(
-        max_length=50,
-        nullable=True,
+        sa_column=Column(String(50), nullable=True),
         description="Primary phone number"
     )
     
     # Professional Information
     title: Optional[str] = Field(
-        max_length=100,
-        nullable=True,
+        sa_column=Column(String(100), nullable=True),
         description="Professional title or role"
     )
     organization: Optional[str] = Field(
-        max_length=255,
-        nullable=True,
+        sa_column=Column(String(255), nullable=True),
         description="Organization or company name"
     )
-    contact_type: ContactType = Field(
-        default=ContactType.EXTERNAL,
-        nullable=False,
-        description="Type of contact relationship"
+    contact_type: str = Field(
+        sa_column=Column(String, nullable=False),
+        default=ContactType.EXTERNAL.value,
+        description="Type of contact (internal, client, or external)"
     )
-    status: ContactStatus = Field(
-        default=ContactStatus.ACTIVE,
-        nullable=False,
-        description="Current contact status"
+    status: str = Field(
+        sa_column=Column(String, nullable=False),
+        default=ContactStatus.ACTIVE.value,
+        description="Current status of the contact"
     )
     
     # Additional Information
-    notes: Optional[str] = Field(
-        nullable=True,
-        description="Additional notes about the contact"
+    metadata: ContactMetadata = Field(
+        sa_column=Column(JSONB, nullable=False),
+        default_factory=ContactMetadata,
+        description="Additional contact metadata and preferences"
+    )
+    tags: list[str] = Field(
+        sa_column=Column(ARRAY(String), nullable=False, default=list),
+        description="Contact tags for categorization"
     )
     
     # Metadata
     created_at: datetime = Field(
+        sa_column=Column(DateTime, nullable=False),
         default_factory=datetime.utcnow,
-        nullable=False,
-        description="Timestamp when the contact was created"
+        description="When the contact was created"
     )
     updated_at: datetime = Field(
+        sa_column=Column(DateTime, nullable=False),
         default_factory=datetime.utcnow,
-        nullable=False,
-        description="Timestamp when the contact was last updated"
+        description="When the contact was last updated"
+    )
+    birth_date: Optional[datetime] = Field(
+        sa_column=Column(DateTime, nullable=True),
+        description="Contact's date of birth"
     )
     created_by: UUID = Field(
         sa_column=Column(
@@ -150,23 +167,46 @@ class ContactBase(SQLModel, ABC):
     )
 
     # Relationships
-    client: List["ClientBase"] = Relationship(
+    client: Optional[List["ClientBase"]] = None
+    project: Optional[List["ProjectBase"]] = None
+    contact_client: Optional[List["ContactClientBase"]] = None
+    contact_project: Optional[List["ContactProjectBase"]] = None
+
+    _client = Relationship(
         back_populates="contact",
         link_model="ContactClientBase",
-        sa_relationship_kwargs={"lazy": "selectin"}
+        sa_relationship_kwargs={
+            "lazy": "selectin",
+            "cascade": "all",
+            "primaryjoin": "and_(foreign(ContactBase.contact_id)==ContactClientBase.contact_id, ContactBase.__table__.schema==ContactClientBase.__table__.schema)",
+            "secondaryjoin": "and_(ContactClientBase.client_id==ClientBase.client_id, ContactClientBase.__table__.schema==ClientBase.__table__.schema)"
+        }
     )
-    project: List["ProjectBase"] = Relationship(
+    _project = Relationship(
         back_populates="contact",
         link_model="ContactProjectBase",
-        sa_relationship_kwargs={"lazy": "selectin"}
+        sa_relationship_kwargs={
+            "lazy": "selectin",
+            "cascade": "all",
+            "primaryjoin": "and_(foreign(ContactBase.contact_id)==ContactProjectBase.contact_id, ContactBase.__table__.schema==ContactProjectBase.__table__.schema)",
+            "secondaryjoin": "and_(ContactProjectBase.project_id==ProjectBase.project_id, ContactProjectBase.__table__.schema==ProjectBase.__table__.schema)"
+        }
     )
-    contact_client: List["ContactClientBase"] = Relationship(
+    _contact_client = Relationship(
         back_populates="contact",
-        sa_relationship_kwargs={"lazy": "selectin"}
+        sa_relationship_kwargs={
+            "cascade": "all, delete-orphan",
+            "lazy": "selectin",
+            "primaryjoin": "and_(foreign(ContactBase.contact_id)==ContactClientBase.contact_id, ContactBase.__table__.schema==ContactClientBase.__table__.schema)"
+        }
     )
-    contact_project: List["ContactProjectBase"] = Relationship(
+    _contact_project = Relationship(
         back_populates="contact",
-        sa_relationship_kwargs={"lazy": "selectin"}
+        sa_relationship_kwargs={
+            "cascade": "all, delete-orphan",
+            "lazy": "selectin",
+            "primaryjoin": "and_(foreign(ContactBase.contact_id)==ContactProjectBase.contact_id, ContactBase.__table__.schema==ContactProjectBase.__table__.schema)"
+        }
     )
 
     def __repr__(self) -> str:
@@ -174,7 +214,7 @@ class ContactBase(SQLModel, ABC):
         return f"Contact(id={self.contact_id}, name={self.first_name} {self.last_name})"
 
 
-class ContactBlueprint(ContactBase):
+class ContactBlueprint(ContactBase, table=True):
     """
     Concrete implementation of ContactBase for the public schema blueprint.
     Serves as a reference for tenant-specific implementations.

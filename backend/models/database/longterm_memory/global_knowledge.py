@@ -1,12 +1,13 @@
 # models/database/longterm_memory/global_knowledge.py
 
 from sqlmodel import SQLModel, Field, Index
-from sqlalchemy import TIMESTAMP, Column, Text, ForeignKey, Enum as SQLEnum, UniqueConstraint
+from sqlalchemy import TIMESTAMP, Column, Text, ForeignKey, Enum as SQLEnum, UniqueConstraint, String
 from typing import Optional
 from datetime import datetime
 from uuid import UUID, uuid4
 from sqlalchemy.dialects.postgresql import UUID as SQLAlchemyUUID
 from enum import Enum
+from pydantic import validator
 from abc import ABC
 
 
@@ -61,10 +62,19 @@ class GlobalKnowledgeBase(SQLModel, ABC):
     )
 
     # Knowledge Content
-    knowledge_type: KnowledgeType = Field(
-        sa_column=Column(SQLEnum(KnowledgeType)),
+    knowledge_type: str = Field(
+        sa_column=Column(String, nullable=False),
         description="Type of global knowledge"
     )
+
+    @validator("knowledge_type")
+    def validate_knowledge_type(cls, v):
+        if isinstance(v, KnowledgeType):
+            return v.value
+        if v not in [e.value for e in KnowledgeType]:
+            raise ValueError(f"Invalid knowledge type: {v}")
+        return v
+
     prompt: str = Field(
         sa_column=Column(Text),
         description="Global knowledge prompt"
@@ -82,7 +92,7 @@ class GlobalKnowledgeBase(SQLModel, ABC):
         return f"GlobalKnowledge(id={self.id}, vp_id={self.vp_id}, type={self.knowledge_type})"
 
 
-class GlobalKnowledgeBlueprint(GlobalKnowledgeBase):
+class GlobalKnowledgeBlueprint(GlobalKnowledgeBase, table=True):
     """
     Concrete implementation of GlobalKnowledgeBase for the public schema blueprint.
     Serves as a reference for tenant-specific implementations.
