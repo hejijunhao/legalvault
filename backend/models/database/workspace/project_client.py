@@ -3,15 +3,14 @@
 from datetime import datetime
 from enum import Enum
 from typing import Optional, List, TYPE_CHECKING
-from sqlalchemy import Column, Index, String, JSONB
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Column, Index, String, DateTime
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlmodel import Field, SQLModel, Relationship, ForeignKey
 from pydantic import validator
 from abc import ABC
 
-if TYPE_CHECKING:
-    from .client import ClientBase
-    from .project import ProjectBase
+from .client import ClientBase
+from .project import ProjectBase
 
 class ClientProjectRole(str, Enum):
     """Role of the client in the project"""
@@ -20,20 +19,6 @@ class ClientProjectRole(str, Enum):
     OPPOSING = "opposing"      # Opposing party
     INTERESTED = "interested"  # Interested party
     OTHER = "other"           # Other role
-
-
-class ProjectClientMetadata(SQLModel):
-    """Additional metadata for project-client relationship"""
-    billing_type: str = Field(default="hourly", description="Type of billing arrangement")
-    matter_number: Optional[str] = Field(default=None, description="Client's matter/reference number")
-    engagement_terms: dict = Field(
-        default_factory=lambda: {
-            "billing_rate": None,
-            "retainer_amount": None,
-            "payment_terms": "net-30"
-        }
-    )
-    notes: str = Field(default="", description="Additional notes about the relationship")
 
 
 class ProjectClientBase(SQLModel, ABC):
@@ -51,7 +36,7 @@ class ProjectClientBase(SQLModel, ABC):
     project_id: UUID = Field(
         default=None,
         sa_column=Column(
-            ForeignKey("enterprise_schema.projects.project_id", ondelete="CASCADE"),
+            ForeignKey("projects.project_id", ondelete="CASCADE"),
             primary_key=True,
             nullable=False
         )
@@ -59,7 +44,7 @@ class ProjectClientBase(SQLModel, ABC):
     client_id: UUID = Field(
         default=None,
         sa_column=Column(
-            ForeignKey("enterprise_schema.clients.client_id", ondelete="CASCADE"),
+            ForeignKey("clients.client_id", ondelete="CASCADE"),
             primary_key=True,
             nullable=False
         )
@@ -89,22 +74,16 @@ class ProjectClientBase(SQLModel, ABC):
         sa_column=Column(String(100), nullable=True),
         description="Client's matter/reference number"
     )
-    
-    metadata: ProjectClientMetadata = Field(
-        sa_column=Column(JSONB, nullable=False),
-        default_factory=ProjectClientMetadata,
-        description="Additional metadata about the project-client relationship"
-    )
 
     created_at: datetime = Field(
+        sa_column=Column(DateTime, nullable=False),
         default_factory=datetime.utcnow,
-        nullable=False,
-        sa_column=Column(nullable=False)
+        description="When the contact was created"
     )
     updated_at: datetime = Field(
+        sa_column=Column(DateTime, nullable=False),
         default_factory=datetime.utcnow,
-        nullable=False,
-        sa_column=Column(nullable=False)
+        description="When the contact was last updated"
     )
     created_by: UUID = Field(
         sa_column=Column(
@@ -120,24 +99,23 @@ class ProjectClientBase(SQLModel, ABC):
     )
 
     # Class Linkages
-    project: Optional["ProjectBase"] = None
-    client: Optional["ClientBase"] = None
-
-    _project = Relationship(
-        back_populates="_project_client",
+    project: Optional["ProjectBase"] = Relationship(
+        back_populates="project_client",
         sa_relationship_kwargs={
             "lazy": "selectin",
-            "cascade": "all, delete",
-            "primaryjoin": "and_(foreign(ProjectClientBase.project_id)==ProjectBase.project_id, ProjectClientBase.__table__.schema==ProjectBase.__table__.schema)"
+            "primaryjoin": "and_(foreign(ProjectClientBase.project_id)==ProjectBase.project_id, "
+                           "ProjectClientBase.__table__.schema==ProjectBase.__table__.schema)",
+            "cascade": "all, delete"
         }
     )
 
-    _client = Relationship(
-        back_populates="_project_client",
+    client: Optional["ClientBase"] = Relationship(
+        back_populates="project_client",
         sa_relationship_kwargs={
             "lazy": "selectin",
-            "cascade": "all, delete",
-            "primaryjoin": "and_(foreign(ProjectClientBase.client_id)==ClientBase.client_id, ProjectClientBase.__table__.schema==ClientBase.__table__.schema)"
+            "primaryjoin": "and_(foreign(ProjectClientBase.client_id)==ClientBase.client_id, "
+                           "ProjectClientBase.__table__.schema==ClientBase.__table__.schema)",
+            "cascade": "all, delete"
         }
     )
 
@@ -150,15 +128,8 @@ class ProjectClientBlueprint(ProjectClientBase, table=True):
     Concrete implementation of ProjectClientBase for the public schema blueprint.
     Serves as a reference for tenant-specific implementations.
     """
-    __tablename__ = "project_client_blueprint"
+    __tablename__ = "project_client"
     __table_args__ = (
-        Index("idx_project_client_role", "role"),
-        Index("idx_project_client_created", "created_by"),
+        *ProjectClientBase.__table_args__,
         {'schema': 'public'}
     )
-
-class ProjectClient(ProjectClientBase):
-    """
-    Concrete implementation of ProjectClientBase for enterprise schemas.
-    """
-    __tablename__ = "project_clients"

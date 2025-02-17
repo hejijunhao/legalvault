@@ -4,7 +4,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional, List, Dict, TYPE_CHECKING
 from sqlalchemy import text, ARRAY, String, UniqueConstraint, DateTime
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlmodel import Field, SQLModel, JSON, Column, Index, ForeignKey, Relationship
 from abc import ABC
 from pydantic import validator
@@ -13,7 +13,6 @@ if TYPE_CHECKING:
     from .notebook import NotebookBase
     from .reminder import ReminderBase
     from .task import TaskBase
-    from .client import ClientBase
     from .project_client import ProjectClientBase
     from .contact_project import ContactProjectBase
 
@@ -156,55 +155,68 @@ class ProjectBase(SQLModel, ABC):
     )
 
     # Relationships
-    notebook: Optional["NotebookBase"] = None
-    reminder: Optional[List["ReminderBase"]] = None
-    task: Optional[List["TaskBase"]] = None
-    contact_project: Optional[List["ContactProjectBase"]] = None
-    project_client: Optional[List["ProjectClientBase"]] = None
-
-    _notebook = Relationship(
+    notebook: Optional["NotebookBase"] = Relationship(
         back_populates="project",
         sa_relationship_kwargs={
             "uselist": False,
             "cascade": "all, delete-orphan",
             "lazy": "selectin",
-            "primaryjoin": "and_(foreign(ProjectBase.project_id)==NotebookBase.project_id, ProjectBase.__table__.schema==NotebookBase.__table__.schema)"
+            "primaryjoin": "and_(foreign(ProjectBase.project_id)==NotebookBase.project_id, "
+                           "ProjectBase.__table__.schema==NotebookBase.__table__.schema)"
         }
     )
 
-    _reminder = Relationship(
+    reminder: Optional[List["ReminderBase"]] = Relationship(
         back_populates="project",
         sa_relationship_kwargs={
             "cascade": "all, delete-orphan",
             "lazy": "selectin",
-            "primaryjoin": "and_(foreign(ProjectBase.project_id)==ReminderBase.project_id, ProjectBase.__table__.schema==ReminderBase.__table__.schema)"
+            "primaryjoin": "and_(foreign(ProjectBase.project_id)==ReminderBase.project_id, "
+                           "ProjectBase.__table__.schema==ReminderBase.__table__.schema)"
         }
     )
 
-    _task = Relationship(
+    task: Optional[List["TaskBase"]] = Relationship(
         back_populates="project",
         sa_relationship_kwargs={
             "cascade": "all, delete-orphan",
             "lazy": "selectin",
-            "primaryjoin": "and_(foreign(ProjectBase.project_id)==TaskBase.project_id, ProjectBase.__table__.schema==TaskBase.__table__.schema)"
+            "primaryjoin": "and_(foreign(ProjectBase.project_id)==TaskBase.project_id, "
+                           "ProjectBase.__table__.schema==TaskBase.__table__.schema)"
         }
     )
 
-    _contact_project = Relationship(
+    contact_project: Optional[List["ContactProjectBase"]] = Relationship(
         back_populates="project",
+        link_model="ContactProjectBase",
         sa_relationship_kwargs={
-            "cascade": "all, delete-orphan",
             "lazy": "selectin",
-            "primaryjoin": "and_(foreign(ProjectBase.project_id)==ContactProjectBase.project_id, ProjectBase.__table__.schema==ContactProjectBase.__table__.schema)"
+            "cascade": "all",
+            "primaryjoin": (
+                "and_(foreign(ProjectBase.project_id)==ContactProjectBase.project_id, "
+                "ProjectBase.__table__.schema==ContactProjectBase.__table__.schema)"
+            ),
+            "secondaryjoin": (
+                "and_(ContactProjectBase.contact_id==ContactBase.contact_id, "
+                "ContactProjectBase.__table__.schema==ContactBase.__table__.schema)"
+            )
         }
     )
 
-    _project_client = Relationship(
+    project_client: Optional[List["ProjectClientBase"]] = Relationship(
         back_populates="project",
+        link_model="ProjectClientBase",
         sa_relationship_kwargs={
-            "cascade": "all, delete-orphan",
             "lazy": "selectin",
-            "primaryjoin": "and_(foreign(ProjectBase.project_id)==ProjectClientBase.project_id, ProjectBase.__table__.schema==ProjectClientBase.__table__.schema)"
+            "cascade": "all",
+            "primaryjoin": (
+                "and_(foreign(ProjectBase.project_id)==ProjectClientBase.project_id, "
+                "ProjectBase.__table__.schema==ProjectClientBase.__table__.schema)"
+            ),
+            "secondaryjoin": (
+                "and_(ProjectClientBase.client_id==ClientBase.client_id, "
+                "ProjectClientBase.__table__.schema==ClientBase.__table__.schema)"
+            )
         }
     )
 
@@ -234,19 +246,9 @@ class ProjectBlueprint(ProjectBase, table=True):
     Concrete implementation of ProjectBase for the public schema blueprint.
     Serves as a reference for tenant-specific implementations.
     """
-    __tablename__ = "project_blueprint"
+    __tablename__ = "projects"
     __table_args__ = (
-        UniqueConstraint("name", name="uq_project_name"),
-        Index("idx_project_status_practice", "status", "practice_area"),
-        Index("idx_project_created_by", "created_by"),
-        Index("idx_project_modified", "modified_by", "updated_at"),
-        Index("idx_project_tasks", "project_id"),
+        *ProjectBase.__table_args__,
         {'schema': 'public'}
     )
 
-
-class Project(ProjectBase):
-    """
-    Concrete implementation of ProjectBase for enterprise schemas.
-    """
-    __tablename__ = "projects"

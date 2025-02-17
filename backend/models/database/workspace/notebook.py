@@ -2,13 +2,14 @@
 
 from datetime import datetime
 from typing import Optional, TYPE_CHECKING
-from sqlalchemy import text, Text, JSONB, String, ARRAY, DateTime
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import text, Text, String, ARRAY, DateTime
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlmodel import Field, SQLModel, Column, ForeignKey, Index, Relationship
 from abc import ABC
 
 if TYPE_CHECKING:
-    from .project import Project
+    from .project import ProjectBase
+
 
 class NotebookBase(SQLModel, ABC):
     """
@@ -50,7 +51,7 @@ class NotebookBase(SQLModel, ABC):
     project_id: UUID = Field(
         sa_column=Column(
             UUID(as_uuid=True),
-            ForeignKey("enterprise_schema.projects.project_id", ondelete="CASCADE"),
+            ForeignKey("projects.project_id", ondelete="CASCADE"),
             nullable=False
         ),
         description="ID of the associated project"
@@ -92,11 +93,6 @@ class NotebookBase(SQLModel, ABC):
         default="",
         description="Rich text content of the notebook"
     )
-    metadata: NotebookMetadata = Field(
-        sa_column=Column(JSONB, nullable=False),
-        default_factory=NotebookMetadata,
-        description="Additional notebook metadata"
-    )
     tags: list[str] = Field(
         sa_column=Column(ARRAY(String), nullable=False, default=list),
         description="List of tags for categorization"
@@ -117,13 +113,12 @@ class NotebookBase(SQLModel, ABC):
 
 
     # Relationships
-    project: Optional["Project"] = None
-
-    _project = Relationship(
-        back_populates="_notebook",
+    project: Optional["ProjectBase"] = Relationship(
+        back_populates="notebook",
         sa_relationship_kwargs={
             "lazy": "selectin",
-            "primaryjoin": "and_(foreign(NotebookBase.project_id)==ProjectBase.project_id, NotebookBase.__table__.schema==ProjectBase.__table__.schema)"
+            "primaryjoin": "and_(foreign(NotebookBase.project_id)==ProjectBase.project_id, "
+                           "NotebookBase.__table__.schema==ProjectBase.__table__.schema)"
         }
     )
 
@@ -132,44 +127,13 @@ class NotebookBase(SQLModel, ABC):
         return f"Notebook(id={self.notebook_id}, project_id={self.project_id}, title={self.title or 'Untitled'})"
 
 
-class NotebookMetadata(SQLModel):
-    """Additional metadata for notebooks"""
-    version: int = Field(default=1, description="Version number of the notebook")
-    revision_history: list[dict] = Field(
-        default_factory=list,
-        description="History of notebook revisions"
-    )
-    contributors: list[UUID] = Field(
-        default_factory=list,
-        description="List of users who have contributed"
-    )
-    last_viewed: Optional[datetime] = Field(default=None)
-    references: list[dict] = Field(
-        default_factory=list,
-        description="External references and citations"
-    )
-    attachments: list[dict] = Field(
-        default_factory=list,
-        description="List of attached files"
-    )
-
-
 class NotebookBlueprint(NotebookBase, table=True):
     """
     Concrete implementation of NotebookBase for the public schema blueprint.
     Serves as a reference for tenant-specific implementations.
     """
-    __tablename__ = "notebook_blueprint"
+    __tablename__ = "notebooks"
     __table_args__ = (
-        Index("idx_notebook_project", "project_id"),
-        Index("idx_notebook_created_by", "created_by"),
-        Index("idx_notebook_modified", "modified_by", "updated_at"),
+        *NotebookBase.__table_args__,
         {'schema': 'public'}
     )
-
-
-class Notebook(NotebookBase):
-    """
-    Concrete implementation of NotebookBase for enterprise schemas.
-    """
-    __tablename__ = "notebooks"

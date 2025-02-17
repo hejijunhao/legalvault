@@ -1,27 +1,27 @@
 # models/database/workspace/__init__.py
 
-from .client import Client, ClientBase, LegalEntityType, ClientStatus
-from .contact import Contact, ContactBase, ContactType, ContactStatus
-from .contact_client import ContactClient, ContactClientBase, ContactRole
-from .contact_project import ContactProject, ContactProjectBase, ProjectRole
-from .notebook import Notebook, NotebookBase
+from .client import ClientBlueprint, ClientBase, LegalEntityType, ClientStatus
+from .contact import ContactBlueprint, ContactBase, ContactType, ContactStatus
+from .contact_client import ContactClientBlueprint, ContactClientBase, ContactRole
+from .contact_project import ContactProjectBlueprint, ContactProjectBase, ProjectRole
+from .notebook import NotebookBlueprint, NotebookBase
 from .project import (
-    Project, ProjectBase, ProjectStatus, 
+    ProjectBlueprint, ProjectBase, ProjectStatus,
     ConfidentialityLevel, ProjectKnowledge
 )
-from .project_client import ProjectClient, ProjectClientBase, ClientProjectRole
-from .reminder import Reminder, ReminderBase, ReminderStatus
-from .task import Task, TaskBase, TaskStatus
+from .project_client import ProjectClientBlueprint, ProjectClientBase, ClientProjectRole
+from .reminder import ReminderBlueprint, ReminderBase, ReminderStatus
+from .task import TaskBlueprint, TaskBase, TaskStatus
 
 __all__ = [
-    'Client', 'ClientBase', 'LegalEntityType', 'ClientStatus',
-    'Contact', 'ContactBase', 'ContactType', 'ContactStatus',
-    'ContactClient', 'ContactClientBase', 'ContactRole',
-    'ContactProject', 'ContactProjectBase', 'ProjectRole',
-    'Notebook', 'NotebookBase',
-    'Project', 'ProjectBase', 'ProjectStatus', 'ConfidentialityLevel', 'ProjectKnowledge',
-    'ProjectClient', 'ProjectClientBase', 'ClientProjectRole',
-    'Reminder', 'ReminderBase', 'ReminderStatus',
-    'Task', 'TaskBase', 'TaskStatus',
+    'ClientBase', 'LegalEntityType', 'ClientStatus',
+    'ContactBlueprint', 'ContactBase', 'ContactType', 'ContactStatus',
+    'ContactClientBlueprint', 'ContactClientBase', 'ContactRole',
+    'ContactProjectBlueprint', 'ContactProjectBase', 'ProjectRole',
+    'NotebookBlueprint', 'NotebookBase',
+    'ProjectBlueprint', 'ProjectBase', 'ProjectStatus', 'ConfidentialityLevel', 'ProjectKnowledge',
+    'ProjectClientBlueprint', 'ProjectClientBase', 'ClientProjectRole',
+    'ReminderBlueprint', 'ReminderBase', 'ReminderStatus',
+    'TaskBlueprint', 'TaskBase', 'TaskStatus',
 ]
 

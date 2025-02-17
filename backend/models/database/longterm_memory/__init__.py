@@ -8,8 +8,8 @@ from .educational_knowledge import (
     EducationType
 )
 from .global_knowledge import (
-    GlobalKnowledge, 
-    GlobalKnowledgeBase, 
+    GlobalKnowledge,
+    GlobalKnowledgeBase,
     KnowledgeType
 )
 from .self_identity import SelfIdentity, SelfIdentityBase

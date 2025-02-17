@@ -3,8 +3,8 @@
 from datetime import datetime
 from enum import Enum
 from typing import Optional, List, TYPE_CHECKING
-from sqlalchemy import text, String, ARRAY, JSONB, DateTime
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import text, String, ARRAY, DateTime
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlmodel import Field, SQLModel, Index, Column, ForeignKey, Relationship
 from abc import ABC
 
@@ -26,21 +26,6 @@ class ContactStatus(str, Enum):
     ACTIVE = "active"
     INACTIVE = "inactive"
     ARCHIVED = "archived"
-
-
-class ContactMetadata(SQLModel):
-    """Contact metadata and additional information"""
-    notes: str = Field(default="", description="Additional notes about the contact")
-    last_interaction: Optional[datetime] = Field(default=None)
-    preferred_language: str = Field(default="en")
-    timezone: str = Field(default="UTC")
-    communication_preferences: dict = Field(
-        default_factory=lambda: {
-            "email": True,
-            "phone": True,
-            "mail": False
-        }
-    )
 
 
 class ContactBase(SQLModel, ABC):
@@ -124,11 +109,6 @@ class ContactBase(SQLModel, ABC):
     )
     
     # Additional Information
-    metadata: ContactMetadata = Field(
-        sa_column=Column(JSONB, nullable=False),
-        default_factory=ContactMetadata,
-        description="Additional contact metadata and preferences"
-    )
     tags: list[str] = Field(
         sa_column=Column(ARRAY(String), nullable=False, default=list),
         description="Contact tags for categorization"
@@ -167,45 +147,37 @@ class ContactBase(SQLModel, ABC):
     )
 
     # Relationships
-    client: Optional[List["ClientBase"]] = None
-    project: Optional[List["ProjectBase"]] = None
-    contact_client: Optional[List["ContactClientBase"]] = None
-    contact_project: Optional[List["ContactProjectBase"]] = None
-
-    _client = Relationship(
-        back_populates="contact",
-        link_model="ContactClientBase",
-        sa_relationship_kwargs={
-            "lazy": "selectin",
-            "cascade": "all",
-            "primaryjoin": "and_(foreign(ContactBase.contact_id)==ContactClientBase.contact_id, ContactBase.__table__.schema==ContactClientBase.__table__.schema)",
-            "secondaryjoin": "and_(ContactClientBase.client_id==ClientBase.client_id, ContactClientBase.__table__.schema==ClientBase.__table__.schema)"
-        }
-    )
-    _project = Relationship(
+    contact_project: Optional[List["ContactProjectBase"]] = Relationship(
         back_populates="contact",
         link_model="ContactProjectBase",
         sa_relationship_kwargs={
             "lazy": "selectin",
             "cascade": "all",
-            "primaryjoin": "and_(foreign(ContactBase.contact_id)==ContactProjectBase.contact_id, ContactBase.__table__.schema==ContactProjectBase.__table__.schema)",
-            "secondaryjoin": "and_(ContactProjectBase.project_id==ProjectBase.project_id, ContactProjectBase.__table__.schema==ProjectBase.__table__.schema)"
+            "primaryjoin": (
+                "and_(foreign(ContactBase.contact_id)==ContactProjectBase.contact_id, "
+                "ContactBase.__table__.schema==ContactProjectBase.__table__.schema)"
+            ),
+            "secondaryjoin": (
+                "and_(ContactProjectBase.project_id==ProjectBase.project_id, "
+                "ContactProjectBase.__table__.schema==ProjectBase.__table__.schema)"
+            )
         }
     )
-    _contact_client = Relationship(
+
+    contact_client: Optional[List["ContactClientBase"]] = Relationship(
         back_populates="contact",
+        link_model="ContactClientBase",
         sa_relationship_kwargs={
-            "cascade": "all, delete-orphan",
             "lazy": "selectin",
-            "primaryjoin": "and_(foreign(ContactBase.contact_id)==ContactClientBase.contact_id, ContactBase.__table__.schema==ContactClientBase.__table__.schema)"
-        }
-    )
-    _contact_project = Relationship(
-        back_populates="contact",
-        sa_relationship_kwargs={
-            "cascade": "all, delete-orphan",
-            "lazy": "selectin",
-            "primaryjoin": "and_(foreign(ContactBase.contact_id)==ContactProjectBase.contact_id, ContactBase.__table__.schema==ContactProjectBase.__table__.schema)"
+            "cascade": "all",
+            "primaryjoin": (
+                "and_(foreign(ContactBase.contact_id)==ContactClientBase.contact_id, "
+                "ContactBase.__table__.schema==ContactClientBase.__table__.schema)"
+            ),
+            "secondaryjoin": (
+                "and_(ContactClientBase.client_id==ClientBase.client_id, "
+                "ContactClientBase.__table__.schema==ClientBase.__table__.schema)"
+            )
         }
     )
 
@@ -219,18 +191,8 @@ class ContactBlueprint(ContactBase, table=True):
     Concrete implementation of ContactBase for the public schema blueprint.
     Serves as a reference for tenant-specific implementations.
     """
-    __tablename__ = "contact_blueprint"
+    __tablename__ = "contacts"
     __table_args__ = (
-        Index("idx_contact_name", "first_name", "last_name"),
-        Index("idx_contact_email", "email"),
-        Index("idx_contact_created_by", "created_by"),
-        Index("idx_contact_modified", "modified_by", "updated_at"),
+        *ContactBase.__table_args__,
         {'schema': 'public'}
     )
-
-
-class Contact(ContactBase):
-    """
-    Concrete implementation of ContactBase for enterprise schemas.
-    """
-    __tablename__ = "contacts"

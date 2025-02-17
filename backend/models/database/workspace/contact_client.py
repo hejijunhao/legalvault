@@ -3,8 +3,8 @@
 from datetime import datetime
 from enum import Enum
 from typing import Optional, List, TYPE_CHECKING
-from sqlalchemy import Column, Index, String, JSONB
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Column, Index, String, DateTime
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlmodel import Field, SQLModel, Relationship, ForeignKey
 from pydantic import validator
 from abc import ABC
@@ -23,6 +23,12 @@ class ContactRole(str, Enum):
     ADMINISTRATIVE = "administrative"  # Administrative contact
     OTHER = "other"             # Other role
 
+class ContactClientMetadata(SQLModel):
+    """Additional metadata for contact-client relationship"""
+    notes: str = Field(default="", description="Additional notes about the relationship")
+    last_interaction: Optional[datetime] = Field(default=None)
+    interaction_frequency: str = Field(default="as-needed")
+    preferred_contact_method: str = Field(default="email")
 
 class ContactClientBase(SQLModel, ABC):
     """
@@ -39,7 +45,7 @@ class ContactClientBase(SQLModel, ABC):
     contact_id: UUID = Field(
         default=None,
         sa_column=Column(
-            ForeignKey("enterprise_schema.contacts.contact_id", ondelete="CASCADE"),
+            ForeignKey("contacts.contact_id", ondelete="CASCADE"),
             primary_key=True,
             nullable=False
         )
@@ -47,7 +53,7 @@ class ContactClientBase(SQLModel, ABC):
     client_id: UUID = Field(
         default=None,
         sa_column=Column(
-            ForeignKey("enterprise_schema.clients.client_id", ondelete="CASCADE"),
+            ForeignKey("clients.client_id", ondelete="CASCADE"),
             primary_key=True,
             nullable=False
         )
@@ -74,13 +80,11 @@ class ContactClientBase(SQLModel, ABC):
     )
     created_at: datetime = Field(
         default_factory=datetime.utcnow,
-        nullable=False,
-        sa_column=Column(nullable=False)
+        sa_column=Column(DateTime, nullable=False)
     )
     updated_at: datetime = Field(
         default_factory=datetime.utcnow,
-        nullable=False,
-        sa_column=Column(nullable=False)
+        sa_column=Column(DateTime, nullable=False)
     )
     created_by: UUID = Field(
         sa_column=Column(
@@ -95,29 +99,28 @@ class ContactClientBase(SQLModel, ABC):
         )
     )
 
-    metadata: ContactClientMetadata = Field(
+    contact_client_metadata: ContactClientMetadata = Field(
         sa_column=Column(JSONB, nullable=False),
         default_factory=ContactClientMetadata,
         description="Additional metadata about the contact-client relationship"
     )
 
-    # Linkages
-    client: Optional["ClientBase"] = None
-    contact: Optional["ContactBase"] = None
-
-    _client = Relationship(
-        back_populates="_contact_client",
+    # Relationships
+    contact: Optional["ContactBase"] = Relationship(
+        back_populates="contact_client",
         sa_relationship_kwargs={
             "lazy": "selectin",
-            "primaryjoin": "and_(foreign(ContactClientBase.client_id)==ClientBase.client_id, ContactClientBase.__table__.schema==ClientBase.__table__.schema)",
+            "primaryjoin": "and_(foreign(ContactClientBase.contact_id)==ContactBase.contact_id, "
+                           "ContactClientBase.__table__.schema==ContactBase.__table__.schema)",
             "cascade": "all, delete"
         }
     )
-    _contact = Relationship(
-        back_populates="_contact_client",
+    client: Optional["ClientBase"] = Relationship(
+        back_populates="contact_client",
         sa_relationship_kwargs={
             "lazy": "selectin",
-            "primaryjoin": "and_(foreign(ContactClientBase.contact_id)==ContactBase.contact_id, ContactClientBase.__table__.schema==ContactBase.__table__.schema)",
+            "primaryjoin": "and_(foreign(ContactClientBase.client_id)==ClientBase.client_id, "
+                           "ContactClientBase.__table__.schema==ClientBase.__table__.schema)",
             "cascade": "all, delete"
         }
     )
@@ -126,30 +129,13 @@ class ContactClientBase(SQLModel, ABC):
         "arbitrary_types_allowed": True
     }
 
-
-class ContactClientMetadata(SQLModel):
-    """Additional metadata for contact-client relationship"""
-    notes: str = Field(default="", description="Additional notes about the relationship")
-    last_interaction: Optional[datetime] = Field(default=None)
-    interaction_frequency: str = Field(default="as-needed")
-    preferred_contact_method: str = Field(default="email")
-
-
 class ContactClientBlueprint(ContactClientBase, table=True):
     """
     Concrete implementation of ContactClientBase for the public schema blueprint.
     Serves as a reference for tenant-specific implementations.
     """
-    __tablename__ = "contact_client_blueprint"
+    __tablename__ = "contact_client"
     __table_args__ = (
-        Index("idx_contact_client_role", "role"),
-        Index("idx_contact_client_created", "created_by"),
+        *ContactClientBase.__table_args__,
         {'schema': 'public'}
     )
-
-
-class ContactClient(ContactClientBase):
-    """
-    Concrete implementation of ContactClientBase for enterprise schemas.
-    """
-    __tablename__ = "contact_clients"

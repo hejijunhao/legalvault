@@ -2,13 +2,15 @@
 
 from datetime import datetime
 from enum import Enum
-from typing import Optional, List
-from sqlalchemy import text, String, DateTime, JSONB
+from typing import Optional, TYPE_CHECKING
+from sqlalchemy import text, String, DateTime
 from sqlalchemy.dialects.postgresql import UUID
 from sqlmodel import Field, SQLModel, Index, Column, ForeignKey, Relationship
 from pydantic import validator
-from .project import Project
 from abc import ABC
+
+if TYPE_CHECKING:
+    from .project import ProjectBase
 
 class TaskStatus(str, Enum):
     """Status options for tasks"""
@@ -61,7 +63,7 @@ class TaskBase(SQLModel, ABC):
     project_id: UUID = Field(
         sa_column=Column(
             UUID(as_uuid=True),
-            ForeignKey("enterprise_schema.projects.project_id", ondelete="CASCADE"),
+            ForeignKey("projects.project_id", ondelete="CASCADE"),
             nullable=False
         ),
         description="ID of the associated project"
@@ -132,40 +134,20 @@ class TaskBase(SQLModel, ABC):
         sa_column=Column(DateTime, nullable=True),
         description="Timestamp when the task was completed"
     )
-    metadata: TaskMetadata = Field(
-        sa_column=Column(JSONB, nullable=False),
-        default_factory=TaskMetadata,
-        description="Additional task metadata and settings"
-    )
 
     # Relationships
-    project: Optional["Project"] = None
-
-    _project = Relationship(
-        back_populates="_task",
+    project: Optional["ProjectBase"] = Relationship(
+        back_populates="task",
         sa_relationship_kwargs={
             "lazy": "selectin",
-            "primaryjoin": "and_(foreign(TaskBase.project_id)==ProjectBase.project_id, TaskBase.__table__.schema==ProjectBase.__table__.schema)"
+            "primaryjoin": "and_(foreign(TaskBase.project_id)==ProjectBase.project_id, "
+                           "TaskBase.__table__.schema==ProjectBase.__table__.schema)"
         }
     )
 
     def __repr__(self) -> str:
         """String representation of the Task"""
         return f"Task(id={self.task_id}, title={self.title}, status={self.status})"
-
-
-class TaskMetadata(SQLModel):
-    """Additional metadata for tasks"""
-    priority: str = Field(default="medium", description="Priority level of the task")
-    estimated_hours: Optional[float] = Field(default=None, description="Estimated hours to complete")
-    actual_hours: Optional[float] = Field(default=None, description="Actual hours spent")
-    dependencies: list[UUID] = Field(default_factory=list, description="IDs of dependent tasks")
-    checklist: list[dict] = Field(
-        default_factory=lambda: [],
-        description="List of subtasks or checklist items"
-    )
-    completion_notes: str = Field(default="", description="Notes upon completion")
-    tags: list[str] = Field(default_factory=list, description="Task tags")
 
 
 class TaskBlueprint(TaskBase, table=True):
@@ -175,18 +157,6 @@ class TaskBlueprint(TaskBase, table=True):
     """
     __tablename__ = "task_blueprint"
     __table_args__ = (
-        Index("idx_task_project", "project_id"),
-        Index("idx_task_status", "status"),
-        Index("idx_task_due_date", "due_date"),
-        Index("idx_task_assigned", "assigned_to"),
-        Index("idx_task_created_by", "created_by"),
-        Index("idx_task_modified", "modified_by", "updated_at"),
+        *TaskBase.__table_args__,
         {'schema': 'public'}
     )
-
-
-class Task(TaskBase):
-    """
-    Concrete implementation of TaskBase for enterprise schemas.
-    """
-    __tablename__ = "tasks"
