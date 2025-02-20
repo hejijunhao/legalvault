@@ -21,6 +21,7 @@ import {
   StickyNote,
   BookOpen,
   Paperclip,
+  ArrowRight,
 } from "lucide-react"
 
 const categories = [
@@ -68,11 +69,11 @@ const categories = [
 
 const getGradient = (index: number) => {
   const gradients = [
-    "from-blue-400 via-purple-400 to-pink-400",
-    "from-green-400 via-teal-400 to-blue-400",
-    "from-yellow-400 via-orange-400 to-red-400",
-    "from-pink-400 via-rose-400 to-indigo-400",
-    "from-indigo-400 via-cyan-400 to-emerald-400",
+    "from-[#93c5fd]/20 to-[#bfdbfe]/20",
+    "from-[#9fe870]/20 to-[#bfdbfe]/20",
+    "from-[#bfdbfe]/20 to-[#93c5fd]/20",
+    "from-[#9fe870]/20 to-[#93c5fd]/20",
+    "from-[#93c5fd]/20 to-[#9fe870]/20",
   ]
   return gradients[index % gradients.length]
 }
@@ -82,7 +83,10 @@ export function TypeCategories() {
 
   return (
     <div className="w-full">
-      <div className="grid grid-cols-5 gap-4 p-4">
+      <div className="mb-2">
+        <h2 className="text-[10px] font-light tracking-[1px] text-[#1C1C1C]">FILE TYPES</h2>
+      </div>
+      <div className="grid grid-cols-5 gap-4">
         {categories.map((category, index) => (
           <Link href={`/library/${category.name.toLowerCase()}`} key={category.name}>
             <motion.div
@@ -94,33 +98,31 @@ export function TypeCategories() {
               onHoverEnd={() => setHoveredIndex(null)}
             >
               <div
-                className={`h-full cursor-pointer overflow-hidden rounded-xl border border-white/20 bg-gradient-to-br ${getGradient(index)} p-6 transition-all duration-300 hover:shadow-lg`}
+                className={`h-full cursor-pointer overflow-hidden rounded-xl border border-white/20 bg-gradient-to-br ${getGradient(index)} p-2.5 transition-all duration-300 hover:shadow-lg`}
               >
                 <motion.div
                   className="absolute inset-0 bg-white opacity-70 transition-opacity duration-300 rounded-xl"
                   animate={{ opacity: hoveredIndex === index ? 0.6 : 0.7 }}
                 />
                 <div className="relative z-10 flex h-full flex-col items-start">
-                  <div className="mb-4">
-                    <span className="text-base font-medium text-black">{category.name}</span>
+                  <div className="mb-2">
+                    <span className="text-sm font-medium text-black/80">{category.name}</span>
                   </div>
-                  <div className="space-y-2 flex-grow text-left">
+                  <div className="space-y-1.5 flex-grow text-left">
                     {category.types.map((type) => (
-                      <div key={type.name} className="flex items-center gap-2 text-sm text-black/70">
-                        <type.icon className="h-4 w-4" />
+                      <div key={type.name} className="flex items-center gap-1.5 text-xs text-black/70">
+                        <type.icon className="h-3 w-3" />
                         <span>{type.name}</span>
                       </div>
                     ))}
                   </div>
                   <motion.div
-                    className="mt-4 pt-2 border-t border-black/10"
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: hoveredIndex === index ? 1 : 0, y: hoveredIndex === index ? 0 : 10 }}
+                    className="absolute bottom-2 right-2"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: hoveredIndex === index ? 1 : 0 }}
                     transition={{ duration: 0.2 }}
                   >
-                    <span className="text-sm font-medium text-black/90 hover:text-black transition-colors">
-                      View All →
-                    </span>
+                    <ArrowRight className="h-4 w-4 text-black/70" />
                   </motion.div>
                 </div>
               </div>
@@ -131,7 +133,4 @@ export function TypeCategories() {
     </div>
   )
 }
-
-
-
 
