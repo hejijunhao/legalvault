@@ -2,7 +2,7 @@
 
 "use client"
 
-import { useParams } from "next/navigation"
+// import { useParams } from "next/navigation"
 import { BackButton } from "@/components/ui/back-button"
 import { SearchTags } from "@/components/library/search/search-tags"
 import { SearchResultsBlock } from "@/components/library/search/search-results-block"
@@ -97,8 +97,8 @@ const mockSearchData = {
 }
 
 export default function SearchPage() {
-  const params = useParams()
-  const searchId = params.searchId as string
+  // const params = useParams()
+  // const searchId = params.searchId as string
 
   return (
     <div className="min-h-screen pb-20">
