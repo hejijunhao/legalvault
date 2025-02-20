@@ -99,6 +99,8 @@ class ClientBase(SQLModel, ABC, TimestampMixin, UserAuditMixin):
 
 
     # Relationships defined in Concrete Classes (client_blueprint and client)
+
+
     # Functions and database operations defined in /domain layer
 
     def __repr__(self) -> str:
