@@ -31,26 +31,26 @@ const sections = [
 export function QuickAccessSections() {
   return (
     <motion.div
-      className="mx-auto max-w-2xl"
+      className="w-full max-w-[600px]"
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
     >
-      <div className="flex items-stretch rounded-full bg-white p-1.5 shadow-[0_2px_12px_rgba(0,0,0,0.08)]">
+      <div className="flex items-stretch rounded-lg bg-white/20 backdrop-blur-sm p-1 shadow-[0_2px_8px_rgba(0,0,0,0.03)] border border-white/20">
         {sections.map((section, index) => {
           const Icon = section.icon
           return (
             <React.Fragment key={section.id}>
-              {index > 0 && <div className="w-px bg-gray-200" />}
+              {index > 0 && <div className="w-px bg-gray-100" />}
               <Link href={section.href} className="flex-1">
-                <motion.button
-                  className="flex h-12 w-full items-center justify-center gap-2 rounded-full px-6 py-3 text-sm text-gray-700 transition-colors hover:bg-gray-100"
+                <motion.div
+                  className="flex h-10 w-full items-center justify-center gap-2 rounded-md px-4 py-2 text-sm text-[#1C1C1C] transition-colors"
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                 >
-                  <Icon className="h-5 w-5" />
+                  <Icon className="h-4 w-4" />
                   {section.title}
-                </motion.button>
+                </motion.div>
               </Link>
             </React.Fragment>
           )
@@ -59,4 +59,6 @@ export function QuickAccessSections() {
     </motion.div>
   )
 }
+
+
 
