@@ -9,11 +9,13 @@ import Image from "next/image"
 import { ChatOverlay } from "@/components/chat/chat-overlay"
 import { DropdownProfileMenu } from "@/components/ui/dropdown-profile-menu"
 
-const navigation = [
+type NavItem = { name: string; href: string };
+const navigation: NavItem[] = [
   { name: "Workspace", href: "/workspace" },
   { name: "Library", href: "/library" },
+  { name: "Research", href: "/research" },
   { name: "Paralegal", href: "/paralegal" },
-]
+];
 
 export function MainHeader() {
   const pathname = usePathname()
