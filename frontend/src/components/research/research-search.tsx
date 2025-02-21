@@ -2,18 +2,27 @@
 
 "use client"
 
-import { useState } from "react"
+import { useState, useRef, type ChangeEvent } from "react"
 import { motion } from "framer-motion"
-import { Search, Globe, Paperclip, ArrowRight } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { ArrowRight, Link2, Globe, Shuffle } from "lucide-react"
 
 interface ResearchSearchProps {
   query: string
-  onQueryChange: (query: string) => void
+  onQueryChange: (value: string) => void
 }
 
 export function ResearchSearch({ query, onQueryChange }: ResearchSearchProps) {
-  const [mode, setMode] = useState("auto")
+  const [isFocused, setIsFocused] = useState(false)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  const handleTextareaChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
+    onQueryChange(e.target.value)
+
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto"
+      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`
+    }
+  }
 
   return (
     <motion.div
@@ -22,33 +31,45 @@ export function ResearchSearch({ query, onQueryChange }: ResearchSearchProps) {
       transition={{ duration: 0.5, delay: 0.2 }}
       className="relative w-full"
     >
-      <div className="relative flex items-center rounded-xl border border-gray-200 bg-white shadow-sm">
-        <div className="flex h-14 items-center gap-2 border-r border-gray-100 px-4">
-          <button
-            onClick={() => setMode(mode === "auto" ? "manual" : "auto")}
-            className="flex items-center gap-1.5 rounded-lg bg-gray-50 px-3 py-1.5 text-sm text-gray-700 transition-colors hover:bg-gray-100"
-          >
-            <Search className="h-4 w-4" />
-            <span>{mode === "auto" ? "Auto" : "Manual"}</span>
-          </button>
-        </div>
-        <input
-          type="text"
+      <div
+        className={`flex flex-col rounded-2xl border bg-white p-4 shadow-[0_0_10px_rgba(0,0,0,0.05)] transition-all ${
+          isFocused ? "border-gray-300" : "border-gray-200"
+        }`}
+      >
+        <textarea
+          ref={textareaRef}
           value={query}
-          onChange={(e) => onQueryChange(e.target.value)}
-          placeholder="Research legal precedents, analyze cases, or explore regulations..."
-          className="flex-1 bg-transparent px-4 text-base text-gray-900 placeholder-gray-400 focus:outline-none"
+          onChange={handleTextareaChange}
+          onFocus={() => setIsFocused(true)}
+          onBlur={() => setIsFocused(false)}
+          placeholder="Ask anything..."
+          className="mb-3 w-full resize-none border-0 bg-transparent text-lg text-gray-900 placeholder:text-gray-500 focus:outline-none focus:ring-0"
+          style={{ minHeight: "24px", maxHeight: "200px" }}
         />
-        <div className="flex items-center gap-2 px-4">
-          <button className="rounded-lg p-2 text-gray-400 transition-colors hover:bg-gray-50 hover:text-gray-600">
-            <Globe className="h-5 w-5" />
-          </button>
-          <button className="rounded-lg p-2 text-gray-400 transition-colors hover:bg-gray-50 hover:text-gray-600">
-            <Paperclip className="h-5 w-5" />
-          </button>
-          <Button size="icon" className="h-9 w-9 rounded-lg bg-[#9FE870] text-[#09332B] hover:bg-[#9FE870]/90">
-            <ArrowRight className="h-5 w-5" />
-          </Button>
+
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <button className="flex items-center gap-2 rounded-full bg-gray-50 px-4 py-2 text-sm text-gray-600">
+              <Shuffle className="h-4 w-4" />
+              Auto
+            </button>
+            <button className="rounded-lg p-2 text-gray-400 hover:text-gray-600">
+              <Globe className="h-5 w-5" />
+            </button>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button className="rounded-lg p-2 text-gray-400 hover:text-gray-600">
+              <Link2 className="h-5 w-5" />
+            </button>
+            <button
+              className={`rounded-full p-2 transition-colors ${
+                query.trim() ? "bg-[#95C066] text-white" : "bg-gray-100 text-gray-400"
+              }`}
+            >
+              <ArrowRight className="h-5 w-5" />
+            </button>
+          </div>
         </div>
       </div>
     </motion.div>
