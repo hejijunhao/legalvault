@@ -3,8 +3,11 @@
 "use client"
 
 import { useState } from "react"
+import { motion } from "framer-motion"
 import { cn } from "@/lib/utils"
 import Image from "next/image"
+import { ChatInput } from "@/components/paralegal/chat-input"
+import { ActivityBlock } from "@/components/paralegal/activity-block"
 
 type Section = "profile" | "knowledge" | "abilities" | "integrations"
 
@@ -39,18 +42,39 @@ export default function ParalegalPage() {
           ))}
         </nav>
 
-        {/* Portrait Section */}
-        <div className="relative min-h-[calc(100vh-4rem)]">
-          <div className="absolute left-[-150px] top-0 h-full w-[700px]">
-            <Image
-              src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Virtual%20Paralegals-fie2JYdrbgShF29etJsoiieb2v8SUT.svg"
-              alt="Virtual Paralegal Portrait"
-              fill
-              className="object-cover object-left"
-              priority
-            />
+        {/* Content Section */}
+        <div className="relative flex flex-col min-h-[calc(100vh-4rem)] pt-[220px]">
+          {/* Activity Block */}
+          {selectedSection === "profile" && (
+            <motion.div
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5 }}
+              className="absolute top-12 right-8 w-[600px]"
+            >
+              <ActivityBlock />
+            </motion.div>
+          )}
+
+          {/* Portrait Section */}
+          <div className="absolute bottom-0 left-[-200px] w-[calc(100%-300px)]">
+            <div className="relative h-[calc(100vh-4rem)] w-full">
+              <Image
+                src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Virtual%20Paralegals-fie2JYdrbgShF29etJsoiieb2v8SUT.svg"
+                alt="Virtual Paralegal Portrait"
+                layout="fill"
+                objectFit="contain"
+                objectPosition="bottom left"
+                priority
+              />
+            </div>
           </div>
         </div>
+      </div>
+
+      {/* Chat Input */}
+      <div className="fixed bottom-8 right-8 z-50">
+        <ChatInput />
       </div>
     </div>
   )
