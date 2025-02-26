@@ -31,7 +31,7 @@ export default function ComingSoon() {
           >
             <h1 className="font-['Libre_Baskerville'] text-5xl italic text-gray-900">Your Virtual Paralegal</h1>
             <p className="text-xl text-gray-600 leading-relaxed max-w-[500px]">
-              We're crafting an intelligent assistant that understands your legal practice. Coming soon to LegalVault.
+              We are crafting an intelligent assistant that understands your legal practice. Coming soon to LegalVault.
             </p>
             <div className="h-[2px] w-24 bg-gray-200" />
             <div className="space-y-2">
