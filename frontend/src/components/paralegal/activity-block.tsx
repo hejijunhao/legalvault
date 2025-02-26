@@ -12,7 +12,7 @@ type DayActivity = {
   level: ActivityLevel
 }
 
-type ActivityBlockProps = {}
+type ActivityBlockProps = Record<string, never>
 
 export function ActivityBlock({}: ActivityBlockProps) {
   const [currentYear, setCurrentYear] = useState(new Date())
@@ -31,7 +31,7 @@ export function ActivityBlock({}: ActivityBlockProps) {
   const totalContributions = activityData.reduce((sum, day) => sum + day.level, 0)
 
   // Get array of month labels
-  const months = Array.from(new Set(days.map((date) => format(date, "MMM"))))
+  // const months = Array.from(new Set(days.map((date) => format(date, "MMM"))))
 
   const navigateYear = (direction: "prev" | "next") => {
     setCurrentYear((prev) => (direction === "prev" ? subYears(prev, 1) : addYears(prev, 1)))

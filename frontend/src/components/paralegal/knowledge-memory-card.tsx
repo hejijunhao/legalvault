@@ -79,7 +79,7 @@ function MemoryBlock({ icon: Icon, label, stats, color }: MemoryBlockProps) {
           <span className="text-xs font-medium">{label}</span>
         </div>
         <div className="flex items-center space-x-4">
-          {stats.map((stat, index) => (
+          {stats.map((stat) => (
             <div key={stat.label} className="flex items-center space-x-2">
               <div className={`w-2 h-2 rounded-full ${color} opacity-70`} />
               <span className="text-xs text-gray-600">{stat.value}</span>

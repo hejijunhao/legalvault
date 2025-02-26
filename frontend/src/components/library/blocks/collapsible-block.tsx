@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import { Card } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
+import Image from 'next/image'
 import { Button } from "@/components/ui/button"
 
 interface BlockItem {
@@ -59,7 +60,7 @@ export function CollapsibleBlock({ title, items, iconUrls, viewAllLink }: Collap
                     }}
                     transition={{ duration: 0.5, ease: "easeInOut" }}
                   >
-                    <img src={icon || "/placeholder.svg"} alt="" className="h-4 w-4" />
+                    <Image src={icon || "/placeholder.svg"} alt="" className="h-4 w-4" />
                   </motion.div>
                 ))}
               </div>
@@ -100,7 +101,7 @@ export function CollapsibleBlock({ title, items, iconUrls, viewAllLink }: Collap
                     >
                       <div className="flex items-center gap-3">
                         <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#F3F4F6] transition-all duration-300 group-hover:bg-[#E5E7EB]">
-                          <img src={item.icon || "/placeholder.svg"} alt="" className="h-5 w-5" />
+                          <Image src={item.icon || "/placeholder.svg"} alt="" className="h-5 w-5" />
                         </div>
                         <div>
                           <p className="text-sm font-medium text-[#1C1C1C]">{item.name}</p>

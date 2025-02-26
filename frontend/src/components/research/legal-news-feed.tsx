@@ -5,6 +5,7 @@
 import { motion } from "framer-motion"
 import { Bookmark, Scale, Gavel, Globe, BookOpen, Building2 } from "lucide-react"
 import { useState } from "react"
+import Image from 'next/image'
 
 const categories = [
   { id: "all", label: "All Updates", icon: Scale },
@@ -96,7 +97,7 @@ export function LegalNewsFeed() {
           className="group relative overflow-hidden rounded-xl bg-card"
         >
           <div className="aspect-[2/1] overflow-hidden">
-            <img
+            <Image
               src={featuredArticle.image || "/placeholder.svg"}
               alt={featuredArticle.title}
               className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
