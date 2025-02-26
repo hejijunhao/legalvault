@@ -5,9 +5,41 @@
 import { useEffect, useState } from "react"
 import { motion } from "framer-motion"
 import { Progress } from "@/components/ui/progress"
-import { FileText, FileSpreadsheet, FileImage, Film, File } from "lucide-react"
+import {
+  BookOpen,
+  Scale,
+  GraduationCap,
+  Gavel,
+  FileText,
+  Bookmark,
+  PenTool,
+  Scroll,
+  BookMarked,
+  Calculator,
+  Percent,
+  Pi,
+  Sigma,
+  Infinity,
+  Hash,
+} from "lucide-react"
 
-const floatingIcons = [FileText, FileSpreadsheet, FileImage, Film, File]
+const floatingIcons = [
+  BookOpen,
+  Scale,
+  GraduationCap,
+  Gavel,
+  FileText,
+  Bookmark,
+  PenTool,
+  Scroll,
+  BookMarked,
+  Calculator,
+  Percent,
+  Pi,
+  Sigma,
+  Infinity,
+  Hash,
+]
 
 export default function ComingSoon() {
   const [progress, setProgress] = useState(0)
@@ -27,7 +59,7 @@ export default function ComingSoon() {
         return (
           <motion.div
             key={i}
-            className="absolute text-white"
+            className="absolute text-gray-300"
             initial={{
               x: Math.random() * window.innerWidth,
               y: Math.random() * window.innerHeight,
@@ -77,6 +109,8 @@ export default function ComingSoon() {
     </div>
   )
 }
+
+
 
 
 
