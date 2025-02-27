@@ -21,6 +21,12 @@ interface UserMessagesProps {
   userName?: string
 }
 
+function formatTime(timestamp: Date) {
+  const hours = timestamp.getHours().toString().padStart(2, "0")
+  const minutes = timestamp.getMinutes().toString().padStart(2, "0")
+  return `${hours}:${minutes}`
+}
+
 export function UserMessages({ messages, userAvatar, userName = "You" }: UserMessagesProps) {
   return (
     <div className="space-y-6 mb-8">
@@ -42,7 +48,7 @@ export function UserMessages({ messages, userAvatar, userName = "You" }: UserMes
             <p className="text-sm leading-relaxed">{message.content}</p>
             {message.timestamp && (
               <p className="mt-1 text-xs text-gray-500">
-                {message.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                {formatTime(message.timestamp)}
               </p>
             )}
 
@@ -100,6 +106,3 @@ export function UserMessages({ messages, userAvatar, userName = "You" }: UserMes
     </div>
   )
 }
-
-
-
