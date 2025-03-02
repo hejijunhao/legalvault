@@ -15,18 +15,22 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
     raise ValueError("No DATABASE_URL found in environment")
 
-# Configure SSL context for psycopg2
+# Configure connection arguments for psycopg2
 ssl_args = {
-    "sslmode": "require",  # Changed from ssl_mode to sslmode for psycopg2
+    "sslmode": "require",      # Use SSL
+    "connect_timeout": 10,     # Connection timeout in seconds
+    "gssencmode": "disable",   # Disable GSSAPI authentication which was causing errors
 }
 
 # Create engine with explicit driver specification
 url = make_url(DATABASE_URL)
 engine = create_engine(
     url.set(drivername="postgresql+psycopg2"),  # Explicitly set the driver
-    echo=True,  # Set to False in production
+    echo=False,  # Set to False in production, True for debugging
     connect_args=ssl_args,
-    pool_pre_ping=True
+    pool_pre_ping=True,
+    pool_size=5,
+    max_overflow=10
 )
 
 def init_db():

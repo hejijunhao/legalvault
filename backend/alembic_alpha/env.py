@@ -61,7 +61,7 @@ load_dotenv()
 config = context.config
 
 # Set the sqlalchemy.url from environment variable
-config.set_main_option("sqlalchemy.url", os.environ["SYNC_DATABASE_URL"])
+config.set_main_option("sqlalchemy.url", os.environ["DATABASE_URL"])
 
 # Interpret the config file for Python logging.
 if config.config_file_name is not None:

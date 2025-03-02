@@ -1,11 +1,13 @@
 # backend/main.py
+
 from fastapi import FastAPI, Depends, HTTPException
-from sqlmodel import select, Session
+import psycopg2
+from dotenv import load_dotenv
+import os
+from logging import getLogger
 from typing import List
 from .core.database import get_session
-from .models.database.paralegal import VirtualParalegal
-from backend.services.initializers.op_taskmanagement_initializer import TaskManagementInitializer
-from logging import getLogger
+
 from .api.routes import router as api_router
 
 logger = getLogger(__name__)
@@ -13,40 +15,41 @@ app = FastAPI()
 
 app.include_router(api_router)
 
-@app.on_event("startup")
-async def initialize_operations():
-    try:
-        session = next(get_session())
-        initializer = TaskManagementInitializer(session)
-        # TODO: Replace with proper tech tree ID retrieval
-        ability_id = 1
-        operation_ids = initializer.initialize_operations(ability_id)
-        logger.info(f"Initialized task management operations: {operation_ids}")
-    except Exception as e:
-        logger.error(f"Error initializing operations: {e}")
-        # Don't raise the exception - allow the app to start even if initialization fails
-        # You might want to add monitoring/alerting here
-    finally:
-        session.close()
-
-@app.get("/virtual-paralegals", response_model=List[VirtualParalegal])
-async def list_paralegals(session: Session = Depends(get_session)):
-    result = await session.execute(select(VirtualParalegal))
-    return result.scalars().all()
-
-@app.post("/virtual-paralegals", response_model=VirtualParalegal)
-async def create_paralegal(
-    paralegal: VirtualParalegal,
-    session: Session = Depends(get_session)
-):
-    session.add(paralegal)
-    await session.commit()
-    await session.refresh(paralegal)
-    return paralegal
-
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
+
+# Load environment variables from .env
+load_dotenv()
+
+# Connect to the database
+try:
+    # Use the DATABASE_URL environment variable
+    DATABASE_URL = os.getenv("DATABASE_URL")
+    # Connect with GSSAPI disabled to avoid authentication errors
+    connection = psycopg2.connect(
+        DATABASE_URL,
+        sslmode='require',
+        gssencmode='disable'
+    )
+    print("Connection successful!")
+    
+    # Create a cursor to execute SQL queries
+    cursor = connection.cursor()
+    
+    # Example query
+    cursor.execute("SELECT NOW();")
+    result = cursor.fetchone()
+    print("Current Time:", result)
+
+    # Close the cursor and connection
+    cursor.close()
+    connection.close()
+    print("Connection closed.")
+
+except Exception as e:
+    print(f"Failed to connect: {e}")
+
 
 # Error handling
 @app.exception_handler(HTTPException)

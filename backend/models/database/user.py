@@ -3,7 +3,7 @@
 from sqlalchemy import Column, String, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import relationship
+# from sqlalchemy.orm import relationship
 from uuid import uuid4
 from models.database.mixins import TimestampMixin
 

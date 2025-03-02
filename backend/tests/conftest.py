@@ -1,76 +1,46 @@
 # backend/tests/conftest.py
 
+import os
 import pytest
-import logging
-from pathlib import Path
-import sys
-from sqlmodel import SQLModel
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import NullPool
+from sqlalchemy.engine.url import make_url
 
-# Add backend directory to Python path
-current_dir = Path(__file__).resolve().parent
-backend_dir = current_dir.parent
-sys.path.insert(0, str(backend_dir))
+# Load environment variables from .env
+from dotenv import load_dotenv
+from logging import getLogger
 
-# Set up SQLAlchemy logging
-logging.basicConfig()
-logging.getLogger('sqlalchemy.engine').setLevel(logging.INFO)
-logging.getLogger('sqlalchemy.pool').setLevel(logging.DEBUG)
+logger = getLogger(__name__)
+load_dotenv()
 
+# Use the DATABASE_URL from environment
+DATABASE_URL = os.environ["DATABASE_URL"]
 
 @pytest.fixture(scope="session")
 def engine():
-    """Create a test database engine"""
-    DATABASE_URL = "postgresql://philippholke@localhost:5432/test_db"
-
+    """Create a test database engine."""
     print("\n=== Creating Database Engine ===")
+    # Configure SSL and authentication settings
+    connect_args = {
+        "sslmode": "require",      # Use SSL
+        "connect_timeout": 10,     # Connection timeout in seconds
+        "gssencmode": "disable",   # Disable GSSAPI authentication which was causing errors
+    }
+    
+    # Use NullPool to avoid connection pooling issues in tests
+    # Explicitly set the driver to psycopg2
+    url = make_url(DATABASE_URL)
     engine = create_engine(
-        DATABASE_URL,
-        echo=True,  # SQL statements
-        echo_pool=True  # Connection pool activity
+        url.set(drivername="postgresql+psycopg2"),
+        poolclass=NullPool,
+        connect_args=connect_args
     )
-
-    print("\n=== Creating Schemas ===")
-    with engine.connect() as conn:
-        print("Creating public schema...")
-        conn.execute(text('CREATE SCHEMA IF NOT EXISTS public'))
-        print("Creating vault schema...")
-        conn.execute(text('CREATE SCHEMA IF NOT EXISTS vault'))
-        conn.commit()
-        print("Schemas created successfully")
-
-    print("\n=== Inspecting Metadata ===")
-    print("Available tables:", SQLModel.metadata.tables.keys())
-    for table in SQLModel.metadata.tables.values():
-        print(f"\nTable: {table.name}")
-        print(f"Schema: {table.schema}")
-        print("Columns:", [c.name for c in table.columns])
-        print("Constraints:", [c for c in table.constraints])
-        print("Foreign Keys:", [f"{fk.parent}.{fk.column}" for fk in table.foreign_keys])
-
-    print("\n=== Creating Tables ===")
-    try:
-        SQLModel.metadata.create_all(engine)
-        print("Tables created successfully")
-    except Exception as e:
-        print(f"Error creating tables: {str(e)}")
-        raise
-
-    yield engine
-
-    print("\n=== Cleaning Up ===")
-    try:
-        SQLModel.metadata.drop_all(engine)
-        print("Tables dropped successfully")
-    except Exception as e:
-        print(f"Error dropping tables: {str(e)}")
-        raise
-
+    return engine
 
 @pytest.fixture
 def session(engine):
-    """Create a new database session for a test"""
+    """Create a new database session for a test."""
     print("\n=== Creating New Session ===")
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     session = SessionLocal()
