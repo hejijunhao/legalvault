@@ -4,7 +4,7 @@ from sqlalchemy import Column, DateTime, event, MetaData
 from sqlalchemy.ext.declarative import declarative_base, declared_attr
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
-import uuid
+from uuid import uuid4
 
 # Naming convention for constraints
 convention = {
@@ -25,7 +25,7 @@ class BaseModel:
         # Convert CamelCase to snake_case
         return ''.join(['_' + c.lower() if c.isupper() else c for c in cls.__name__]).lstrip('_')
     
-    id = Column(UUID, primary_key=True, default=uuid.uuid4)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
 
 # Core base for all models
 Base = declarative_base(cls=BaseModel, metadata=metadata)

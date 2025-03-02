@@ -17,6 +17,8 @@ from dotenv import load_dotenv
 from models.database.base import Base
 from models.database.user import User
 from models.database.auth_user import AuthUser
+from models.database.enterprise import Enterprise
+from models.database.paralegal import VirtualParalegal
 
 # Load environment variables
 load_dotenv()
@@ -43,12 +45,56 @@ target_metadata = MetaData(naming_convention=Base.metadata.naming_convention)
 # Only include tables you want to migrate
 AuthUser.__table__.tometadata(target_metadata)
 User.__table__.tometadata(target_metadata)
+Enterprise.__table__.tometadata(target_metadata)
+VirtualParalegal.__table__.tometadata(target_metadata)
 
+# List of tables we explicitly want to manage
+managed_tables = {
+    'user', 
+    'enterprises', 
+    'virtual_paralegals'
+}
+
+# Supabase system schemas that we *don't* want to modify
+supabase_system_schemas = {
+    'auth',
+    'storage',
+    'realtime',
+}
 
 def include_name(name, type_, parent_names):
-    # Only include objects in the 'vault' schema, and only include tables we explicitly add to target_metadata
-    if type_ == "table":
-        return parent_names.get("schema") == "vault"
+    """
+    Control which database objects Alembic will consider for migrations.
+    
+    This function is crucial to prevent Alembic from trying to drop or modify
+    Supabase system tables and other objects we don't want to manage.
+    
+    Args:
+        name: Name of the database object
+        type_: Type of object (table, column, index, etc.)
+        parent_names: Dictionary with parent object names
+    
+    Returns:
+        Boolean indicating whether the object should be included
+    """
+    # Exclude Supabase system schemas
+    schema = parent_names.get("schema")
+    if schema in supabase_system_schemas:
+        return False
+    
+    # For the 'vault' schema, only include tables we explicitly want to manage
+    if schema == 'vault':
+        if type_ == "table":
+            return name in managed_tables
+        
+        # For other object types (columns, indexes, etc.), only include them
+        # if they belong to tables we're managing
+        if type_ in ("column", "index", "constraint"):
+            table_name = parent_names.get("table_name")
+            return table_name in managed_tables
+    
+    # For other schemas (public, enterprise_*), include all objects
+    # This allows migrations for public and enterprise-specific schemas
     return True
 
 def run_migrations_offline() -> None:
@@ -60,7 +106,8 @@ def run_migrations_offline() -> None:
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
         include_schemas=True,  # Ensure schema awareness for 'vault' and 'auth'
-        include_name=include_name,  # Only include objects in the 'vault' schema
+        include_name=include_name,  # Only include objects we explicitly want to manage
+        compare_type=True,  # Be more precise about column type changes
     )
 
     with context.begin_transaction():
@@ -87,7 +134,8 @@ def run_migrations_online() -> None:
             connection=connection, 
             target_metadata=target_metadata,
             include_schemas=True,  # Ensure schema awareness for 'vault' and 'auth'
-            include_name=include_name,  # Only include objects in the 'vault' schema
+            include_name=include_name,  # Only include objects we explicitly want to manage
+            compare_type=True,  # Be more precise about column type changes
         )
 
         with context.begin_transaction():
