@@ -2,9 +2,7 @@
 
 from sqlalchemy import Column, String, Boolean, DateTime
 from sqlalchemy.dialects.postgresql import UUID, JSONB
-from sqlalchemy.ext.declarative import declarative_base
-
-Base = declarative_base()
+from models.database.base import Base
 
 class AuthUser(Base):
     __tablename__ = "users"

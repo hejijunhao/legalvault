@@ -1,44 +1,17 @@
-#models/database/_init_.py
+# models/database/__init__.py
 
-from sqlalchemy.ext.declarative import declarative_base
-
-from .mixins.__init__ import *
-from .workspace.__init__ import *
-from .abilities.__init__ import *
-from .integrations.__init__ import *
-from .longterm_memory.__init__ import *
+from .mixins.timestamp_mixin import TimestampMixin
+from .mixins.user_tracking_mixin import UserAuditMixin
 from .auth_user import AuthUser
 from .user import User
-
-Base = declarative_base()
+from .base import Base, VaultBase, PublicBase
 
 __all__ = [
+    "Base",
+    "VaultBase",
+    "PublicBase",
     "TimestampMixin",
     "UserAuditMixin",
-    "WorkspaceBase",
-    "ClientBase",
-    "ContactBase",
-    "ContactClientBase",
-    "ContactProjectBase",
-    "NotebookBase",
-    "ProjectBase",
-    "ReminderBase",
-    "TaskBase",
-    "Ability",
-    "AbilityNode",
-    "AbilityCategory",
-    "AbilityProgress",
-    "AbilityManager",
-    "Integration",
-    "AuthType",
-    "Credentials",
-    "IntegrationAbility",
-    "ActionsHistoryBase",
-    "ConversationalHistoryBase",
-    "EducationalKnowledgeBase",
-    "GlobalKnowledgeBase",
-    "SelfIdentityBase",
-    "ProfilePicture",
     "User",
     "AuthUser"
 ]

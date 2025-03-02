@@ -5,34 +5,51 @@ import os
 from pathlib import Path
 
 # Add the project root directory to Python path
-project_root = str(Path(__file__).parents[2])  # Go up two levels from alembic/env.py
+project_root = str(Path(__file__).parents[2])
 sys.path.append(project_root)
 
 from logging.config import fileConfig
-from sqlalchemy import engine_from_config, MetaData
-from sqlalchemy import pool
+from sqlalchemy import engine_from_config, pool, MetaData
 from alembic import context
 from dotenv import load_dotenv
 
-# Import only the migratable models (classes with tables, not mixins)
+# Import the Base and models
+from models.database.base import Base
 from models.database.user import User
-
-# Create a custom MetaData object for the specific models you want to migrate
-target_metadata = MetaData()
-User.__table__.tometadata(target_metadata)
+from models.database.auth_user import AuthUser
 
 # Load environment variables
 load_dotenv()
 
-# This is the Alembic Config object, which provides access to the values within the .ini file in use.
+# This is the Alembic Config object
 config = context.config
 
 # Set the sqlalchemy.url from environment variable
-config.set_main_option("sqlalchemy.url", os.environ["DATABASE_URL"])
+database_url = os.environ["DATABASE_URL"]
+if "gssencmode=disable" not in database_url:
+    if "?" in database_url:
+        database_url += "&gssencmode=disable"
+    else:
+        database_url += "?gssencmode=disable"
+config.set_main_option("sqlalchemy.url", database_url)
 
-# Interpret the config file for Python logging.
+# Interpret the config file for Python logging
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
+
+# Create a custom metadata for migration
+target_metadata = MetaData(naming_convention=Base.metadata.naming_convention)
+
+# Only include tables you want to migrate
+AuthUser.__table__.tometadata(target_metadata)
+User.__table__.tometadata(target_metadata)
+
+
+def include_name(name, type_, parent_names):
+    # Only include objects in the 'vault' schema, and only include tables we explicitly add to target_metadata
+    if type_ == "table":
+        return parent_names.get("schema") == "vault"
+    return True
 
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode."""
@@ -43,6 +60,7 @@ def run_migrations_offline() -> None:
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
         include_schemas=True,  # Ensure schema awareness for 'vault' and 'auth'
+        include_name=include_name,  # Only include objects in the 'vault' schema
     )
 
     with context.begin_transaction():
@@ -69,6 +87,7 @@ def run_migrations_online() -> None:
             connection=connection, 
             target_metadata=target_metadata,
             include_schemas=True,  # Ensure schema awareness for 'vault' and 'auth'
+            include_name=include_name,  # Only include objects in the 'vault' schema
         )
 
         with context.begin_transaction():

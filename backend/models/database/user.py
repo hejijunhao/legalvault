@@ -2,19 +2,12 @@
 
 from sqlalchemy import Column, String, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.ext.declarative import declarative_base
 # from sqlalchemy.orm import relationship
 from uuid import uuid4
+from models.database.base import VaultBase
 from models.database.mixins import TimestampMixin
 
-# Create a declarative base for vault models
-Base = declarative_base()
-
-class User(Base, TimestampMixin):
-    __tablename__ = "users"
-    __table_args__ = {'schema': 'vault'}
-
-    id = Column(UUID, primary_key=True, default=uuid4)
+class User(VaultBase, TimestampMixin):
     auth_user_id = Column(UUID(as_uuid=True), ForeignKey('auth.users.id'), unique=True, nullable=False, index=True)
     first_name = Column(String, nullable=False)  # Added: First name of the user
     last_name = Column(String, nullable=False)   # Added: Last name of the user
