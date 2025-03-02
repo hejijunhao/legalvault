@@ -1,7 +1,7 @@
 # models/database/mixins/timestamp_mixin.py
 
 from datetime import datetime
-from sqlalchemy import Column, DateTime
+from sqlalchemy import Column, DateTime, func
 from sqlalchemy.ext.declarative import declared_attr
 
 class TimestampMixin:
@@ -12,7 +12,7 @@ class TimestampMixin:
         return Column(
             DateTime,
             nullable=False,
-            default=datetime.utcnow,
+            server_default=func.now(),
             comment="Timestamp when the record was created"
         )
 
@@ -21,7 +21,7 @@ class TimestampMixin:
         return Column(
             DateTime,
             nullable=False,
-            default=datetime.utcnow,
-            onupdate=datetime.utcnow,
+            server_default=func.now(),
+            onupdate=func.now(),
             comment="Timestamp when the record was last updated"
         )

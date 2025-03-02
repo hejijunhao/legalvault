@@ -1,42 +1,41 @@
 # models/database/user.py
 
-from sqlmodel import SQLModel, Field, Relationship
-from typing import Optional, TYPE_CHECKING
-from uuid import UUID, uuid4
-from datetime import datetime
+from sqlalchemy import Column, String, ForeignKey
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import relationship
+from uuid import uuid4
+from models.database.mixins import TimestampMixin
 
-if TYPE_CHECKING:
-    from .enterprise import Enterprise
-    from .paralegal import VirtualParalegal
+# Create a declarative base for vault models
+Base = declarative_base()
 
-class User(SQLModel, table=True):
+class User(Base, TimestampMixin):
     __tablename__ = "users"
     __table_args__ = {'schema': 'vault'}
 
-    id: UUID = Field(default_factory=uuid4, primary_key=True)
-    email: str = Field(unique=True, index=True)
-    name: str
-    role: str = Field(default="lawyer")
-    virtual_paralegal_id: Optional[UUID] = Field(default=None, foreign_key="vault.virtual_paralegals.id", index=True)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
-    enterprise_id: UUID = Field(foreign_key="vault.enterprises.id", index=True)
+    id = Column(UUID, primary_key=True, default=uuid4)
+    auth_user_id = Column(UUID(as_uuid=True), ForeignKey('auth.users.id'), unique=True, nullable=False, index=True)
+    first_name = Column(String, nullable=False)  # Added: First name of the user
+    last_name = Column(String, nullable=False)   # Added: Last name of the user
+    name = Column(String, nullable=False)        # Added: Full name (could be derived from first_name + last_name)
+    role = Column(String, default="lawyer", nullable=False)
+    # virtual_paralegal_id = Column(UUID, ForeignKey('vault.virtual_paralegals.id'), index=True, nullable=True)
+    # enterprise_id = Column(UUID, ForeignKey('vault.enterprises.id'), index=True, nullable=False)
 
-    # Relationships
-    enterprise: Optional["Enterprise"] = Relationship(
-        back_populates="users",
-        sa_relationship_kwargs={
-            "lazy": "selectin",
-            "primaryjoin": "and_(User.enterprise_id==Enterprise.id, "
-                           "User.__table__.schema==Enterprise.__table__.schema)"
-        }
-    )
-    virtual_paralegal: Optional["VirtualParalegal"] = Relationship(
-        back_populates="user",
-        sa_relationship_kwargs={
-            "lazy": "selectin",
-            "uselist": False,
-            "primaryjoin": "and_(User.virtual_paralegal_id==VirtualParalegal.id, "
-                           "User.__table__.schema==VirtualParalegal.__table__.schema)"
-        }
-    )
+    # enterprise = relationship(
+    #     "Enterprise",
+    #     back_populates="users",
+    #     lazy="selectin",
+    #     primaryjoin="and_(User.enterprise_id==Enterprise.id, User.__table__.schema==Enterprise.__table__.schema)"
+    # )
+    # virtual_paralegal = relationship(
+    #    "VirtualParalegal",
+    #     back_populates="user",
+    #     lazy="selectin",
+    #     uselist=False,
+    #     primaryjoin="and_(User.virtual_paralegal_id==VirtualParalegal.id, User.__table__.schema==VirtualParalegal.__table__.schema)"
+    # )
+
+    def __repr__(self):
+        return f"User(id={self.id}, name={self.name}, role={self.role})"
