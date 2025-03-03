@@ -1,6 +1,6 @@
 # models/domain/research/search_operations.py
 
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Tuple
 from uuid import UUID, uuid4
 from datetime import datetime
 
@@ -28,7 +28,7 @@ class ResearchOperations:
         self.db_session = db_session
     
     async def create_search(self, user_id: UUID, enterprise_id: UUID, query: str, 
-                           search_params: Optional[Dict] = None) -> tuple[UUID, Dict[str, Any]]:
+                           search_params: Optional[Dict] = None) -> Tuple[Optional[UUID], Dict[str, Any]]:
         """
         Create and execute a new search, persisting it and its messages.
         
@@ -39,43 +39,47 @@ class ResearchOperations:
             search_params: Optional parameters for the search
             
         Returns:
-            Tuple of (search_id, search_response)
+            Tuple of (search_id, search_response) or (None, error_response)
         """
-        # Execute search
-        search_domain = ResearchSearch(user_id=user_id, enterprise_id=enterprise_id)
-        response = await search_domain.start_search(query, search_params)
+        try:
+            # Execute search
+            search_domain = ResearchSearch(user_id=user_id, enterprise_id=enterprise_id)
+            response = await search_domain.start_search(query, search_params)
+            
+            # Create search record
+            search_id = uuid4()
+            db_search = PublicSearch(
+                id=search_id,
+                title=query[:255],  # Truncate to fit DB constraints if needed
+                user_id=user_id,
+                enterprise_id=enterprise_id,
+                search_params=search_params or {}
+            )
+            self.db_session.add(db_search)
         
-        # Create search record
-        search_id = uuid4()
-        db_search = PublicSearch(
-            id=search_id,
-            title=query[:255],  # Truncate to fit DB constraints if needed
-            user_id=user_id,
-            enterprise_id=enterprise_id,
-            search_params=search_params or {}
-        )
-        self.db_session.add(db_search)
+            # Add user message
+            user_message = PublicSearchMessage(
+                search_id=search_id,
+                role="user",
+                content={"text": query},
+                sequence=0
+            )
+            self.db_session.add(user_message)
         
-        # Add user message
-        user_message = PublicSearchMessage(
-            search_id=search_id,
-            role="user",
-            content={"text": query},
-            sequence=0
-        )
-        self.db_session.add(user_message)
+            # Add response message
+            response_message = PublicSearchMessage(
+                search_id=search_id,
+                role="assistant" if "error" not in response else "system",
+                content=response,
+                sequence=1
+            )
+            self.db_session.add(response_message)
         
-        # Add response message
-        response_message = PublicSearchMessage(
-            search_id=search_id,
-            role="assistant" if "error" not in response else "system",
-            content=response,
-            sequence=1
-        )
-        self.db_session.add(response_message)
-        
-        await self.db_session.commit()
-        return search_id, response
+            await self.db_session.commit()
+            return search_id, response
+        except Exception as e:
+            await self.db_session.rollback()
+            return None, {"error": f"Database error: {str(e)}"}
     
     async def continue_search(self, search_id: UUID, follow_up_query: str) -> Dict[str, Any]:
         """
@@ -86,57 +90,61 @@ class ResearchOperations:
             follow_up_query: Follow-up query from the user
             
         Returns:
-            Search response
+            Search response or error dict
         """
-        # Fetch search to get context
-        query = select(PublicSearch).where(PublicSearch.id == search_id)
-        result = await self.db_session.execute(query)
-        db_search = result.scalars().first()
-        if not db_search:
-            return {"error": "Search not found"}
-        
-        # Get thread_id from last assistant message
-        thread_query = select(PublicSearchMessage).where(
-            PublicSearchMessage.search_id == search_id,
-            PublicSearchMessage.role == "assistant"
-        ).order_by(PublicSearchMessage.sequence.desc()).limit(1)
-        thread_result = await self.db_session.execute(thread_query)
-        last_msg = thread_result.scalars().first()
-        thread_id = last_msg.content.get("thread_id") if last_msg else None
-        
-        # Get next sequence
-        seq_query = select(func.max(PublicSearchMessage.sequence)).where(
-            PublicSearchMessage.search_id == search_id
-        )
-        seq_result = await self.db_session.execute(seq_query)
-        next_seq = (seq_result.scalar() or -1) + 1
-        
-        # Execute follow-up
-        search_domain = ResearchSearch(user_id=db_search.user_id, enterprise_id=db_search.enterprise_id)
-        response = await search_domain.continue_search(follow_up_query, thread_id) if thread_id else \
-                  await search_domain.start_search(follow_up_query, db_search.search_params)
-        
-        # Save messages
-        user_message = PublicSearchMessage(
-            search_id=search_id,
-            role="user",
-            content={"text": follow_up_query},
-            sequence=next_seq
-        )
-        self.db_session.add(user_message)
-        
-        response_message = PublicSearchMessage(
-            search_id=search_id,
-            role="assistant" if "error" not in response else "system",
-            content=response,
-            sequence=next_seq + 1
-        )
-        self.db_session.add(response_message)
-        
-        # Update timestamp
-        db_search.updated_at = datetime.utcnow()
-        await self.db_session.commit()
-        return response
+        try:
+            # Fetch search to get context
+            query = select(PublicSearch).where(PublicSearch.id == search_id)
+            result = await self.db_session.execute(query)
+            db_search = result.scalars().first()
+            if not db_search:
+                return {"error": "Search not found"}
+            
+            # Get thread_id from last assistant message
+            thread_query = select(PublicSearchMessage).where(
+                PublicSearchMessage.search_id == search_id,
+                PublicSearchMessage.role == "assistant"
+            ).order_by(PublicSearchMessage.sequence.desc()).limit(1)
+            thread_result = await self.db_session.execute(thread_query)
+            last_msg = thread_result.scalars().first()
+            thread_id = last_msg.content.get("thread_id") if last_msg else None
+            
+            # Get next sequence
+            seq_query = select(func.max(PublicSearchMessage.sequence)).where(
+                PublicSearchMessage.search_id == search_id
+            )
+            seq_result = await self.db_session.execute(seq_query)
+            next_seq = (seq_result.scalar() or -1) + 1
+            
+            # Execute follow-up
+            search_domain = ResearchSearch(user_id=db_search.user_id, enterprise_id=db_search.enterprise_id)
+            response = await search_domain.continue_search(follow_up_query, thread_id) if thread_id else \
+                      await search_domain.start_search(follow_up_query, db_search.search_params)
+            
+            # Save messages
+            user_message = PublicSearchMessage(
+                search_id=search_id,
+                role="user",
+                content={"text": follow_up_query},
+                sequence=next_seq
+            )
+            self.db_session.add(user_message)
+            
+            response_message = PublicSearchMessage(
+                search_id=search_id,
+                role="assistant" if "error" not in response else "system",
+                content=response,
+                sequence=next_seq + 1
+            )
+            self.db_session.add(response_message)
+            
+            # Update timestamp
+            db_search.updated_at = datetime.utcnow()
+            await self.db_session.commit()
+            return response
+        except Exception as e:
+            await self.db_session.rollback()
+            return {"error": f"Database error: {str(e)}"}
     
     async def get_search_by_id(self, search_id: UUID) -> Optional[Dict[str, Any]]:
         """
@@ -148,35 +156,38 @@ class ResearchOperations:
         Returns:
             Dictionary with search data and messages, or None if not found
         """
-        query = select(PublicSearch).options(
-            selectinload(PublicSearch.messages)
-        ).where(PublicSearch.id == search_id)
-        result = await self.db_session.execute(query)
-        db_search = result.scalars().first()
-        
-        if not db_search:
-            return None
-        
-        search_data = {
-            "id": str(db_search.id),
-            "title": db_search.title,
-            "description": db_search.description,
-            "user_id": str(db_search.user_id),
-            "enterprise_id": str(db_search.enterprise_id),
-            "is_featured": db_search.is_featured,
-            "tags": db_search.tags,
-            "search_params": db_search.search_params,
-            "created_at": db_search.created_at.isoformat() if db_search.created_at else None,
-            "updated_at": db_search.updated_at.isoformat() if db_search.updated_at else None,
-            "messages": [
-                {
-                    "role": msg.role,
-                    "content": msg.content,
-                    "sequence": msg.sequence
-                } for msg in sorted(db_search.messages, key=lambda m: m.sequence)
-            ]
-        }
-        return search_data
+        try:
+            query = select(PublicSearch).options(
+                selectinload(PublicSearch.messages)
+            ).where(PublicSearch.id == search_id)
+            result = await self.db_session.execute(query)
+            db_search = result.scalars().first()
+            
+            if not db_search:
+                return None
+            
+            search_data = {
+                "id": str(db_search.id),
+                "title": db_search.title,
+                "description": db_search.description,
+                "user_id": str(db_search.user_id),
+                "enterprise_id": str(db_search.enterprise_id),
+                "is_featured": db_search.is_featured,
+                "tags": db_search.tags,
+                "search_params": db_search.search_params,
+                "created_at": db_search.created_at.isoformat() if db_search.created_at else None,
+                "updated_at": db_search.updated_at.isoformat() if db_search.updated_at else None,
+                "messages": [
+                    {
+                        "role": msg.role,
+                        "content": msg.content,
+                        "sequence": msg.sequence
+                    } for msg in sorted(db_search.messages, key=lambda m: m.sequence)
+                ]
+            }
+            return search_data
+        except Exception as e:
+            return None  # Error fetching search
     
     async def list_searches(
         self,
@@ -199,40 +210,43 @@ class ResearchOperations:
         Returns:
             List of search dictionaries
         """
-        query = select(PublicSearch)
-        
-        # Apply filters
-        if user_id:
-            query = query.where(PublicSearch.user_id == user_id)
-        if enterprise_id:
-            query = query.where(PublicSearch.enterprise_id == enterprise_id)
-        if featured_only:
-            query = query.where(PublicSearch.is_featured == True)
-        
-        # Apply sorting and pagination
-        query = query.order_by(PublicSearch.updated_at.desc())
-        query = query.limit(limit).offset(offset)
-        
-        result = await self.db_session.execute(query)
-        db_searches = result.scalars().all()
-        
-        # Convert to dictionaries
-        searches = []
-        for db_search in db_searches:
-            search_data = {
-                "id": str(db_search.id),
-                "title": db_search.title,
-                "description": db_search.description,
-                "user_id": str(db_search.user_id),
-                "enterprise_id": str(db_search.enterprise_id),
-                "is_featured": db_search.is_featured,
-                "tags": db_search.tags,
-                "created_at": db_search.created_at.isoformat() if db_search.created_at else None,
-                "updated_at": db_search.updated_at.isoformat() if db_search.updated_at else None
-            }
-            searches.append(search_data)
-        
-        return searches
+        try:
+            query = select(PublicSearch)
+            
+            # Apply filters
+            if user_id:
+                query = query.where(PublicSearch.user_id == user_id)
+            if enterprise_id:
+                query = query.where(PublicSearch.enterprise_id == enterprise_id)
+            if featured_only:
+                query = query.where(PublicSearch.is_featured == True)
+            
+            # Apply sorting and pagination
+            query = query.order_by(PublicSearch.updated_at.desc())
+            query = query.limit(limit).offset(offset)
+            
+            result = await self.db_session.execute(query)
+            db_searches = result.scalars().all()
+            
+            # Convert to dictionaries
+            searches = []
+            for db_search in db_searches:
+                search_data = {
+                    "id": str(db_search.id),
+                    "title": db_search.title,
+                    "description": db_search.description,
+                    "user_id": str(db_search.user_id),
+                    "enterprise_id": str(db_search.enterprise_id),
+                    "is_featured": db_search.is_featured,
+                    "tags": db_search.tags,
+                    "created_at": db_search.created_at.isoformat() if db_search.created_at else None,
+                    "updated_at": db_search.updated_at.isoformat() if db_search.updated_at else None
+                }
+                searches.append(search_data)
+            
+            return searches
+        except Exception as e:
+            return []  # Return empty list on error
     
     async def update_search_metadata(
         self, 
@@ -255,32 +269,36 @@ class ResearchOperations:
         Returns:
             True if updated, False if not found
         """
-        # Build update values
-        update_values = {}
-        if title is not None:
-            update_values["title"] = title
-        if description is not None:
-            update_values["description"] = description
-        if tags is not None:
-            update_values["tags"] = tags
-        if is_featured is not None:
-            update_values["is_featured"] = is_featured
-        
-        if not update_values:
-            return True  # Nothing to update
-        
-        # Add updated timestamp
-        update_values["updated_at"] = datetime.utcnow()
-        
-        # Direct SQL UPDATE for efficiency
-        update_stmt = update(PublicSearch).where(
-            PublicSearch.id == search_id
-        ).values(**update_values)
-        
-        result = await self.db_session.execute(update_stmt)
-        await self.db_session.commit()
-        
-        return result.rowcount > 0
+        try:
+            # Build update values
+            update_values = {}
+            if title is not None:
+                update_values["title"] = title
+            if description is not None:
+                update_values["description"] = description
+            if tags is not None:
+                update_values["tags"] = tags
+            if is_featured is not None:
+                update_values["is_featured"] = is_featured
+            
+            if not update_values:
+                return True  # Nothing to update
+            
+            # Add updated timestamp
+            update_values["updated_at"] = datetime.utcnow()
+            
+            # Direct SQL UPDATE for efficiency
+            update_stmt = update(PublicSearch).where(
+                PublicSearch.id == search_id
+            ).values(**update_values)
+            
+            result = await self.db_session.execute(update_stmt)
+            await self.db_session.commit()
+            
+            return result.rowcount > 0
+        except Exception as e:
+            await self.db_session.rollback()
+            return False  # Update failed
     
     async def delete_search(self, search_id: UUID) -> bool:
         """
@@ -292,7 +310,11 @@ class ResearchOperations:
         Returns:
             True if deleted, False if not found
         """
-        query = delete(PublicSearch).where(PublicSearch.id == search_id)
-        result = await self.db_session.execute(query)
-        await self.db_session.commit()
-        return result.rowcount > 0
+        try:
+            query = delete(PublicSearch).where(PublicSearch.id == search_id)
+            result = await self.db_session.execute(query)
+            await self.db_session.commit()
+            return result.rowcount > 0
+        except Exception as e:
+            await self.db_session.rollback()
+            return False  # Delete failed
