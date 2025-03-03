@@ -14,6 +14,8 @@ if TYPE_CHECKING:
     from models.database.paralegal import VirtualParalegal
 
 class User(VaultBase, TimestampMixin):
+    __tablename__ = "users"  # Explicitly set to plural form to match Supabase naming convention
+    
     auth_user_id = Column(UUID(as_uuid=True), ForeignKey('auth.users.id'), unique=True, nullable=False, index=True)
     first_name = Column(String, nullable=False)
     last_name = Column(String, nullable=False)

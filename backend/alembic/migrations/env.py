@@ -41,23 +41,12 @@ config.set_main_option("sqlalchemy.url", database_url)
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Create a custom metadata for migration
-target_metadata = MetaData(naming_convention=Base.metadata.naming_convention)
+# Use the Base.metadata directly
+target_metadata = Base.metadata
 
-for table in Base.metadata.tables.values():
-    table.tometadata(target_metadata)
-
-# Only include tables you want to migrate
-# AuthUser.__table__.tometadata(target_metadata)
-# User.__table__.tometadata(target_metadata)
-# Enterprise.__table__.tometadata(target_metadata)
-# VirtualParalegal.__table__.tometadata(target_metadata)
-# PublicSearch.__table__.tometadata(target_metadata)
-# PublicSearchMessage.__table__.tometadata(target_metadata)
-
-# List of tables we explicitly want to manage
+# List of tables we explicitly want to manage in the vault schema
 managed_tables = {
-    'user', 
+    'users', 
     'enterprises', 
     'virtual_paralegals',
     'public_searches',
