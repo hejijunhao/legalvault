@@ -19,6 +19,8 @@ from models.database.user import User
 from models.database.auth_user import AuthUser
 from models.database.enterprise import Enterprise
 from models.database.paralegal import VirtualParalegal
+from models.database.research.public_searches import PublicSearch
+from models.database.research.public_search_messages import PublicSearchMessage
 
 # Load environment variables
 load_dotenv()
@@ -42,17 +44,24 @@ if config.config_file_name is not None:
 # Create a custom metadata for migration
 target_metadata = MetaData(naming_convention=Base.metadata.naming_convention)
 
+for table in Base.metadata.tables.values():
+    table.tometadata(target_metadata)
+
 # Only include tables you want to migrate
-AuthUser.__table__.tometadata(target_metadata)
-User.__table__.tometadata(target_metadata)
-Enterprise.__table__.tometadata(target_metadata)
-VirtualParalegal.__table__.tometadata(target_metadata)
+# AuthUser.__table__.tometadata(target_metadata)
+# User.__table__.tometadata(target_metadata)
+# Enterprise.__table__.tometadata(target_metadata)
+# VirtualParalegal.__table__.tometadata(target_metadata)
+# PublicSearch.__table__.tometadata(target_metadata)
+# PublicSearchMessage.__table__.tometadata(target_metadata)
 
 # List of tables we explicitly want to manage
 managed_tables = {
     'user', 
     'enterprises', 
-    'virtual_paralegals'
+    'virtual_paralegals',
+    'public_searches',
+    'public_search_messages'
 }
 
 # Supabase system schemas that we *don't* want to modify
