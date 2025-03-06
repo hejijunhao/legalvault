@@ -3,9 +3,10 @@
 import os
 import ssl
 from sqlmodel import SQLModel, Session, create_engine
-from contextlib import contextmanager
+from contextlib import contextmanager, asynccontextmanager
 from dotenv import load_dotenv
 from sqlalchemy.engine.url import make_url
+from fastapi import Depends
 
 load_dotenv()
 
@@ -43,3 +44,17 @@ def get_session():
         yield session
     finally:
         session.close()
+
+# Async context manager for FastAPI dependency injection
+@asynccontextmanager
+async def get_async_session():
+    session = Session(engine)
+    try:
+        yield session
+    finally:
+        session.close()
+
+# FastAPI dependency
+def get_db():
+    with get_session() as session:
+        yield session

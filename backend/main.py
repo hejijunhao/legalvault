@@ -6,14 +6,14 @@ from dotenv import load_dotenv
 import os
 from logging import getLogger
 from typing import List
-from .core.database import get_session
+from core.database import get_session
 
-from .api.routes import router as api_router
+from api.routes import router as api_router
 
 logger = getLogger(__name__)
 app = FastAPI()
 
-app.include_router(api_router)
+app.include_router(api_router, prefix="/api")
 
 @app.get("/health")
 async def health_check():

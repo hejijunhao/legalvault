@@ -1,0 +1,104 @@
+# api/routes/auth/auth.py
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlmodel import Session
+from models.schemas.auth.user import UserLogin, UserCreate, UserProfile
+from models.schemas.auth.token import TokenResponse
+from models.domain.user_operations import UserOperations
+from core.database import get_db
+from core.auth import get_current_user
+from models.database.user import User
+from uuid import UUID
+
+router = APIRouter(prefix="/auth", tags=["Authentication"])
+
+@router.post("/login", response_model=TokenResponse)
+async def login(
+    data: UserLogin,
+    session: Session = Depends(get_db)
+):
+    """
+    Authenticate a user and return an access token.
+    """
+    user_ops = UserOperations(session)
+    token = await user_ops.authenticate(data)
+    
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+        
+    return token
+
+@router.post("/register", response_model=UserProfile)
+async def register(
+    data: UserCreate,
+    session: Session = Depends(get_db)
+):
+    """
+    Register a new user.
+    """
+    print(f"Attempting to register user with email: {data.email}")
+    user_ops = UserOperations(session)
+    user = await user_ops.register(data)
+    
+    print(f"Registration result: {user}")
+    
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User already exists or auth user not found",
+        )
+        
+    # Get user profile
+    profile = await user_ops.get_user_profile(user.id)
+    print(f"User profile: {profile}")
+    return profile
+
+@router.get("/me", response_model=UserProfile)
+async def get_current_user_profile(
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_db)
+):
+    """
+    Get the current user's profile.
+    """
+    user_ops = UserOperations(session)
+    profile = await user_ops.get_user_profile(current_user.id)
+    
+    if not profile:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User profile not found",
+        )
+        
+    return profile
+
+@router.get("/user/{user_id}", response_model=UserProfile)
+async def get_user_profile(
+    user_id: UUID,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_db)
+):
+    """
+    Get a user's profile by ID.
+    """
+    # Check if the user is requesting their own profile or has admin permissions
+    if current_user.id != user_id and current_user.role not in ["admin", "super_admin"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to access this user's profile",
+        )
+        
+    user_ops = UserOperations(session)
+    profile = await user_ops.get_user_profile(user_id)
+    
+    if not profile:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User profile not found",
+        )
+        
+    return profile
