@@ -24,24 +24,24 @@ class User(VaultBase, TimestampMixin):
     virtual_paralegal_id = Column(UUID(as_uuid=True), ForeignKey('vault.virtual_paralegals.id'), index=True, nullable=True)
     enterprise_id = Column(UUID(as_uuid=True), ForeignKey('vault.enterprises.id'), index=True, nullable=True)
 
-    # Use fully string-based relationship definition to resolve circular import
-    enterprise = relationship(
-        "Enterprise",
-        lazy="selectin",
-        foreign_keys=[enterprise_id]
-    )
-    virtual_paralegal = relationship(
-        "VirtualParalegal",
-        back_populates="user",
-        lazy="selectin",
-        uselist=False,
-        primaryjoin="and_(models.database.user.User.virtual_paralegal_id==models.database.paralegal.VirtualParalegal.id, models.database.user.User.__table__.schema==models.database.paralegal.VirtualParalegal.__table__.schema)"
-    )
-    public_searches = relationship(
-        "PublicSearch",
-        back_populates="user",
-        lazy="selectin",
-        primaryjoin="and_(models.database.user.User.id==models.database.research.public_searches.PublicSearch.user_id, models.database.user.User.__table__.schema==models.database.research.public_searches.PublicSearch.__table__.schema)"
-    )
+    # Temporarily comment out all relationships to fix circular import issues
+    # enterprise = relationship(
+    #     "Enterprise",
+    #     lazy="selectin",
+    #     foreign_keys=[enterprise_id]
+    # )
+    # virtual_paralegal = relationship(
+    #     "VirtualParalegal",
+    #     back_populates="user",
+    #     lazy="selectin",
+    #     uselist=False,
+    #     primaryjoin="and_(models.database.user.User.virtual_paralegal_id==models.database.paralegal.VirtualParalegal.id, models.database.user.User.__table__.schema==models.database.paralegal.VirtualParalegal.__table__.schema)"
+    # )
+    # public_searches = relationship(
+    #     "PublicSearch",
+    #     back_populates="user",
+    #     lazy="selectin",
+    #     primaryjoin="and_(models.database.user.User.id==models.database.research.public_searches.PublicSearch.user_id, models.database.user.User.__table__.schema==models.database.research.public_searches.PublicSearch.__table__.schema)"
+    # )
     def __repr__(self):
         return f"User(id={self.id}, name={self.name}, role={self.role})"

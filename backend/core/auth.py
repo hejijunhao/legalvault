@@ -34,12 +34,33 @@ async def get_current_user(
     if token_data is None:
         raise credentials_exception
         
-    # Get user from database
-    user = await user_ops.get_user_by_id(token_data.user_id)
+    # Get user from database using direct SQL to avoid relationship loading issues
+    from sqlalchemy import text
     
-    if user is None:
+    query = text("""
+        SELECT id, auth_user_id, first_name, last_name, name, role, virtual_paralegal_id, enterprise_id, created_at, updated_at
+        FROM vault.users WHERE id = :user_id
+    """)
+    
+    result = await session.execute(query, {"user_id": token_data.user_id})
+    user_data = result.fetchone()
+    
+    if user_data is None:
         raise credentials_exception
-        
+    
+    # Create a User instance manually without loading relationships
+    user = User()
+    user.id = user_data[0]
+    user.auth_user_id = user_data[1]
+    user.first_name = user_data[2]
+    user.last_name = user_data[3]
+    user.name = user_data[4]
+    user.role = user_data[5]
+    user.virtual_paralegal_id = user_data[6]
+    user.enterprise_id = user_data[7]
+    user.created_at = user_data[8]
+    user.updated_at = user_data[9]
+    
     return user
 
 async def get_user_permissions(

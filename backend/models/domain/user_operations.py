@@ -3,7 +3,7 @@
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 from uuid import UUID
-from sqlalchemy import select, delete
+from sqlalchemy import select, delete, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from passlib.context import CryptContext
 from jose import jwt
@@ -88,9 +88,6 @@ class UserOperations:
                 return None
             
             # Create application user record using direct SQL to avoid relationship issues
-            from sqlalchemy import text
-            
-            # Create the user with minimal fields to avoid relationship loading
             query = text("""
                 INSERT INTO vault.users (id, auth_user_id, first_name, last_name, name, role, created_at, updated_at)
                 VALUES (:id, :auth_user_id, :first_name, :last_name, :name, :role, NOW(), NOW())
@@ -164,27 +161,34 @@ class UserOperations:
             # Get the user ID from the response
             auth_user_id = auth_response.user.id
             
-            # Get the application user
-            query = select(User).where(User.auth_user_id == auth_user_id)
-            result = await self.session.execute(query)
-            user = result.scalar_one_or_none()
+            # Use direct SQL to get the user to avoid relationship loading issues
+            query = text("""
+                SELECT id, auth_user_id, first_name, last_name, name, role, virtual_paralegal_id, enterprise_id, created_at, updated_at
+                FROM vault.users WHERE auth_user_id = :auth_user_id
+            """)
             
-            if not user:
+            result = await self.session.execute(query, {"auth_user_id": auth_user_id})
+            user_data = result.fetchone()
+            
+            if not user_data:
                 return None
             
             # Create access token
             access_token = await self._create_access_token(
-                data={"sub": str(user.id), "email": data.email}
+                data={"sub": str(user_data[0]), "email": data.email}
             )
             
             return TokenResponse(
                 access_token=access_token,
                 token_type="bearer",
-                user_id=user.id,
+                user_id=user_data[0],
                 expires_in=JWT_EXPIRATION * 60  # convert minutes to seconds
             )
         except Exception as e:
             print(f"Error during authentication: {str(e)}")
+            # Print more detailed error information
+            import traceback
+            traceback.print_exc()
             return None
 
     async def get_user_by_id(self, user_id: UUID) -> Optional[User]:
