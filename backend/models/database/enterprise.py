@@ -18,13 +18,13 @@ class Enterprise(VaultBase, TimestampMixin):
     domain = Column(String, nullable=False, unique=True)  # e.g. "lawfirm.com"
     subscription_tier = Column(String, default="standard", nullable=False)
 
-    # Relationship - removing type annotation to fix SQLAlchemy error
-    users = relationship(
-        "User",
-        back_populates="enterprise",
-        lazy="selectin",
-        uselist=True  # Explicitly indicate one-to-many
-    )
+    # Relationship - commented out for uni-directional relationship. Prev. removed type annotation to fix SQLAlchemy error
+    # users = relationship(
+    #     "User",
+    #     back_populates="enterprise",
+    #     lazy="selectin",
+    #     uselist=True  # Explicitly indicate one-to-many
+    # )
 
     def __repr__(self):
         return f"Enterprise(id={self.id}, name={self.name}, domain={self.domain})"

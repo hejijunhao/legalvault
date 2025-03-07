@@ -4,6 +4,7 @@ import os
 import ssl
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import NullPool
 from sqlmodel import SQLModel, Session
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
@@ -43,8 +44,15 @@ print("\n===== END DATABASE CONNECTION INFO =====\n")
 # asyncpg uses different SSL parameters than psycopg2
 ssl_args_async = {
     # Set statement_cache_size to 0 for pgBouncer compatibility
-    "statement_cache_size": 0
+    "statement_cache_size": 0,
+    "prepared_statement_cache_size": 0,
+    "command_timeout": 60,
+    "server_settings": {
+        "statement_timeout": "10000",  # 10 seconds
+        "application_name": "LegalVault"
+    }
 }
+
 # Only add SSL if needed
 if url_obj.query.get("sslmode") == "require":
     # Create an SSL context that doesn't verify certificates
@@ -62,12 +70,22 @@ ssl_args_sync = {
 
 # Create engines with the appropriate SSL args and URLs
 async_engine = create_async_engine(
-    async_url_obj,
+    async_url_obj.render_as_string(hide_password=False),  # Use the full URL string
     echo=True,  # Set to True for debugging
-    connect_args=ssl_args_async,
-    pool_pre_ping=True,
-    pool_size=5,
-    max_overflow=10
+    connect_args={
+        "statement_cache_size": 0,  # Critical for pgBouncer compatibility
+        "prepared_statement_cache_size": 0,  # Critical for pgBouncer compatibility
+        "command_timeout": 60,
+        "server_settings": {
+            "statement_timeout": "10000",  # 10 seconds
+            "application_name": "LegalVault"
+        },
+        **({
+            "ssl": ssl_context
+        } if url_obj.query.get("sslmode") == "require" else {})
+    },
+    poolclass=NullPool,  # Disable connection pooling to avoid pgBouncer issues
+    pool_pre_ping=True
 )
 
 # Create a separate sync engine for backward compatibility

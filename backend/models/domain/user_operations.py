@@ -3,7 +3,7 @@
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 from uuid import UUID
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from passlib.context import CryptContext
 from jose import jwt
@@ -114,27 +114,37 @@ class UserOperations:
             await self.session.commit()
             
             # Now fetch the user directly to avoid relationship loading
-            query = text("SELECT * FROM vault.users WHERE id = :id")
+            query = text("""
+                SELECT id, auth_user_id, first_name, last_name, name, role, virtual_paralegal_id, enterprise_id, created_at, updated_at
+                FROM vault.users WHERE id = :id
+            """)
             result = await self.session.execute(query, {"id": user_id})
             user_data = result.fetchone()
-                
-            # Create a User object manually
-            from models.database.user import User
-            new_user = User()
-            new_user.id = user_data[0]  # Assuming id is the first column
-            new_user.auth_user_id = user_data[1]  # Assuming auth_user_id is the second column
-            new_user.first_name = data.first_name
-            new_user.last_name = data.last_name
-            new_user.name = f"{data.first_name} {data.last_name}"
-            new_user.role = data.role
+
+            # Create a UserProfile object instead of a User instance to avoid circular imports
+            if user_data:
+                return UserProfile(
+                    id=user_data[0],
+                    email=data.email,
+                    first_name=user_data[2],
+                    last_name=user_data[3],
+                    name=user_data[4],
+                    role=user_data[5],
+                    virtual_paralegal_id=user_data[6],
+                    enterprise_id=user_data[7],
+                    created_at=user_data[8],
+                    updated_at=user_data[9]
+                )
             
-            return new_user
+            return None
         except Exception as e:
             print(f"Error during registration: {str(e)}")
             # Print more detailed error information
             import traceback
             traceback.print_exc()
+            await self.session.rollback()
             return None
+
 
     async def authenticate(self, data: UserLogin) -> Optional[TokenResponse]:
         """
@@ -244,3 +254,32 @@ class UserOperations:
             return TokenData(user_id=UUID(user_id))
         except jwt.PyJWTError:
             return None
+
+    async def delete_user(self, user_id: UUID) -> bool:
+        """
+        Delete a user from both application database and Supabase Auth.
+        """
+        try:
+            # Get the user to find the auth_user_id
+            user = await self.get_user_by_id(user_id)
+            if not user:
+                return False
+                
+            # Store the auth_user_id before deleting the user
+            auth_user_id = user.auth_user_id
+            
+            # First delete from application database
+            query = delete(User).where(User.id == user_id)
+            await self.session.execute(query)
+            await self.session.commit()
+            
+            # Then delete from Supabase Auth
+            from core.supabase_client import get_supabase_client
+            supabase = get_supabase_client()
+            supabase.auth.admin.delete_user(auth_user_id)
+            
+            return True
+        except Exception as e:
+            print(f"Error deleting user: {str(e)}")
+            await self.session.rollback()
+            return False

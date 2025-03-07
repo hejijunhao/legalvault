@@ -27,7 +27,6 @@ class User(VaultBase, TimestampMixin):
     # Use fully string-based relationship definition to resolve circular import
     enterprise = relationship(
         "Enterprise",
-        back_populates="users",
         lazy="selectin",
         foreign_keys=[enterprise_id]
     )
