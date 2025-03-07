@@ -1,7 +1,7 @@
 # api/routes/auth/auth.py
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlmodel import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from models.schemas.auth.user import UserLogin, UserCreate, UserProfile
 from models.schemas.auth.token import TokenResponse
 from models.domain.user_operations import UserOperations
@@ -15,7 +15,7 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 @router.post("/login", response_model=TokenResponse)
 async def login(
     data: UserLogin,
-    session: Session = Depends(get_db)
+    session: AsyncSession = Depends(get_db)
 ):
     """
     Authenticate a user and return an access token.
@@ -35,7 +35,7 @@ async def login(
 @router.post("/register", response_model=UserProfile)
 async def register(
     data: UserCreate,
-    session: Session = Depends(get_db)
+    session: AsyncSession = Depends(get_db)
 ):
     """
     Register a new user.
@@ -60,7 +60,7 @@ async def register(
 @router.get("/me", response_model=UserProfile)
 async def get_current_user_profile(
     current_user: User = Depends(get_current_user),
-    session: Session = Depends(get_db)
+    session: AsyncSession = Depends(get_db)
 ):
     """
     Get the current user's profile.
@@ -80,7 +80,7 @@ async def get_current_user_profile(
 async def get_user_profile(
     user_id: UUID,
     current_user: User = Depends(get_current_user),
-    session: Session = Depends(get_db)
+    session: AsyncSession = Depends(get_db)
 ):
     """
     Get a user's profile by ID.

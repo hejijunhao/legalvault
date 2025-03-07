@@ -3,9 +3,9 @@
 from typing import List, Optional, Union
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlmodel import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.database import get_session
+from core.database import get_db
 from core.auth import get_current_user, get_user_permissions
 from models.database.user import User
 from models.domain.research.search_operations import ResearchOperations
@@ -27,7 +27,7 @@ async def create_search(
     data: SearchCreate,
     current_user: UUID = Depends(get_current_user),
     user_permissions: List[str] = Depends(get_user_permissions),
-    session: Session = Depends(get_session)
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Create a new legal research search.
@@ -36,9 +36,9 @@ async def create_search(
     storing both the query and results for future reference.
     """
     # Get enterprise_id from user context (implementation depends on your auth system)
-    enterprise_id = await get_user_enterprise(current_user, session)
+    enterprise_id = await get_user_enterprise(current_user, db)
     
-    operations = ResearchOperations(session)
+    operations = ResearchOperations(db)
     search_id, response = await operations.create_search(
         user_id=current_user,
         enterprise_id=enterprise_id,
@@ -64,7 +64,7 @@ async def continue_search(
     data: SearchContinue,
     current_user: UUID = Depends(get_current_user),
     user_permissions: List[str] = Depends(get_user_permissions),
-    session: Session = Depends(get_session)
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Continue an existing search with a follow-up query.
@@ -72,7 +72,7 @@ async def continue_search(
     Adds a follow-up question to an existing search thread, maintaining context
     from previous interactions.
     """
-    operations = ResearchOperations(session)
+    operations = ResearchOperations(db)
     
     # Verify ownership of search
     search = await operations.get_search_by_id(search_id)
@@ -102,14 +102,14 @@ async def get_search(
     search_id: UUID,
     current_user: UUID = Depends(get_current_user),
     user_permissions: List[str] = Depends(get_user_permissions),
-    session: Session = Depends(get_session)
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Get a specific search by ID.
     
     Retrieves the full details of a search, including all messages in the conversation.
     """
-    operations = ResearchOperations(session)
+    operations = ResearchOperations(db)
     search = await operations.get_search_by_id(search_id)
     
     if not search:
@@ -128,7 +128,7 @@ async def list_searches(
     offset: int = Query(0, ge=0, description="Pagination offset"),
     current_user: UUID = Depends(get_current_user),
     user_permissions: List[str] = Depends(get_user_permissions),
-    session: Session = Depends(get_session)
+    db: AsyncSession = Depends(get_db)
 ):
     """
     List searches with optional filtering.
@@ -137,9 +137,9 @@ async def list_searches(
     only featured searches.
     """
     # Get enterprise_id from user context
-    enterprise_id = await get_user_enterprise(current_user, session)
+    enterprise_id = await get_user_enterprise(current_user, db)
     
-    operations = ResearchOperations(session)
+    operations = ResearchOperations(db)
     searches = await operations.list_searches(
         user_id=current_user,
         enterprise_id=enterprise_id,
@@ -156,14 +156,14 @@ async def update_search(
     data: SearchUpdate,
     current_user: UUID = Depends(get_current_user),
     user_permissions: List[str] = Depends(get_user_permissions),
-    session: Session = Depends(get_session)
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Update search metadata.
     
     Updates the title, description, featured status, or tags of a search.
     """
-    operations = ResearchOperations(session)
+    operations = ResearchOperations(db)
     
     # Verify ownership of search
     search = await operations.get_search_by_id(search_id)
@@ -190,14 +190,14 @@ async def delete_search(
     search_id: UUID,
     current_user: UUID = Depends(get_current_user),
     user_permissions: List[str] = Depends(get_user_permissions),
-    session: Session = Depends(get_session)
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Delete a search.
     
     Permanently removes a search and all its messages.
     """
-    operations = ResearchOperations(session)
+    operations = ResearchOperations(db)
     
     # Verify ownership of search
     search = await operations.get_search_by_id(search_id)
@@ -210,13 +210,13 @@ async def delete_search(
         raise HTTPException(status_code=500, detail="Failed to delete search")
 
 # Helper function to get user's enterprise ID
-async def get_user_enterprise(current_user: Union[UUID, User], session: Session) -> UUID:
+async def get_user_enterprise(current_user: Union[UUID, User], db: AsyncSession) -> UUID:
     """
     Get the enterprise ID for a user.
     
     Args:
         current_user: Either a User object or a UUID representing the user ID
-        session: SQLAlchemy async session
+        db: SQLAlchemy async session
         
     Returns:
         UUID of the user's enterprise
@@ -234,7 +234,7 @@ async def get_user_enterprise(current_user: Union[UUID, User], session: Session)
     # Otherwise, query the database using the UUID
     user_id = current_user if isinstance(current_user, UUID) else current_user.id
     query = select(User.enterprise_id).where(User.id == user_id)
-    result = await session.execute(query)
+    result = await db.execute(query)
     enterprise_id = result.scalar_one_or_none()
     
     if not enterprise_id:

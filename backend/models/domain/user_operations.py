@@ -3,7 +3,7 @@
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 from uuid import UUID
-from sqlmodel import Session, select
+from sqlalchemy.ext.asyncio import AsyncSession
 from passlib.context import CryptContext
 from jose import jwt
 from models.database.auth_user import AuthUser
@@ -11,7 +11,7 @@ from models.database.user import User
 from models.schemas.auth.user import UserCreate, UserLogin, UserProfile
 from models.schemas.auth.token import TokenResponse, TokenData
 import os
-from core.database import get_session
+from core.database import get_async_session
 
 # Get JWT settings from environment
 JWT_SECRET = os.getenv("JWT_SECRET_KEY", "your-secret-key")  # Use a secure key in production
@@ -23,18 +23,18 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 class UserOperations:
-    def __init__(self, session: Session):
+    def __init__(self, session: AsyncSession):
         self.session = session
 
-    def _verify_password(self, plain_password: str, encrypted_password: str) -> bool:
+    async def _verify_password(self, plain_password: str, encrypted_password: str) -> bool:
         """Verify a password against a hash."""
         return pwd_context.verify(plain_password, encrypted_password)
     
-    def _get_password_hash(self, password: str) -> str:
+    async def _get_password_hash(self, password: str) -> str:
         """Generate a password hash."""
         return pwd_context.hash(password)
 
-    def _create_access_token(self, data: dict, expires_delta: Optional[timedelta] = None) -> str:
+    async def _create_access_token(self, data: dict, expires_delta: Optional[timedelta] = None) -> str:
         """Create a JWT access token."""
         to_encode = data.copy()
         
@@ -78,6 +78,14 @@ class UserOperations:
             # Get the user ID from the response
             auth_user_id = auth_response.user.id
             
+            # Ensure auth_user_id is a UUID object, not a string
+            from uuid import UUID
+            try:
+                auth_user_id = UUID(auth_user_id)
+            except ValueError as e:
+                print(f"Error converting auth_user_id to UUID: {e}")
+                return None
+            
             # Create application user record using direct SQL to avoid relationship issues
             from sqlalchemy import text
             
@@ -108,7 +116,7 @@ class UserOperations:
             query = text("SELECT * FROM vault.users WHERE id = :id")
             result = await self.session.execute(query, {"id": user_id})
             user_data = result.fetchone()
-            
+                
             # Create a User object manually
             from models.database.user import User
             new_user = User()
@@ -154,7 +162,7 @@ class UserOperations:
                 return None
             
             # Create access token
-            access_token = self._create_access_token(
+            access_token = await self._create_access_token(
                 data={"sub": str(user.id), "email": data.email}
             )
             
@@ -224,7 +232,7 @@ class UserOperations:
             print(f"Error getting user profile: {str(e)}")
             return None
 
-    def decode_token(self, token: str) -> Optional[TokenData]:
+    async def decode_token(self, token: str) -> Optional[TokenData]:
         """Decode and validate a JWT token"""
         try:
             payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])

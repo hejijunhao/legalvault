@@ -1,12 +1,13 @@
 # backend/main.py
 
 from fastapi import FastAPI, Depends, HTTPException
-import psycopg2
 from dotenv import load_dotenv
 import os
 from logging import getLogger
 from typing import List
-from core.database import get_session
+from core.database import get_db, init_db, async_session_factory
+import asyncio
+from sqlalchemy.sql import text
 
 from api.routes import router as api_router
 
@@ -22,34 +23,37 @@ async def health_check():
 # Load environment variables from .env
 load_dotenv()
 
-# Connect to the database
-try:
-    # Use the DATABASE_URL environment variable
-    DATABASE_URL = os.getenv("DATABASE_URL")
-    # Connect with GSSAPI disabled to avoid authentication errors
-    connection = psycopg2.connect(
-        DATABASE_URL,
-        sslmode='require',
-        gssencmode='disable'
-    )
-    print("Connection successful!")
-    
-    # Create a cursor to execute SQL queries
-    cursor = connection.cursor()
-    
-    # Example query
-    cursor.execute("SELECT NOW();")
-    result = cursor.fetchone()
-    print("Current Time:", result)
-
-    # Close the cursor and connection
-    cursor.close()
-    connection.close()
-    print("Connection closed.")
-
-except Exception as e:
-    print(f"Failed to connect: {e}")
-
+# Startup event to initialize database
+@app.on_event("startup")
+async def startup_event():
+    try:
+        # Initialize database tables
+        print("Attempting to initialize database...")
+        await init_db()
+        print("Database initialized successfully!")
+        
+        # Test database connection
+        print("Testing database connection...")
+        try:
+            # Create a session directly for testing instead of using the dependency
+            async with async_session_factory() as session:
+                print("Successfully got database session")
+                result = await session.execute(text("SELECT NOW();"))
+                current_time = result.scalar()
+                print(f"Database connection successful! Current time: {current_time}")
+        except Exception as db_error:
+            print(f"Database connection error: {db_error}")
+            print(f"Error type: {type(db_error).__name__}")
+            import traceback
+            print(traceback.format_exc())
+        
+    except Exception as e:
+        print(f"Error during startup: {e}")
+        print(f"Error type: {type(e).__name__}")
+        import traceback
+        print(traceback.format_exc())
+        # Don't raise here - allow the application to start even if DB init fails
+        # This helps with debugging
 
 # Error handling
 @app.exception_handler(HTTPException)

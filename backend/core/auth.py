@@ -4,19 +4,19 @@ from typing import List, Optional
 from uuid import UUID
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from sqlmodel import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from models.database.auth_user import AuthUser
 from models.database.user import User
 from models.schemas.auth.token import TokenData
 from models.domain.user_operations import UserOperations
-from core.database import get_session
+from core.database import get_db
 import jwt
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/login")
 
 async def get_current_user(
     token: str = Depends(oauth2_scheme), 
-    session: Session = Depends(get_session)
+    session: AsyncSession = Depends(get_db)
 ) -> User:
     """
     Validate the access token and return the current user.
@@ -29,7 +29,7 @@ async def get_current_user(
     
     # Decode token
     user_ops = UserOperations(session)
-    token_data = user_ops.decode_token(token)
+    token_data = await user_ops.decode_token(token)
     
     if token_data is None:
         raise credentials_exception
