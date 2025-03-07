@@ -1,6 +1,6 @@
 # models/schemas/auth/user.py
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, validator
 from typing import Optional
 from uuid import UUID
 from datetime import datetime
@@ -15,6 +15,12 @@ class UserCreate(BaseModel):
     first_name: str
     last_name: str
     role: str = "lawyer"  # default role
+
+    @validator('password')
+    def validate_password(cls, v):
+        if len(v) < 6:
+            raise ValueError("Password should be at least 6 characters.")
+        return v
 
 class UserProfile(BaseModel):
     id: UUID

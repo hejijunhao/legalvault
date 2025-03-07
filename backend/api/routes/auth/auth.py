@@ -42,19 +42,16 @@ async def register(
     """
     print(f"Attempting to register user with email: {data.email}")
     user_ops = UserOperations(session)
-    user = await user_ops.register(data)
+    profile = await user_ops.register(data)
     
-    print(f"Registration result: {user}")
+    print(f"Registration result: {profile}")
     
-    if not user:
+    if not profile:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="User already exists or auth user not found",
         )
         
-    # Get user profile
-    profile = await user_ops.get_user_profile(user.id)
-    print(f"User profile: {profile}")
     return profile
 
 @router.get("/me", response_model=UserProfile)

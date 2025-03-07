@@ -29,7 +29,7 @@ class User(VaultBase, TimestampMixin):
         "Enterprise",
         back_populates="users",
         lazy="selectin",
-        primaryjoin="and_(models.database.user.User.enterprise_id==models.database.enterprise.Enterprise.id, models.database.user.User.__table__.schema==models.database.enterprise.Enterprise.__table__.schema)"
+        foreign_keys=[enterprise_id]
     )
     virtual_paralegal = relationship(
         "VirtualParalegal",

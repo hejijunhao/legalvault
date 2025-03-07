@@ -23,7 +23,6 @@ class Enterprise(VaultBase, TimestampMixin):
         "User",
         back_populates="enterprise",
         lazy="selectin",
-        primaryjoin="and_(models.database.enterprise.Enterprise.id==models.database.user.User.enterprise_id, models.database.enterprise.Enterprise.__table__.schema==models.database.user.User.__table__.schema)",
         uselist=True  # Explicitly indicate one-to-many
     )
 
