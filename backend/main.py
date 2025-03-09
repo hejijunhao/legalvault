@@ -11,11 +11,15 @@ import asyncio
 from sqlalchemy.sql import text
 
 from api.routes import router as api_router
+from api.routes.auth.webhooks import router as webhook_router
+
 
 logger = getLogger(__name__)
 app = FastAPI()
 
 app.include_router(api_router, prefix="/api")
+app.include_router(webhook_router, prefix="/api/auth", tags=["auth"])
+
 
 @app.get("/health")
 async def health_check():
