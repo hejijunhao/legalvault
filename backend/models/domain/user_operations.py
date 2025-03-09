@@ -14,6 +14,7 @@ from models.schemas.auth.token import TokenResponse, TokenData
 import os
 from core.database import get_async_session
 import logging
+import re
 
 # Get JWT settings from environment
 JWT_SECRET = os.getenv("JWT_SECRET_KEY", "your-secret-key")  # Use a secure key in production
@@ -52,7 +53,7 @@ class UserOperations:
         encoded_jwt = jwt.encode(to_encode, JWT_SECRET, algorithm=JWT_ALGORITHM)
         return encoded_jwt
 
-    async def register(self, data: UserCreate) -> Optional[User]:
+    async def register(self, data: UserCreate) -> Optional[UserProfile]:
         """
         Register a new user using Supabase Auth.
         Creates both Supabase Auth user and application User records.
@@ -93,8 +94,8 @@ class UserOperations:
             
             # Create application user record using direct SQL to avoid relationship issues
             query = text("""
-                INSERT INTO vault.users (id, auth_user_id, first_name, last_name, name, role, created_at, updated_at)
-                VALUES (:id, :auth_user_id, :first_name, :last_name, :name, :role, NOW(), NOW())
+                INSERT INTO vault.users (id, auth_user_id, first_name, last_name, name, role, email, created_at, updated_at)
+                VALUES (:id, :auth_user_id, :first_name, :last_name, :name, :role, :email, NOW(), NOW())
                 RETURNING id
             """)
             
@@ -109,14 +110,15 @@ class UserOperations:
                     "first_name": data.first_name,
                     "last_name": data.last_name,
                     "name": f"{data.first_name} {data.last_name}",
-                    "role": data.role
+                    "role": data.role,
+                    "email": data.email
                 }
             )
             await self.session.commit()
             
             # Now fetch the user directly to avoid relationship loading
             query = text("""
-                SELECT id, auth_user_id, first_name, last_name, name, role, virtual_paralegal_id, enterprise_id, created_at, updated_at
+                SELECT id, auth_user_id, first_name, last_name, name, role, email, virtual_paralegal_id, enterprise_id, created_at, updated_at
                 FROM vault.users WHERE id = :id
             """)
             result = await self.session.execute(query, {"id": user_id})
@@ -126,15 +128,15 @@ class UserOperations:
             if user_data:
                 return UserProfile(
                     id=user_data[0],
-                    email=data.email,
+                    email=user_data[6],  # Use email from database
                     first_name=user_data[2],
                     last_name=user_data[3],
                     name=user_data[4],
                     role=user_data[5],
-                    virtual_paralegal_id=user_data[6],
-                    enterprise_id=user_data[7],
-                    created_at=user_data[8],
-                    updated_at=user_data[9]
+                    virtual_paralegal_id=user_data[7],
+                    enterprise_id=user_data[8],
+                    created_at=user_data[9],
+                    updated_at=user_data[10]
                 )
             
             return None
@@ -146,6 +148,88 @@ class UserOperations:
             await self.session.rollback()
             return None
 
+    async def update_user_email(self, user_id: UUID, email: str) -> Optional[UserProfile]:
+        """
+        Update a user's email in both Supabase Auth and vault.users table.
+        
+        Args:
+            user_id: UUID of the user in the application database
+            email: New email address
+        
+        Returns:
+            Updated UserProfile or None if update failed
+        """
+        import re
+        from core.supabase_client import get_supabase_client
+        
+        # Validate email format
+        email_pattern = r"[^@]+@[^@]+\.[^@]+"
+        if not re.match(email_pattern, email):
+            logger.error(f"Invalid email format: {email}")
+            return None
+        
+        try:
+            # Get the user to find the auth_user_id
+            user = await self.get_user_by_id(user_id)
+            if not user:
+                logger.error(f"User not found with ID: {user_id}")
+                return None
+                
+            auth_user_id = user["auth_user_id"]
+            
+            # Check email uniqueness in vault.users
+            query = text("""
+                SELECT id FROM vault.users WHERE email = :email AND id != :user_id
+            """)
+            result = await self.session.execute(query, {"email": email, "user_id": user_id})
+            if result.fetchone():
+                logger.error(f"Email {email} already in use in vault.users")
+                return None
+            
+            # Check email uniqueness in Supabase Auth
+            supabase = get_supabase_client()
+            try:
+                auth_users = supabase.auth.admin.list_users()
+                if any(u.email == email and u.id != str(auth_user_id) for u in auth_users):
+                    logger.error(f"Email {email} already in use in Supabase Auth")
+                    return None
+            except Exception as auth_error:
+                logger.error(f"Error checking email uniqueness in Supabase Auth: {str(auth_error)}")
+                return None
+            
+            # Update vault.users first (safer transaction approach)
+            query = text("""
+                UPDATE vault.users
+                SET email = :email, updated_at = NOW()
+                WHERE id = :user_id
+                RETURNING id
+            """)
+            
+            result = await self.session.execute(query, {"email": email, "user_id": user_id})
+            if not result.fetchone():
+                logger.error(f"Failed to update email in vault.users for user {user_id}")
+                await self.session.rollback()
+                return None
+            
+            # Then update Supabase Auth
+            try:
+                supabase.auth.admin.update_user_by_id(auth_user_id, {"email": email})
+                logger.info(f"Successfully updated email in Supabase Auth for user {auth_user_id}")
+            except Exception as auth_error:
+                logger.error(f"Error updating email in Supabase Auth: {str(auth_error)}")
+                await self.session.rollback()
+                return None
+            
+            # Commit the transaction
+            await self.session.commit()
+            logger.info(f"Successfully updated email for user {user_id} to {email}")
+            
+            # Return updated user profile
+            return await self.get_user_profile(user_id)
+        except Exception as e:
+            logger.error(f"Error updating user email: {str(e)}")
+            await self.session.rollback()
+            return None
 
     async def authenticate(self, data: UserLogin) -> Optional[TokenResponse]:
         """
@@ -167,7 +251,7 @@ class UserOperations:
             
             # Use direct SQL to get the user to avoid relationship loading issues
             query = text("""
-                SELECT id, auth_user_id, first_name, last_name, name, role, virtual_paralegal_id, enterprise_id, created_at, updated_at
+                SELECT id, auth_user_id, first_name, last_name, name, role, email, virtual_paralegal_id, enterprise_id, created_at, updated_at
                 FROM vault.users WHERE auth_user_id = :auth_user_id
             """)
             
@@ -179,7 +263,7 @@ class UserOperations:
             
             # Create access token
             access_token = await self._create_access_token(
-                data={"sub": str(user_data[0]), "email": data.email}
+                data={"sub": str(user_data[0]), "email": user_data[6]}
             )
             
             return TokenResponse(
@@ -198,11 +282,12 @@ class UserOperations:
     async def get_user_by_id(self, user_id: UUID) -> Optional[Dict[str, Any]]:
         """Get a user by ID"""
         query = text("""
-            SELECT id, auth_user_id, first_name, last_name, name, role, virtual_paralegal_id, enterprise_id, created_at, updated_at
+            SELECT id, auth_user_id, first_name, last_name, name, role, email, virtual_paralegal_id, enterprise_id, created_at, updated_at
             FROM vault.users WHERE id = :user_id
         """)
         result = await self.session.execute(query, {"user_id": user_id})
         user_data = result.fetchone()
+
         if not user_data:
             return None
             
@@ -214,10 +299,11 @@ class UserOperations:
             "last_name": user_data[3],
             "name": user_data[4],
             "role": user_data[5],
-            "virtual_paralegal_id": user_data[6],
-            "enterprise_id": user_data[7],
-            "created_at": user_data[8],
-            "updated_at": user_data[9]
+            "email": user_data[6],
+            "virtual_paralegal_id": user_data[7],
+            "enterprise_id": user_data[8],
+            "created_at": user_data[9],
+            "updated_at": user_data[10]
         }
 
     async def get_user_by_email(self, email: str) -> Optional[Dict[str, Any]]:
@@ -233,7 +319,7 @@ class UserOperations:
             
             # Get the application user using direct SQL
             query = text("""
-                SELECT id, auth_user_id, first_name, last_name, name, role, virtual_paralegal_id, enterprise_id, created_at, updated_at
+                SELECT id, auth_user_id, first_name, last_name, name, role, email, virtual_paralegal_id, enterprise_id, created_at, updated_at
                 FROM vault.users WHERE auth_user_id = :auth_user_id
             """)
             result = await self.session.execute(query, {"auth_user_id": auth_user_id})
@@ -250,27 +336,28 @@ class UserOperations:
                 "last_name": user_data[3],
                 "name": user_data[4],
                 "role": user_data[5],
-                "virtual_paralegal_id": user_data[6],
-                "enterprise_id": user_data[7],
-                "created_at": user_data[8],
-                "updated_at": user_data[9]
+                "email": user_data[6],
+                "virtual_paralegal_id": user_data[7],
+                "enterprise_id": user_data[8],
+                "created_at": user_data[9],
+                "updated_at": user_data[10]
             }
         except Exception as e:
             print(f"Error getting user by email: {str(e)}")
             return None
 
     async def get_user_profile(self, user_id: UUID) -> Optional[UserProfile]:
-        """Get user profile information including email from Supabase Auth.
+        """Get user profile information including email from vault.users table.
         
         Args:
             user_id: UUID of the user in the application database
-            
+        
         Returns:
             UserProfile object with complete user information or None if user not found
         """
         # Use direct SQL to get the user to avoid relationship loading issues
         query = text("""
-            SELECT id, auth_user_id, first_name, last_name, name, role, virtual_paralegal_id, enterprise_id, created_at, updated_at
+            SELECT id, auth_user_id, first_name, last_name, name, role, email, virtual_paralegal_id, enterprise_id, created_at, updated_at
             FROM vault.users WHERE id = :user_id
         """)
         
@@ -283,7 +370,8 @@ class UserOperations:
                 logger.warning(f"No user found with ID: {user_id}")
                 return None
             
-            # Get the user's email from Supabase Auth
+            # Get last login time from Supabase Auth if possible
+            last_login = None
             try:
                 from core.supabase_client import get_supabase_client
                 supabase = get_supabase_client()
@@ -291,13 +379,17 @@ class UserOperations:
                 # Get user details from Supabase Auth using auth_user_id
                 auth_user_id = user_data[1]  # auth_user_id is at index 1
                 auth_response = supabase.auth.admin.get_user_by_id(auth_user_id)
-                email = auth_response.email
                 last_login = auth_response.last_sign_in_at
             except Exception as auth_error:
-                logger.error(f"Error retrieving email from Supabase Auth: {str(auth_error)}")
-                # Fallback to generated email if Supabase Auth retrieval fails
-                email = f"{user_data[2].lower()}.{user_data[3].lower()}@example.com"
+                logger.error(f"Error retrieving last login from Supabase Auth: {str(auth_error)}")
                 last_login = None
+            
+            # Use email from vault.users table
+            email = user_data[6]  # email is now at index 6
+            
+            # If email is not set in the database, use a fallback
+            if not email:
+                email = f"{user_data[2].lower()}.{user_data[3].lower()}@example.com"
                 logger.warning(f"Using fallback email for user {user_id}: {email}")
             
             return UserProfile(
@@ -307,9 +399,9 @@ class UserOperations:
                 last_name=user_data[3],
                 name=user_data[4],
                 role=user_data[5],
-                virtual_paralegal_id=user_data[6],
-                enterprise_id=user_data[7],
-                created_at=user_data[8],
+                virtual_paralegal_id=user_data[7],
+                enterprise_id=user_data[8],
+                created_at=user_data[9],
                 last_login=last_login
             )
         except Exception as e:
