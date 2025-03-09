@@ -12,15 +12,17 @@ from models.domain.user_operations import UserOperations
 from core.database import get_db
 import jwt
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 async def get_current_user(
     token: str = Depends(oauth2_scheme), 
     session: AsyncSession = Depends(get_db)
-) -> User:
+) -> dict:
     """
-    Validate the access token and return the current user.
+    Validate the access token and return the current user as a dictionary.
     """
+    print(f"\n\n===== Authentication Debug =====\nReceived token: {token[:10]}...")
+    
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -31,40 +33,62 @@ async def get_current_user(
     user_ops = UserOperations(session)
     token_data = await user_ops.decode_token(token)
     
+    print(f"Token data after decoding: {token_data}")
+    
     if token_data is None:
+        print("Token data is None, raising credentials exception")
         raise credentials_exception
         
     # Get user from database using direct SQL to avoid relationship loading issues
     from sqlalchemy import text
     
+    # First try to get user by ID
     query = text("""
         SELECT id, auth_user_id, first_name, last_name, name, role, virtual_paralegal_id, enterprise_id, created_at, updated_at
         FROM vault.users WHERE id = :user_id
     """)
     
+    print(f"Executing query with user_id: {token_data.user_id}")
+    
     result = await session.execute(query, {"user_id": token_data.user_id})
     user_data = result.fetchone()
     
+    print(f"Query result by ID: {user_data}")
+    
+    # If not found by ID, try by auth_user_id
     if user_data is None:
+        print("User not found by ID, trying by auth_user_id")
+        query = text("""
+            SELECT id, auth_user_id, first_name, last_name, name, role, virtual_paralegal_id, enterprise_id, created_at, updated_at
+            FROM vault.users WHERE auth_user_id = :auth_user_id
+        """)
+        result = await session.execute(query, {"auth_user_id": token_data.user_id})
+        user_data = result.fetchone()
+        print(f"Query result by auth_user_id: {user_data}")
+    
+    if user_data is None:
+        print("User data is still None after both queries, raising credentials exception")
         raise credentials_exception
     
-    # Create a User instance manually without loading relationships
-    user = User()
-    user.id = user_data[0]
-    user.auth_user_id = user_data[1]
-    user.first_name = user_data[2]
-    user.last_name = user_data[3]
-    user.name = user_data[4]
-    user.role = user_data[5]
-    user.virtual_paralegal_id = user_data[6]
-    user.enterprise_id = user_data[7]
-    user.created_at = user_data[8]
-    user.updated_at = user_data[9]
+    print(f"Successfully found user: {user_data[0]} with role: {user_data[5]}")
+    print("===== End Authentication Debug =====\n\n")
     
-    return user
+    # Return user data as a dictionary instead of creating a User instance
+    return {
+        "id": user_data[0],
+        "auth_user_id": user_data[1],
+        "first_name": user_data[2],
+        "last_name": user_data[3],
+        "name": user_data[4],
+        "role": user_data[5],
+        "virtual_paralegal_id": user_data[6],
+        "enterprise_id": user_data[7],
+        "created_at": user_data[8],
+        "updated_at": user_data[9]
+    }
 
 async def get_user_permissions(
-    user: User = Depends(get_current_user)
+    user: dict = Depends(get_current_user)
 ) -> List[str]:
     """
     Get permissions for the current user based on their role.
@@ -76,26 +100,26 @@ async def get_user_permissions(
         "paralegal": ["read:all", "write:limited"],
     }
     
-    return role_permissions.get(user.role, [])
+    return role_permissions.get(user["role"], [])
 
-async def require_admin(user: User = Depends(get_current_user)):
+async def require_admin(user: dict = Depends(get_current_user)):
     """
     Require the user to have admin role.
     """
-    if user.role != "admin":
+    if user["role"] != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Insufficient permissions"
         )
     return user
 
-async def require_super_admin(user: User = Depends(get_current_user)):
+async def require_super_admin(user: dict = Depends(get_current_user)):
     """
     Require the user to have super_admin role.
     """
     # This would typically check the auth_user.is_super_admin flag
     # For now, we'll just check the role
-    if user.role != "super_admin":
+    if user["role"] != "super_admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Insufficient permissions"

@@ -6,18 +6,22 @@ from uuid import UUID
 from sqlalchemy import select, delete, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from passlib.context import CryptContext
-from jose import jwt
+from jose import jwt, JWTError
 from models.database.auth_user import AuthUser
 from models.database.user import User
 from models.schemas.auth.user import UserCreate, UserLogin, UserProfile
 from models.schemas.auth.token import TokenResponse, TokenData
 import os
 from core.database import get_async_session
+import logging
 
 # Get JWT settings from environment
 JWT_SECRET = os.getenv("JWT_SECRET_KEY", "your-secret-key")  # Use a secure key in production
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION = 30  # minutes
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 # Password hashing context
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -191,13 +195,32 @@ class UserOperations:
             traceback.print_exc()
             return None
 
-    async def get_user_by_id(self, user_id: UUID) -> Optional[User]:
+    async def get_user_by_id(self, user_id: UUID) -> Optional[Dict[str, Any]]:
         """Get a user by ID"""
-        query = select(User).where(User.id == user_id)
-        result = await self.session.execute(query)
-        return result.scalar_one_or_none()
+        query = text("""
+            SELECT id, auth_user_id, first_name, last_name, name, role, virtual_paralegal_id, enterprise_id, created_at, updated_at
+            FROM vault.users WHERE id = :user_id
+        """)
+        result = await self.session.execute(query, {"user_id": user_id})
+        user_data = result.fetchone()
+        if not user_data:
+            return None
+            
+        # Return as a dictionary for easier access
+        return {
+            "id": user_data[0],
+            "auth_user_id": user_data[1],
+            "first_name": user_data[2],
+            "last_name": user_data[3],
+            "name": user_data[4],
+            "role": user_data[5],
+            "virtual_paralegal_id": user_data[6],
+            "enterprise_id": user_data[7],
+            "created_at": user_data[8],
+            "updated_at": user_data[9]
+        }
 
-    async def get_user_by_email(self, email: str) -> Optional[User]:
+    async def get_user_by_email(self, email: str) -> Optional[Dict[str, Any]]:
         """Get a user by email (via auth user)"""
         from core.supabase_client import get_supabase_client
         
@@ -208,43 +231,89 @@ class UserOperations:
             auth_response = supabase.auth.admin.get_user_by_email(email)
             auth_user_id = auth_response.id
             
-            # Get the application user
-            query = select(User).where(User.auth_user_id == auth_user_id)
-            result = await self.session.execute(query)
-            return result.scalar_one_or_none()
+            # Get the application user using direct SQL
+            query = text("""
+                SELECT id, auth_user_id, first_name, last_name, name, role, virtual_paralegal_id, enterprise_id, created_at, updated_at
+                FROM vault.users WHERE auth_user_id = :auth_user_id
+            """)
+            result = await self.session.execute(query, {"auth_user_id": auth_user_id})
+            user_data = result.fetchone()
+            
+            if not user_data:
+                return None
+                
+            # Return as a dictionary for easier access
+            return {
+                "id": user_data[0],
+                "auth_user_id": user_data[1],
+                "first_name": user_data[2],
+                "last_name": user_data[3],
+                "name": user_data[4],
+                "role": user_data[5],
+                "virtual_paralegal_id": user_data[6],
+                "enterprise_id": user_data[7],
+                "created_at": user_data[8],
+                "updated_at": user_data[9]
+            }
         except Exception as e:
             print(f"Error getting user by email: {str(e)}")
             return None
 
     async def get_user_profile(self, user_id: UUID) -> Optional[UserProfile]:
-        """Get user profile information"""
-        user = await self.get_user_by_id(user_id)
-        if not user:
-            return None
-            
-        # Get auth user for additional info
-        from core.supabase_client import get_supabase_client
+        """Get user profile information including email from Supabase Auth.
         
-        supabase = get_supabase_client()
+        Args:
+            user_id: UUID of the user in the application database
+            
+        Returns:
+            UserProfile object with complete user information or None if user not found
+        """
+        # Use direct SQL to get the user to avoid relationship loading issues
+        query = text("""
+            SELECT id, auth_user_id, first_name, last_name, name, role, virtual_paralegal_id, enterprise_id, created_at, updated_at
+            FROM vault.users WHERE id = :user_id
+        """)
         
         try:
-            auth_response = supabase.auth.admin.get_user(user.auth_user_id)
-            auth_user = auth_response.user
+            logger.debug(f"Retrieving user profile for user_id: {user_id}")
+            result = await self.session.execute(query, {"user_id": user_id})
+            user_data = result.fetchone()
+            
+            if not user_data:
+                logger.warning(f"No user found with ID: {user_id}")
+                return None
+            
+            # Get the user's email from Supabase Auth
+            try:
+                from core.supabase_client import get_supabase_client
+                supabase = get_supabase_client()
+                
+                # Get user details from Supabase Auth using auth_user_id
+                auth_user_id = user_data[1]  # auth_user_id is at index 1
+                auth_response = supabase.auth.admin.get_user_by_id(auth_user_id)
+                email = auth_response.email
+                last_login = auth_response.last_sign_in_at
+            except Exception as auth_error:
+                logger.error(f"Error retrieving email from Supabase Auth: {str(auth_error)}")
+                # Fallback to generated email if Supabase Auth retrieval fails
+                email = f"{user_data[2].lower()}.{user_data[3].lower()}@example.com"
+                last_login = None
+                logger.warning(f"Using fallback email for user {user_id}: {email}")
             
             return UserProfile(
-                id=user.id,
-                email=auth_user.email,
-                first_name=user.first_name,
-                last_name=user.last_name,
-                name=user.name,
-                role=user.role,
-                virtual_paralegal_id=user.virtual_paralegal_id,
-                enterprise_id=user.enterprise_id,
-                created_at=user.created_at,
-                last_login=auth_user.last_sign_in_at
+                id=user_data[0],
+                email=email,
+                first_name=user_data[2],
+                last_name=user_data[3],
+                name=user_data[4],
+                role=user_data[5],
+                virtual_paralegal_id=user_data[6],
+                enterprise_id=user_data[7],
+                created_at=user_data[8],
+                last_login=last_login
             )
         except Exception as e:
-            print(f"Error getting user profile: {str(e)}")
+            logger.error(f"Error getting user profile: {str(e)}", exc_info=True)
             return None
 
     async def decode_token(self, token: str) -> Optional[TokenData]:
@@ -253,10 +322,12 @@ class UserOperations:
             payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
             user_id = payload.get("sub")
             if user_id is None:
+                logger.warning("Token missing 'sub' claim")
                 return None
                 
             return TokenData(user_id=UUID(user_id))
-        except jwt.PyJWTError:
+        except Exception as e:
+            logger.error(f"Token validation error: {str(e)}")
             return None
 
     async def delete_user(self, user_id: UUID) -> bool:
@@ -264,17 +335,19 @@ class UserOperations:
         Delete a user from both application database and Supabase Auth.
         """
         try:
-            # Get the user to find the auth_user_id
+            # Get the user to find the auth_user_id using direct SQL
             user = await self.get_user_by_id(user_id)
             if not user:
                 return False
                 
             # Store the auth_user_id before deleting the user
-            auth_user_id = user.auth_user_id
+            auth_user_id = user["auth_user_id"]
             
-            # First delete from application database
-            query = delete(User).where(User.id == user_id)
-            await self.session.execute(query)
+            # Delete from application database using direct SQL
+            query = text("""
+                DELETE FROM vault.users WHERE id = :user_id
+            """)
+            await self.session.execute(query, {"user_id": user_id})
             await self.session.commit()
             
             # Then delete from Supabase Auth

@@ -25,7 +25,7 @@ router = APIRouter(
 @router.post("/", response_model=SearchResponse)
 async def create_search(
     data: SearchCreate,
-    current_user: UUID = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user),
     user_permissions: List[str] = Depends(get_user_permissions),
     db: AsyncSession = Depends(get_db)
 ):
@@ -40,7 +40,7 @@ async def create_search(
     
     operations = ResearchOperations(db)
     search_id, response = await operations.create_search(
-        user_id=current_user,
+        user_id=current_user["id"],
         enterprise_id=enterprise_id,
         query=data.query,
         search_params=data.search_params
@@ -62,7 +62,7 @@ async def create_search(
 async def continue_search(
     search_id: UUID,
     data: SearchContinue,
-    current_user: UUID = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user),
     user_permissions: List[str] = Depends(get_user_permissions),
     db: AsyncSession = Depends(get_db)
 ):
@@ -76,7 +76,7 @@ async def continue_search(
     
     # Verify ownership of search
     search = await operations.get_search_by_id(search_id)
-    if not search or str(search["user_id"]) != str(current_user):
+    if not search or str(search["user_id"]) != str(current_user["id"]):
         raise HTTPException(status_code=404, detail="Search not found")
     
     # Process follow-up
@@ -100,7 +100,7 @@ async def continue_search(
 @router.get("/{search_id}", response_model=SearchResponse)
 async def get_search(
     search_id: UUID,
-    current_user: UUID = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user),
     user_permissions: List[str] = Depends(get_user_permissions),
     db: AsyncSession = Depends(get_db)
 ):
@@ -116,7 +116,7 @@ async def get_search(
         raise HTTPException(status_code=404, detail="Search not found")
     
     # Check if user has access to this search
-    if str(search["user_id"]) != str(current_user) and "admin" not in user_permissions:
+    if str(search["user_id"]) != str(current_user["id"]) and "admin" not in user_permissions:
         raise HTTPException(status_code=403, detail="Not authorized to access this search")
     
     return search
@@ -126,7 +126,7 @@ async def list_searches(
     featured_only: bool = Query(False, description="Only return featured searches"),
     limit: int = Query(20, ge=1, le=100, description="Maximum number of results"),
     offset: int = Query(0, ge=0, description="Pagination offset"),
-    current_user: UUID = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user),
     user_permissions: List[str] = Depends(get_user_permissions),
     db: AsyncSession = Depends(get_db)
 ):
@@ -141,7 +141,7 @@ async def list_searches(
     
     operations = ResearchOperations(db)
     searches = await operations.list_searches(
-        user_id=current_user,
+        user_id=current_user["id"],
         enterprise_id=enterprise_id,
         limit=limit,
         offset=offset,
@@ -154,7 +154,7 @@ async def list_searches(
 async def update_search(
     search_id: UUID,
     data: SearchUpdate,
-    current_user: UUID = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user),
     user_permissions: List[str] = Depends(get_user_permissions),
     db: AsyncSession = Depends(get_db)
 ):
@@ -167,7 +167,7 @@ async def update_search(
     
     # Verify ownership of search
     search = await operations.get_search_by_id(search_id)
-    if not search or str(search["user_id"]) != str(current_user):
+    if not search or str(search["user_id"]) != str(current_user["id"]):
         raise HTTPException(status_code=404, detail="Search not found")
     
     # Update search
@@ -188,7 +188,7 @@ async def update_search(
 @router.delete("/{search_id}", status_code=204)
 async def delete_search(
     search_id: UUID,
-    current_user: UUID = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user),
     user_permissions: List[str] = Depends(get_user_permissions),
     db: AsyncSession = Depends(get_db)
 ):
@@ -201,7 +201,7 @@ async def delete_search(
     
     # Verify ownership of search
     search = await operations.get_search_by_id(search_id)
-    if not search or str(search["user_id"]) != str(current_user):
+    if not search or str(search["user_id"]) != str(current_user["id"]):
         raise HTTPException(status_code=404, detail="Search not found")
     
     # Delete search
@@ -210,12 +210,12 @@ async def delete_search(
         raise HTTPException(status_code=500, detail="Failed to delete search")
 
 # Helper function to get user's enterprise ID
-async def get_user_enterprise(current_user: Union[UUID, User], db: AsyncSession) -> UUID:
+async def get_user_enterprise(current_user: Union[dict, UUID], db: AsyncSession) -> UUID:
     """
     Get the enterprise ID for a user.
     
     Args:
-        current_user: Either a User object or a UUID representing the user ID
+        current_user: Either a dictionary containing user data, or a UUID representing the user ID
         db: SQLAlchemy async session
         
     Returns:
@@ -224,17 +224,21 @@ async def get_user_enterprise(current_user: Union[UUID, User], db: AsyncSession)
     Raises:
         HTTPException: If user has no associated enterprise
     """
-    from sqlalchemy import select
-    from models.database.user import User
+    from sqlalchemy import text
     
-    # If current_user is already a User object with enterprise_id
-    if hasattr(current_user, 'enterprise_id') and current_user.enterprise_id:
-        return current_user.enterprise_id
+    # If current_user is a dictionary with enterprise_id
+    if isinstance(current_user, dict) and "enterprise_id" in current_user:
+        return current_user["enterprise_id"]
     
     # Otherwise, query the database using the UUID
-    user_id = current_user if isinstance(current_user, UUID) else current_user.id
-    query = select(User.enterprise_id).where(User.id == user_id)
-    result = await db.execute(query)
+    user_id = current_user if isinstance(current_user, UUID) else current_user["id"]
+    
+    # Use direct SQL query to avoid ORM relationship issues
+    query = text("""
+        SELECT enterprise_id FROM vault.users WHERE id = :user_id
+    """)
+    
+    result = await db.execute(query, {"user_id": user_id})
     enterprise_id = result.scalar_one_or_none()
     
     if not enterprise_id:

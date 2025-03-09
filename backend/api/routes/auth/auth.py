@@ -56,14 +56,14 @@ async def register(
 
 @router.get("/me", response_model=UserProfile)
 async def get_current_user_profile(
-    current_user: User = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user),
     session: AsyncSession = Depends(get_db)
 ):
     """
     Get the current user's profile.
     """
     user_ops = UserOperations(session)
-    profile = await user_ops.get_user_profile(current_user.id)
+    profile = await user_ops.get_user_profile(current_user["id"])
     
     if not profile:
         raise HTTPException(
@@ -76,14 +76,14 @@ async def get_current_user_profile(
 @router.get("/user/{user_id}", response_model=UserProfile)
 async def get_user_profile(
     user_id: UUID,
-    current_user: User = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user),
     session: AsyncSession = Depends(get_db)
 ):
     """
     Get a user's profile by ID.
     """
     # Check if the user is requesting their own profile or has admin permissions
-    if current_user.id != user_id and current_user.role not in ["admin", "super_admin"]:
+    if current_user["id"] != user_id and current_user["role"] not in ["admin", "super_admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to access this user's profile",
@@ -103,7 +103,7 @@ async def get_user_profile(
 @router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_user(
     user_id: UUID,
-    current_user: User = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user),
     session: AsyncSession = Depends(get_db)
 ):
     """
@@ -111,7 +111,7 @@ async def delete_user(
     Only admins can delete users.
     """
     # Check if the current user has permission to delete users
-    if current_user.role != "admin":
+    if current_user["role"] != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only administrators can delete users",
