@@ -58,6 +58,18 @@ supabase_system_schemas = {
     'auth',
     'storage',
     'realtime',
+    'pgbouncer',
+    'pgsodium',
+    'extensions',
+    'pg_catalog',
+    'information_schema',
+    'supabase_functions',
+    'graphql',
+    'graphql_public',
+    'net',
+    'pgtle',
+    'cron',
+    'pg_net',
 }
 
 def include_name(name, type_, parent_names):
@@ -75,7 +87,7 @@ def include_name(name, type_, parent_names):
     Returns:
         Boolean indicating whether the object should be included
     """
-    # Exclude Supabase system schemas
+    # Exclude Supabase system schemas completely
     schema = parent_names.get("schema")
     if schema in supabase_system_schemas:
         return False
@@ -85,9 +97,9 @@ def include_name(name, type_, parent_names):
         if type_ == "table":
             return name in managed_tables
         
-        # For other object types (columns, indexes, etc.), only include them
+        # For other object types (columns, indexes, etc.), include them
         # if they belong to tables we're managing
-        if type_ in ("column", "index", "constraint"):
+        if type_ in ("column", "index", "constraint", "unique_constraint", "foreign_key_constraint"):
             table_name = parent_names.get("table_name")
             return table_name in managed_tables
     

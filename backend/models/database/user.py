@@ -20,6 +20,7 @@ class User(VaultBase, TimestampMixin):
     first_name = Column(String, nullable=False)
     last_name = Column(String, nullable=False)
     name = Column(String, nullable=False)
+    email = Column(String, unique=True, nullable=True, index=True)
     role = Column(String, default="lawyer", nullable=False)
     virtual_paralegal_id = Column(UUID(as_uuid=True), ForeignKey('vault.virtual_paralegals.id'), index=True, nullable=True)
     enterprise_id = Column(UUID(as_uuid=True), ForeignKey('vault.enterprises.id'), index=True, nullable=True)
