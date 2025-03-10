@@ -8,23 +8,33 @@ import Image from "next/image"
 import { motion } from "framer-motion"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
+import { useAuth } from "@/contexts/auth-context"
+import { toast } from "sonner" // If you have a toast library, or use another notification method
 
 export function LoginForm() {
   const router = useRouter()
+  const { login, isLoading } = useAuth()
   const [email, setEmail] = useState("")
-  const [key, setKey] = useState("")
-  const [isLoading, setIsLoading] = useState(false)
+  const [password, setPassword] = useState("")
+  const [error, setError] = useState("")
 
-  // Temporary login handler that redirects to workspace
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setIsLoading(true)
+    setError("")
 
-    // Simulate loading state
-    await new Promise((resolve) => setTimeout(resolve, 800))
-
-    // Redirect to workspace (this will be replaced with actual auth later)
-    router.push("/workspace")
+    try {
+      const success = await login(email, password)
+      
+      if (success) {
+        // Redirect to workspace on successful login
+        router.push("/workspace")
+      } else {
+        setError("Invalid email or password")
+      }
+    } catch (err) {
+      setError("An error occurred during login")
+      console.error(err)
+    }
   }
 
   return (
@@ -43,6 +53,12 @@ export function LoginForm() {
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-6">
+          {error && (
+            <div className="rounded-md bg-red-500/10 p-3 text-center text-sm text-red-500">
+              {error}
+            </div>
+          )}
+          
           <div className="space-y-4">
             <Input
               type="email"
@@ -54,12 +70,11 @@ export function LoginForm() {
             />
             <Input
               type="password"
-              placeholder="Key"
-              value={key}
-              onChange={(e) => setKey(e.target.value)}
+              placeholder="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
               className="h-12 border-white/10 bg-white/5 font-mono text-white placeholder:text-white/40"
               required
-              // Custom password masking
               style={{
                 letterSpacing: "0.5em",
               }}
@@ -82,4 +97,3 @@ export function LoginForm() {
     </motion.div>
   )
 }
-

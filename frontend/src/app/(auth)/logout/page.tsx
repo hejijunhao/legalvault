@@ -1,10 +1,23 @@
 // src/app/(auth)/logout/page.tsx
 
-// This is a simple logout handler that redirects to the login page
-// In the future, this will handle proper session cleanup
-import { redirect } from "next/navigation"
+"use client"
+
+import { useEffect } from "react"
+import { useRouter } from "next/navigation"
+import { useAuth } from "@/contexts/auth-context"
 
 export default function LogoutPage() {
-  redirect("/login")
-}
+  const { logout } = useAuth()
+  const router = useRouter()
 
+  useEffect(() => {
+    logout()
+    router.push("/login")
+  }, [logout, router])
+
+  return (
+    <div className="flex h-screen items-center justify-center">
+      <p className="text-lg text-white/70">Logging out...</p>
+    </div>
+  )
+}
