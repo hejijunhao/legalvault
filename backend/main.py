@@ -2,6 +2,7 @@
 
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 import os
 from logging import getLogger
@@ -16,6 +17,15 @@ from api.routes.auth.webhooks import router as webhook_router
 
 logger = getLogger(__name__)
 app = FastAPI()
+
+# Configure CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],  # Your frontend URL
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 app.include_router(api_router, prefix="/api")
 app.include_router(webhook_router, prefix="/api/auth", tags=["auth"])
