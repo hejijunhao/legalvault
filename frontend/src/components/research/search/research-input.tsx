@@ -2,68 +2,127 @@
 
 "use client"
 
-import type React from "react"
+import { useState, useRef, useEffect } from "react"
+import { Loader2, Send } from "lucide-react"
+import { Button } from "@/components/ui/button"
 
-import { useState, useRef, type ChangeEvent } from "react"
-import { motion } from "framer-motion"
-import { ArrowRight } from "lucide-react"
+interface ResearchInputProps {
+  onSendMessage: (content: string) => Promise<void>
+  isLoading: boolean
+  maxLength?: number
+  placeholder?: string
+}
 
-export function ResearchInput() {
+export function ResearchInput({
+  onSendMessage,
+  isLoading,
+  maxLength = 1000,
+  placeholder = "Type your legal question here..."
+}: ResearchInputProps) {
   const [input, setInput] = useState("")
-  const [isFocused, setIsFocused] = useState(false)
+  const [charCount, setCharCount] = useState(0)
+  const [isAtLimit, setIsAtLimit] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  const handleTextareaChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
-    setInput(e.target.value)
+  // Update character count and limit status when input changes
+  useEffect(() => {
+    const trimmedLength = input.trim().length
+    setCharCount(trimmedLength)
+    setIsAtLimit(trimmedLength >= maxLength)
+  }, [input, maxLength])
 
-    if (textareaRef.current) {
-      textareaRef.current.style.height = "auto"
-      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`
+  // Auto-adjust textarea height
+  useEffect(() => {
+    const textarea = textareaRef.current
+    if (textarea) {
+      textarea.style.height = "auto"
+      const newHeight = Math.min(textarea.scrollHeight, 200) // Cap at 200px
+      textarea.style.height = `${newHeight}px`
+    }
+  }, [input])
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setInput(e.target.value)
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const trimmedInput = input.trim()
+    
+    if (!trimmedInput || isLoading) return
+    
+    try {
+      await onSendMessage(trimmedInput)
+      setInput("") // Clear input after successful send
+      // Reset textarea height and refocus
+      if (textareaRef.current) {
+        textareaRef.current.style.height = "auto"
+        textareaRef.current.focus()
+      }
+    } catch (error) {
+      console.error("Error sending message:", error)
+      // Error is handled by the parent component
     }
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    console.log("Submitted:", input)
-    setInput("")
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    // Submit on Ctrl+Enter or Cmd+Enter
+    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+      e.preventDefault()
+      handleSubmit(e)
+    }
   }
 
   return (
-    <form onSubmit={handleSubmit} className="fixed bottom-8 left-0 right-0 z-50">
-      <div className="mx-auto max-w-[800px] px-4">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.2 }}
-          className="relative w-full"
-        >
-          <div
-            className={`flex items-center rounded-2xl border bg-white p-4 shadow-[0_0_10px_rgba(0,0,0,0.05)] transition-all ${
-              isFocused ? "border-gray-300" : "border-gray-200"
-            }`}
+    <div className="fixed bottom-0 left-0 right-0 bg-white py-4 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
+      <form 
+        onSubmit={handleSubmit} 
+        className="mx-auto flex max-w-3xl items-end gap-2 px-4"
+        aria-label="Research message form"
+      >
+        <div className="relative flex-1">
+          <textarea
+            ref={textareaRef}
+            value={input}
+            onChange={handleInputChange}
+            onKeyDown={handleKeyDown}
+            placeholder={placeholder}
+            className="min-h-[52px] w-full resize-none rounded-md border border-gray-300 p-3 pr-10 focus:border-[#95C066] focus:outline-none focus:ring-1 focus:ring-[#95C066]"
+            disabled={isLoading}
+            aria-label="Research message input"
+            aria-invalid={isAtLimit}
+            aria-describedby="char-count"
+            maxLength={maxLength}
+          />
+          <div 
+            id="char-count"
+            className={`absolute bottom-1 right-2 text-xs ${isAtLimit ? 'text-red-500 font-bold' : 'text-gray-400'}`}
+            aria-live="polite"
           >
-            <textarea
-              ref={textareaRef}
-              value={input}
-              onChange={handleTextareaChange}
-              onFocus={() => setIsFocused(true)}
-              onBlur={() => setIsFocused(false)}
-              placeholder="Ask anything..."
-              className="flex-1 resize-none border-0 bg-transparent text-sm text-gray-900 placeholder:text-gray-500 focus:outline-none focus:ring-0"
-              style={{ minHeight: "24px", maxHeight: "200px" }}
-            />
-            <button
-              type="submit"
-              className={`ml-4 rounded-full p-2 transition-colors ${
-                input.trim() ? "bg-[#9FE870] text-white" : "bg-gray-100 text-gray-400"
-              }`}
-            >
-              <ArrowRight className="h-5 w-5" />
-            </button>
+            {charCount}/{maxLength}
           </div>
-        </motion.div>
-      </div>
-    </form>
+        </div>
+        <Button
+          type="submit"
+          disabled={!input.trim() || isLoading || isAtLimit}
+          className="h-10 w-10 rounded-full bg-[#95C066] p-2 text-white hover:bg-[#85b056] disabled:bg-gray-300"
+          aria-label={isLoading ? "Sending message" : "Send message"}
+        >
+          {isLoading ? (
+            <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
+          ) : (
+            <Send className="h-5 w-5" aria-hidden="true" />
+          )}
+        </Button>
+      </form>
+      {isLoading && (
+        <div 
+          className="mx-auto mt-2 max-w-3xl px-4 text-sm text-gray-500"
+          aria-live="polite"
+        >
+          Processing your request...
+        </div>
+      )}
+    </div>
   )
 }
-

@@ -5,6 +5,7 @@ import { Inter } from "next/font/google"
 import "../globals.css"
 import { MainHeader } from "@/components/ui/main-header"
 import { ProtectedRoute } from "@/components/auth/protected-route"
+import { ResearchProvider } from "@/contexts/research/research-context"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -22,10 +23,12 @@ export default function RootLayout({
     <html lang="en">
       <body>
         <ProtectedRoute>
-          <div className={inter.className}>
-            <MainHeader />
-            <main className="mx-auto max-w-[1440px] px-4">{children}</main>
-          </div>
+          <ResearchProvider>
+            <div className={inter.className}>
+              <MainHeader />
+              <main className="mx-auto max-w-[1440px] px-4">{children}</main>
+            </div>
+          </ResearchProvider>
         </ProtectedRoute>
       </body>
     </html>
