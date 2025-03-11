@@ -9,8 +9,8 @@ from sqlalchemy import select, delete, func, update
 from sqlalchemy.orm import selectinload
 
 from models.database.research.public_searches import PublicSearch
-from models.database.research.public_search_messages import PublicSearchMessage
 from models.domain.research.search import ResearchSearch
+from models.domain.research.search_message_operations import SearchMessageOperations
 
 class ResearchOperations:
     """
@@ -42,39 +42,31 @@ class ResearchOperations:
             Tuple of (search_id, search_response) or (None, error_response)
         """
         try:
-            # Execute search
+            # Execute search using the domain model
             search_domain = ResearchSearch(user_id=user_id, enterprise_id=enterprise_id)
             response = await search_domain.start_search(query, search_params)
+            
+            # If search execution failed, return the error
+            if "error" in response:
+                return None, response
             
             # Create search record
             search_id = uuid4()
             db_search = PublicSearch(
                 id=search_id,
-                title=query[:255],  # Truncate to fit DB constraints if needed
+                title=query[:255],
                 user_id=user_id,
                 enterprise_id=enterprise_id,
                 search_params=search_params or {}
             )
             self.db_session.add(db_search)
         
-            # Add user message
-            user_message = PublicSearchMessage(
-                search_id=search_id,
-                role="user",
-                content={"text": query},
-                sequence=0
-            )
-            self.db_session.add(user_message)
+            # Use SearchMessageOperations to create messages
+            message_ops = SearchMessageOperations(self.db_session)
+            message_ops.create_message(search_id, "user", {"text": query}, 0)
+            message_ops.create_message(search_id, "assistant", response, 1)
         
-            # Add response message
-            response_message = PublicSearchMessage(
-                search_id=search_id,
-                role="assistant" if "error" not in response else "system",
-                content=response,
-                sequence=1
-            )
-            self.db_session.add(response_message)
-        
+            # Commit everything
             await self.db_session.commit()
             return search_id, response
         except Exception as e:
@@ -116,27 +108,19 @@ class ResearchOperations:
             seq_result = await self.db_session.execute(seq_query)
             next_seq = (seq_result.scalar() or -1) + 1
             
-            # Execute follow-up
+            # Execute follow-up using domain model
             search_domain = ResearchSearch(user_id=db_search.user_id, enterprise_id=db_search.enterprise_id)
             response = await search_domain.continue_search(follow_up_query, thread_id) if thread_id else \
-                      await search_domain.start_search(follow_up_query, db_search.search_params)
+                       await search_domain.start_search(follow_up_query, db_search.search_params)
             
-            # Save messages
-            user_message = PublicSearchMessage(
-                search_id=search_id,
-                role="user",
-                content={"text": follow_up_query},
-                sequence=next_seq
-            )
-            self.db_session.add(user_message)
+            # If search execution failed, return the error
+            if "error" in response:
+                return response
             
-            response_message = PublicSearchMessage(
-                search_id=search_id,
-                role="assistant" if "error" not in response else "system",
-                content=response,
-                sequence=next_seq + 1
-            )
-            self.db_session.add(response_message)
+            # Use SearchMessageOperations to create messages
+            message_ops = SearchMessageOperations(self.db_session)
+            message_ops.create_message(search_id, "user", {"text": follow_up_query}, next_seq)
+            message_ops.create_message(search_id, "assistant", response, next_seq + 1)
             
             # Update timestamp
             db_search.updated_at = datetime.utcnow()
@@ -187,7 +171,7 @@ class ResearchOperations:
             }
             return search_data
         except Exception as e:
-            return None  # Error fetching search
+            return None
     
     async def list_searches(
         self,
@@ -213,7 +197,6 @@ class ResearchOperations:
         try:
             query = select(PublicSearch)
             
-            # Apply filters
             if user_id:
                 query = query.where(PublicSearch.user_id == user_id)
             if enterprise_id:
@@ -221,17 +204,13 @@ class ResearchOperations:
             if featured_only:
                 query = query.where(PublicSearch.is_featured == True)
             
-            # Apply sorting and pagination
-            query = query.order_by(PublicSearch.updated_at.desc())
-            query = query.limit(limit).offset(offset)
+            query = query.order_by(PublicSearch.updated_at.desc()).limit(limit).offset(offset)
             
             result = await self.db_session.execute(query)
             db_searches = result.scalars().all()
             
-            # Convert to dictionaries
-            searches = []
-            for db_search in db_searches:
-                search_data = {
+            searches = [
+                {
                     "id": str(db_search.id),
                     "title": db_search.title,
                     "description": db_search.description,
@@ -242,11 +221,11 @@ class ResearchOperations:
                     "created_at": db_search.created_at.isoformat() if db_search.created_at else None,
                     "updated_at": db_search.updated_at.isoformat() if db_search.updated_at else None
                 }
-                searches.append(search_data)
-            
+                for db_search in db_searches
+            ]
             return searches
         except Exception as e:
-            return []  # Return empty list on error
+            return []
     
     async def update_search_metadata(
         self, 
@@ -270,7 +249,6 @@ class ResearchOperations:
             True if updated, False if not found
         """
         try:
-            # Build update values
             update_values = {}
             if title is not None:
                 update_values["title"] = title
@@ -282,23 +260,17 @@ class ResearchOperations:
                 update_values["is_featured"] = is_featured
             
             if not update_values:
-                return True  # Nothing to update
+                return True
             
-            # Add updated timestamp
             update_values["updated_at"] = datetime.utcnow()
             
-            # Direct SQL UPDATE for efficiency
-            update_stmt = update(PublicSearch).where(
-                PublicSearch.id == search_id
-            ).values(**update_values)
-            
+            update_stmt = update(PublicSearch).where(PublicSearch.id == search_id).values(**update_values)
             result = await self.db_session.execute(update_stmt)
             await self.db_session.commit()
-            
             return result.rowcount > 0
         except Exception as e:
             await self.db_session.rollback()
-            return False  # Update failed
+            return False
     
     async def delete_search(self, search_id: UUID) -> bool:
         """
@@ -317,4 +289,4 @@ class ResearchOperations:
             return result.rowcount > 0
         except Exception as e:
             await self.db_session.rollback()
-            return False  # Delete failed
+            return False
