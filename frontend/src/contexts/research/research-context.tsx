@@ -11,18 +11,22 @@ import {
 } from "@/services/research/research-api"
 
 export interface Message {
-  id: string
-  content: string
-  sender: "user" | "assistant"
-  timestamp: Date
+  role: "user" | "assistant" | "system"
+  content: { text: string, citations?: Array<{ text: string, url: string }> }
+  sequence: number
 }
 
 export interface ResearchSession {
   id: string
+  title: string
   query: string
+  description?: string
+  is_featured: boolean
+  tags?: string[]
+  search_params?: Record<string, any>
   messages: Message[]
-  createdAt: Date
-  updatedAt: Date
+  created_at: string
+  updated_at: string
 }
 
 type ErrorType = {
@@ -59,7 +63,7 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
     
     if (err instanceof Response) {
       const message =
-        err.status === 404 ? "Session not found" :
+        err.status === 404 ? "Search not found" :
         err.status === 401 ? "Authentication required" :
         err.status === 403 ? "Not authorized" :
         err.status === 500 ? "Server error" :
@@ -111,7 +115,7 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
       const data = await fetchSessions()
       setSessions(data)
     } catch (err) {
-      setError(handleApiError(err, "Failed to fetch research sessions"))
+      setError(handleApiError(err, "Failed to fetch research searches"))
     } finally {
       setIsLoading(false)
     }
@@ -121,8 +125,8 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
   const getSession = async (sessionId: string) => {
     if (!sessionId?.trim()) {
       setError({
-        message: "Invalid session ID",
-        details: "Session ID cannot be empty"
+        message: "Invalid search ID",
+        details: "Search ID cannot be empty"
       })
       return
     }
@@ -136,7 +140,7 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
       setCurrentSession(session)
       updateSessionInList(session)
     } catch (err) {
-      setError(handleApiError(err, "Failed to fetch research session"))
+      setError(handleApiError(err, "Failed to fetch research search"))
     } finally {
       setIsLoading(false)
     }
@@ -160,7 +164,7 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
       updateSessionInList(newSession)
       return newSession.id
     } catch (err) {
-      const errorData = handleApiError(err, "Failed to create research session")
+      const errorData = handleApiError(err, "Failed to create research search")
       setError(errorData)
       throw new Error(errorData.message)
     } finally {
@@ -174,15 +178,15 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
     if (!sessionId?.trim() || !trimmedContent) {
       setError({
         message: "Invalid request",
-        details: !sessionId?.trim() ? "Session ID cannot be empty" : "Message content cannot be empty"
+        details: !sessionId?.trim() ? "Search ID cannot be empty" : "Message content cannot be empty"
       })
       return
     }
 
     if (!currentSession) {
       setError({
-        message: "No active session",
-        details: "Please select a session"
+        message: "No active search",
+        details: "Please select a search"
       })
       return
     }

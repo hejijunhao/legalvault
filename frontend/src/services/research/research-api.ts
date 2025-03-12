@@ -14,7 +14,7 @@ export async function getAuthHeader() {
 
 export async function fetchSessions(): Promise<ResearchSession[]> {
   const headers = await getAuthHeader()
-  const response = await fetch('/api/research/sessions', { headers })
+  const response = await fetch('/api/research/searches', { headers })
   
   if (!response.ok) throw response
   return await response.json()
@@ -22,7 +22,7 @@ export async function fetchSessions(): Promise<ResearchSession[]> {
 
 export async function fetchSession(sessionId: string): Promise<ResearchSession> {
   const headers = await getAuthHeader()
-  const response = await fetch(`/api/research/sessions/${sessionId}`, { headers })
+  const response = await fetch(`/api/research/searches/${sessionId}`, { headers })
   
   if (!response.ok) throw response
   return await response.json()
@@ -30,7 +30,7 @@ export async function fetchSession(sessionId: string): Promise<ResearchSession> 
 
 export async function createNewSession(query: string): Promise<ResearchSession> {
   const headers = await getAuthHeader()
-  const response = await fetch('/api/research/sessions', {
+  const response = await fetch('/api/research/searches', {
     method: 'POST',
     headers,
     body: JSON.stringify({ query })
@@ -42,10 +42,10 @@ export async function createNewSession(query: string): Promise<ResearchSession> 
 
 export async function sendSessionMessage(sessionId: string, content: string): Promise<ResearchSession> {
   const headers = await getAuthHeader()
-  const response = await fetch(`/api/research/sessions/${sessionId}/messages`, {
+  const response = await fetch(`/api/research/searches/${sessionId}/continue`, {
     method: 'POST',
     headers,
-    body: JSON.stringify({ content })
+    body: JSON.stringify({ follow_up_query: content })
   })
   
   if (!response.ok) throw response
