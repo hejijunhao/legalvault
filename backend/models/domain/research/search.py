@@ -5,6 +5,9 @@ from uuid import UUID
 import httpx  # For API calls
 import os
 import asyncio
+import logging
+
+logger = logging.getLogger(__name__)
 
 class ResearchSearch:
     """
@@ -24,7 +27,7 @@ class ResearchSearch:
         self.user_id = user_id
         self.enterprise_id = enterprise_id
         self._api_key = os.environ.get("PERPLEXITY_API_KEY", "")
-        self._api_url = os.environ.get("PERPLEXITY_API_URL", "https://api.perplexity.ai/sonar")
+        self._api_url = "https://api.perplexity.ai/chat/completions"
 
     def validate_query(self, query: str) -> bool:
         """
@@ -52,9 +55,35 @@ class ResearchSearch:
         if not self.validate_query(query):
             return {"error": "Invalid query"}
 
-        legal_prompt = "Interpret through a legal lens, prioritize case law and precedents."
-        full_query = f"{legal_prompt} {query}"
-        response = await self._call_perplexity_api(full_query)
+        # Create messages array with system prompt and user query
+        messages = [
+            {
+                "role": "system",
+                "content": "Provide a concise, accurate, and legally relevant response to the query, prioritizing authoritative sources such as case law, statutes, and reputable legal commentary, tailored to the needs of a practicing lawyer."
+            },
+            {
+                "role": "user",
+                "content": query
+            }
+        ]
+        
+        # Set up API payload
+        payload = {
+            "model": "sonar-pro",  # Using Sonar Pro for legal research
+            "messages": messages,
+            "temperature": 0.7,
+            "max_tokens": 500
+        }
+        
+        # Add any additional parameters from params
+        if params:
+            # Only add supported parameters
+            for key in ["temperature", "max_tokens", "top_p", "top_k"]:
+                if key in params:
+                    payload[key] = params[key]
+        
+        logger.debug(f"Starting search with query: {query[:100]}...")
+        response = await self._call_perplexity_api(payload)
         
         if "error" in response:
             return response
@@ -65,13 +94,19 @@ class ResearchSearch:
         
         return self.process_results(response)
 
-    async def continue_search(self, follow_up_query: str, thread_id: str) -> Dict[str, Any]:
+    async def continue_search(
+        self, 
+        follow_up_query: str, 
+        previous_messages: List[Dict[str, str]] = None,
+        thread_id: str = None  # Kept for backward compatibility
+    ) -> Dict[str, Any]:
         """
         Continue an existing search thread with a follow-up query.
         
         Args:
             follow_up_query: Additional query from the user
-            thread_id: ID of the existing search thread
+            previous_messages: List of previous messages in the conversation
+            thread_id: ID of the existing search thread (kept for compatibility)
             
         Returns:
             Processed response for the follow-up
@@ -79,7 +114,32 @@ class ResearchSearch:
         if not self.validate_query(follow_up_query):
             return {"error": "Invalid follow-up query"}
         
-        response = await self._call_perplexity_api(follow_up_query, thread_id)
+        # Use provided previous messages or start with a fresh conversation
+        messages = previous_messages or []
+        
+        # If no previous messages, add a system message
+        if not messages:
+            messages.append({
+                "role": "system",
+                "content": "Provide a concise, accurate, and legally relevant response to the follow-up query, prioritizing authoritative sources such as case law, statutes, and reputable legal commentary, tailored to the needs of a practicing lawyer."
+            })
+        
+        # Add the user's follow-up query
+        messages.append({
+            "role": "user",
+            "content": follow_up_query
+        })
+        
+        payload = {
+            "model": "sonar-pro",
+            "messages": messages,
+            "temperature": 0.7,
+            "max_tokens": 500
+        }
+        
+        logger.debug(f"Continuing search with follow-up query: {follow_up_query[:100]}...")
+        response = await self._call_perplexity_api(payload)
+        
         if "error" in response:
             return response
         
@@ -91,17 +151,15 @@ class ResearchSearch:
 
     async def _call_perplexity_api(
         self,
-        query: str,
-        thread_id: Optional[str] = None,
+        payload: Dict[str, Any],
         max_retries: int = 3,
         retry_delay: float = 1.0
     ) -> Dict[str, Any]:
         """
-        Internal helper to call Perplexity's Sonar API with retry logic.
+        Internal helper to call Perplexity's Chat Completions API with retry logic.
         
         Args:
-            query: Search query
-            thread_id: Optional thread ID for follow-ups
+            payload: Request payload for the API
             max_retries: Maximum number of retry attempts
             retry_delay: Base delay between retries (exponential backoff applied)
             
@@ -109,12 +167,13 @@ class ResearchSearch:
             Raw API response or error dict
         """
         if not self._api_key:
+            logger.error("API key not configured")
             return {"error": "API key not configured"}
         
-        headers = {"Authorization": f"Bearer {self._api_key}"}
-        payload = {"query": query}
-        if thread_id:
-            payload["thread_id"] = thread_id
+        headers = {
+            "Authorization": f"Bearer {self._api_key}",
+            "Content-Type": "application/json"
+        }
         
         retries = 0
         last_error = None
@@ -122,6 +181,7 @@ class ResearchSearch:
         while retries <= max_retries:
             try:
                 async with httpx.AsyncClient() as client:
+                    logger.debug(f"Calling Perplexity API with payload structure: {list(payload.keys())}")
                     response = await client.post(
                         self._api_url,
                         json=payload,
@@ -129,24 +189,28 @@ class ResearchSearch:
                         timeout=10.0
                     )
                     response.raise_for_status()
-                    return response.json()
+                    response_json = response.json()
+                    logger.debug(f"Received response with structure: {list(response_json.keys())}")
+                    return response_json
                     
             except httpx.HTTPStatusError as e:
                 status_code = e.response.status_code
-                # Don't retry auth errors or rate limits
-                if status_code in (401, 403, 429):
-                    if status_code == 401:
-                        return {"error": "API authentication failed. Please check your API key."}
-                    elif status_code == 429:
-                        return {"error": "Rate limit exceeded. Please try again later."}
-                    else:
-                        return {"error": f"Authorization error ({status_code}). Please check your credentials."}
-                
-                # For other HTTP errors, retry with backoff
-                last_error = f"HTTP error {status_code}"
+                error_content = e.response.text
+                if status_code == 401:
+                    logger.error(f"API authentication failed: {error_content}")
+                    return {"error": "API authentication failed. Please check your API key."}
+                elif status_code == 429:
+                    logger.error(f"Rate limit exceeded: {error_content}")
+                    return {"error": "Rate limit exceeded. Please try again later."}
+                elif status_code in (403,):
+                    logger.error(f"Authorization error ({status_code}): {error_content}")
+                    return {"error": f"Authorization error ({status_code}). Please check your credentials."}
+                else:
+                    logger.warning(f"HTTP error {status_code}: {error_content}. Retrying...")
+                    last_error = f"HTTP error {status_code}"
                 
             except httpx.RequestError as e:
-                # Network-related errors are retryable
+                logger.warning(f"Request error: {str(e)}. Retrying...")
                 last_error = f"Request error: {str(e)}"
             
             # Apply exponential backoff
@@ -156,6 +220,7 @@ class ResearchSearch:
             retries += 1
         
         # If we've exhausted retries, return the last error
+        logger.error(f"API call failed after {max_retries} attempts. Last error: {last_error}")
         return {"error": f"API call failed after {max_retries} attempts. Last error: {last_error}"}
 
     def process_results(self, response: Dict[str, Any]) -> Dict[str, Any]:
@@ -168,10 +233,17 @@ class ResearchSearch:
         Returns:
             Structured response with text and citations
         """
-        text = response.get("answer", "")
+        # Extract text from the first choice's message content
+        text = response.get("choices", [{}])[0].get("message", {}).get("content", "")
+        
+        # Extract citations if available
         citations = self.extract_citations(response)
+        
+        # Use the response ID as thread_id for consistency
+        thread_id = response.get("id", "")
+        
         return {
-            "thread_id": response.get("thread_id", ""),
+            "thread_id": thread_id,
             "text": text,
             "citations": citations
         }
@@ -186,7 +258,22 @@ class ResearchSearch:
         Returns:
             List of citation objects (e.g., {"text": "", "url": ""})
         """
-        return response.get("citations", [])
+        # Extract citations from the response
+        raw_citations = response.get("citations", [])
+        
+        # Format citations as objects with text and url
+        formatted_citations = []
+        for i, citation in enumerate(raw_citations):
+            if isinstance(citation, str):
+                formatted_citations.append({
+                    "text": f"Source {i+1}",
+                    "url": citation
+                })
+            elif isinstance(citation, dict):
+                # If citations are already formatted as objects, use them directly
+                formatted_citations.append(citation)
+        
+        return formatted_citations
 
     def _validate_api_response(self, response: Dict[str, Any]) -> bool:
         """
@@ -202,12 +289,21 @@ class ResearchSearch:
         if not isinstance(response, dict):
             return False
             
-        # Verify answer field exists and is a string
-        if "answer" not in response or not isinstance(response["answer"], str):
+        # Verify choices array exists
+        if "choices" not in response or not isinstance(response["choices"], list) or not response["choices"]:
             return False
             
-        # Verify thread_id exists
-        if "thread_id" not in response or not response["thread_id"]:
+        # Verify first choice has a message with content
+        first_choice = response["choices"][0]
+        if not isinstance(first_choice, dict) or "message" not in first_choice:
+            return False
+            
+        message = first_choice["message"]
+        if not isinstance(message, dict) or "content" not in message or not isinstance(message["content"], str):
+            return False
+            
+        # Verify id exists
+        if "id" not in response or not response["id"]:
             return False
             
         # Verify citations is a list if present
