@@ -49,16 +49,10 @@ class SearchResponse(SearchBase):
     model_config = {"from_attributes": True}
 
 class SearchListResponse(BaseModel):
-    """Schema for search list responses"""
-    id: UUID
-    title: str
-    description: Optional[str] = None
-    is_featured: bool
-    tags: Optional[List[str]] = None
-    created_at: datetime
-    updated_at: datetime
-
-    model_config = {"from_attributes": True}
+    items: List[SearchResponse]
+    total: int
+    offset: int
+    limit: int
 
 class SearchUpdate(BaseModel):
     """Schema for updating search metadata"""

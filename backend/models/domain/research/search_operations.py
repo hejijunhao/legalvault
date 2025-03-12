@@ -11,6 +11,7 @@ from sqlalchemy.orm import selectinload
 from models.database.research.public_searches import PublicSearch
 from models.domain.research.search import ResearchSearch
 from models.domain.research.search_message_operations import SearchMessageOperations
+from models.database.research.public_search_messages import PublicSearchMessage
 
 class ResearchOperations:
     """
@@ -101,6 +102,10 @@ class ResearchOperations:
             last_msg = thread_result.scalars().first()
             thread_id = last_msg.content.get("thread_id") if last_msg else None
             
+            # If thread_id is missing, log and handle gracefully
+            if not thread_id:
+                print(f"Warning: No thread_id found for search {search_id}, starting new conversation context")
+            
             # Get next sequence
             seq_query = select(func.max(PublicSearchMessage.sequence)).where(
                 PublicSearchMessage.search_id == search_id
@@ -180,7 +185,7 @@ class ResearchOperations:
         limit: int = 20,
         offset: int = 0,
         featured_only: bool = False
-    ) -> List[Dict[str, Any]]:
+    ) -> Dict[str, Any]:
         """
         List searches with optional filtering.
         
@@ -192,24 +197,38 @@ class ResearchOperations:
             featured_only: Whether to only return featured searches
             
         Returns:
-            List of search dictionaries
+            Dictionary with items list and pagination metadata
         """
         try:
+            # Build base query for data
             query = select(PublicSearch)
             
+            # Build count query with same filters
+            count_query = select(func.count()).select_from(PublicSearch)
+            
+            # Apply filters to both queries
             if user_id:
                 query = query.where(PublicSearch.user_id == user_id)
+                count_query = count_query.where(PublicSearch.user_id == user_id)
             if enterprise_id:
                 query = query.where(PublicSearch.enterprise_id == enterprise_id)
+                count_query = count_query.where(PublicSearch.enterprise_id == enterprise_id)
             if featured_only:
                 query = query.where(PublicSearch.is_featured == True)
+                count_query = count_query.where(PublicSearch.is_featured == True)
             
+            # Apply pagination to data query only
             query = query.order_by(PublicSearch.updated_at.desc()).limit(limit).offset(offset)
             
+            # Execute both queries
             result = await self.db_session.execute(query)
-            db_searches = result.scalars().all()
+            count_result = await self.db_session.execute(count_query)
             
-            searches = [
+            db_searches = result.scalars().all()
+            total_count = count_result.scalar() or 0
+            
+            # Format results
+            items = [
                 {
                     "id": str(db_search.id),
                     "title": db_search.title,
@@ -223,9 +242,21 @@ class ResearchOperations:
                 }
                 for db_search in db_searches
             ]
-            return searches
+            
+            return {
+                "items": items,
+                "total": total_count,
+                "offset": offset,
+                "limit": limit
+            }
         except Exception as e:
-            return []
+            print(f"Error listing searches: {str(e)}")
+            return {
+                "items": [],
+                "total": 0,
+                "offset": offset,
+                "limit": limit
+            }
     
     async def update_search_metadata(
         self, 

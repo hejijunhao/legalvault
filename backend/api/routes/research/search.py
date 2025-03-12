@@ -121,7 +121,7 @@ async def get_search(
     
     return search
 
-@router.get("/", response_model=List[SearchListResponse])
+@router.get("/", response_model=SearchListResponse)
 async def list_searches(
     featured_only: bool = Query(False, description="Only return featured searches"),
     limit: int = Query(20, ge=1, le=100, description="Maximum number of results"),

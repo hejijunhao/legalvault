@@ -3,7 +3,7 @@
 from typing import List, Dict, Any, Optional
 from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, delete, update
+from sqlalchemy import select, delete, update, func
 
 from models.database.research.public_search_messages import PublicSearchMessage
 from models.domain.research.search_message import ResearchMessage
@@ -80,3 +80,10 @@ class SearchMessageOperations:
             }
             for m in messages
         ]
+
+    async def count_messages_by_search(self, search_id: UUID) -> int:
+        """Count the total number of messages for a given search without retrieving all records."""
+        query = select(func.count()).where(PublicSearchMessage.search_id == search_id)
+        result = await self.db.execute(query)
+        count = result.scalar_one()
+        return count

@@ -68,24 +68,4 @@ class ResearchMessage:
             "destination_type": destination_type
         }
 
-    def bookmark_message(self) -> Dict[str, Any]:
-        """Prepare data to bookmark this message."""
-        if not self.message_id:
-            raise ValueError("Cannot bookmark a message without an ID")
-        return {"message_id": self.message_id, "bookmarked": True}
-
-    def highlight_message(self, highlight_data: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Apply highlighting logic to this message.
         
-        Args:
-            highlight_data: Dict with highlight details (e.g., start_pos, end_pos, color).
-        
-        Returns:
-            Updated content with highlight metadata.
-        """
-        if "start_pos" not in highlight_data or "end_pos" not in highlight_data:
-            raise ValueError("Highlight data must include start_pos and end_pos")
-        updated_content = self.content.copy()
-        updated_content["highlights"] = updated_content.get("highlights", []) + [highlight_data]
-        return updated_content

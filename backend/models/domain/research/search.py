@@ -4,6 +4,7 @@ from typing import Dict, List, Optional, Any
 from uuid import UUID
 import httpx  # For API calls
 import os
+import asyncio
 
 class ResearchSearch:
     """
@@ -58,6 +59,10 @@ class ResearchSearch:
         if "error" in response:
             return response
         
+        # Validate response structure
+        if not self._validate_api_response(response):
+            return {"error": "Invalid API response structure"}
+        
         return self.process_results(response)
 
     async def continue_search(self, follow_up_query: str, thread_id: str) -> Dict[str, Any]:
@@ -78,19 +83,27 @@ class ResearchSearch:
         if "error" in response:
             return response
         
+        # Validate response structure
+        if not self._validate_api_response(response):
+            return {"error": "Invalid API response structure"}
+        
         return self.process_results(response)
 
     async def _call_perplexity_api(
         self,
         query: str,
         thread_id: Optional[str] = None,
+        max_retries: int = 3,
+        retry_delay: float = 1.0
     ) -> Dict[str, Any]:
         """
-        Internal helper to call Perplexity's Sonar API.
+        Internal helper to call Perplexity's Sonar API with retry logic.
         
         Args:
             query: Search query
             thread_id: Optional thread ID for follow-ups
+            max_retries: Maximum number of retry attempts
+            retry_delay: Base delay between retries (exponential backoff applied)
             
         Returns:
             Raw API response or error dict
@@ -103,26 +116,47 @@ class ResearchSearch:
         if thread_id:
             payload["thread_id"] = thread_id
         
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    self._api_url,
-                    json=payload,
-                    headers=headers,
-                    timeout=10.0
-                )
-                response.raise_for_status()
-                return response.json()
-        except httpx.HTTPStatusError as e:
-            status_code = e.response.status_code
-            if status_code == 401:
-                return {"error": "API authentication failed. Please check your API key."}
-            elif status_code == 429:
-                return {"error": "Rate limit exceeded. Please try again later."}
-            else:
-                return {"error": f"Search service error ({status_code}). Please try again later."}
-        except httpx.RequestError:
-            return {"error": "API call failed. Please check your network connection and try again."}
+        retries = 0
+        last_error = None
+        
+        while retries <= max_retries:
+            try:
+                async with httpx.AsyncClient() as client:
+                    response = await client.post(
+                        self._api_url,
+                        json=payload,
+                        headers=headers,
+                        timeout=10.0
+                    )
+                    response.raise_for_status()
+                    return response.json()
+                    
+            except httpx.HTTPStatusError as e:
+                status_code = e.response.status_code
+                # Don't retry auth errors or rate limits
+                if status_code in (401, 403, 429):
+                    if status_code == 401:
+                        return {"error": "API authentication failed. Please check your API key."}
+                    elif status_code == 429:
+                        return {"error": "Rate limit exceeded. Please try again later."}
+                    else:
+                        return {"error": f"Authorization error ({status_code}). Please check your credentials."}
+                
+                # For other HTTP errors, retry with backoff
+                last_error = f"HTTP error {status_code}"
+                
+            except httpx.RequestError as e:
+                # Network-related errors are retryable
+                last_error = f"Request error: {str(e)}"
+            
+            # Apply exponential backoff
+            if retries < max_retries:
+                await asyncio.sleep(retry_delay * (2 ** retries))
+            
+            retries += 1
+        
+        # If we've exhausted retries, return the last error
+        return {"error": f"API call failed after {max_retries} attempts. Last error: {last_error}"}
 
     def process_results(self, response: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -153,3 +187,31 @@ class ResearchSearch:
             List of citation objects (e.g., {"text": "", "url": ""})
         """
         return response.get("citations", [])
+
+    def _validate_api_response(self, response: Dict[str, Any]) -> bool:
+        """
+        Validate that the API response has the expected structure.
+        
+        Args:
+            response: Raw API response to validate
+            
+        Returns:
+            True if valid, False otherwise
+        """
+        # Check for required fields
+        if not isinstance(response, dict):
+            return False
+            
+        # Verify answer field exists and is a string
+        if "answer" not in response or not isinstance(response["answer"], str):
+            return False
+            
+        # Verify thread_id exists
+        if "thread_id" not in response or not response["thread_id"]:
+            return False
+            
+        # Verify citations is a list if present
+        if "citations" in response and not isinstance(response["citations"], list):
+            return False
+            
+        return True
