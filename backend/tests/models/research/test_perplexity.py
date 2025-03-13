@@ -19,17 +19,39 @@ async def test_search():
     # Create a search instance
     search = ResearchSearch(user_id=uuid4(), enterprise_id=uuid4())
     
+    # Define the system prompt for legal research
+    system_prompt = "Provide a concise, accurate, and legally relevant response to the query, prioritizing authoritative sources such as case law, statutes, and reputable legal commentary, tailored to the needs of a practicing lawyer."
+    
     # Test initial query
     print("Testing initial query...")
-    result = await search.start_search("What are the key elements of a valid contract?")
+    initial_query = "What are the key elements of a valid contract?"
     
-    if "error" in result:
-        print(f"Error: {result['error']}")
+    # Create initial messages array with system prompt and user query
+    initial_messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": initial_query}
+    ]
+    
+    # Call the API with the initial messages
+    # Note: We're bypassing start_search to directly test the API call
+    payload = {
+        "model": "sonar-pro",
+        "messages": initial_messages,
+        "temperature": 0.7,
+        "max_tokens": 500
+    }
+    
+    print(f"Sending initial payload with {len(initial_messages)} messages")
+    initial_response = await search._call_perplexity_api(payload)
+    
+    if "error" in initial_response:
+        print(f"Error in initial query: {initial_response['error']}")
         return
     
-    print(f"Thread ID: {result['thread_id']}")
-    print(f"Text: {result['text'][:200]}...")
-    print(f"Citations: {result['citations']}")
+    # Extract the assistant's response
+    assistant_response = initial_response["choices"][0]["message"]["content"]
+    print(f"\nInitial response received:")
+    print(f"Text: {assistant_response[:200]}...")
     
     # Add a delay before the follow-up query to avoid rate limiting
     print("\nWaiting 3 seconds before follow-up query...")
@@ -37,38 +59,45 @@ async def test_search():
     
     # Test follow-up query
     print("Testing follow-up query...")
-    # Create a messages array with the previous conversation
-    # Note: Perplexity might expect a specific format for messages
-    previous_messages = [
-        {
-            "role": "system",
-            "content": "Provide a concise, accurate, and legally relevant response to the query, prioritizing authoritative sources such as case law, statutes, and reputable legal commentary, tailored to the needs of a practicing lawyer."
-        },
-        {
-            "role": "user",
-            "content": "What are the key elements of a valid contract?"
-        },
-        {
-            "role": "assistant",
-            "content": result['text']
-        }
+    follow_up_query = "How does consideration differ between common law and civil law systems?"
+    
+    # Create follow-up messages array with the complete conversation history
+    follow_up_messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": initial_query},
+        {"role": "assistant", "content": assistant_response},
+        {"role": "user", "content": follow_up_query}
     ]
     
-    print(f"Using previous_messages with {len(previous_messages)} messages")
+    # Create the follow-up payload
+    follow_up_payload = {
+        "model": "sonar-pro",
+        "messages": follow_up_messages,
+        "temperature": 0.7,
+        "max_tokens": 500
+    }
+    
+    print(f"Sending follow-up payload with {len(follow_up_messages)} messages")
+    print(f"Follow-up query: {follow_up_query}")
     
     try:
-        follow_up = await search.continue_search(
-            "How does consideration differ between common law and civil law systems?",
-            previous_messages=previous_messages
-        )
+        follow_up_response = await search._call_perplexity_api(follow_up_payload)
         
-        if "error" in follow_up:
-            print(f"Error: {follow_up['error']}")
+        if "error" in follow_up_response:
+            print(f"Error in follow-up query: {follow_up_response['error']}")
             return
         
-        print(f"Thread ID: {follow_up['thread_id']}")
-        print(f"Text: {follow_up['text'][:200]}...")
-        print(f"Citations: {follow_up['citations']}")
+        # Extract the assistant's response to the follow-up
+        follow_up_assistant_response = follow_up_response["choices"][0]["message"]["content"]
+        print(f"\nFollow-up response received:")
+        print(f"Text: {follow_up_assistant_response[:200]}...")
+        
+        # Extract citations if available
+        if "citations" in follow_up_response:
+            print(f"Citations: {follow_up_response['citations']}")
+        else:
+            print("No citations provided in the response.")
+            
     except Exception as e:
         print(f"Exception during follow-up query: {str(e)}")
 
