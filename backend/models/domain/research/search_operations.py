@@ -28,15 +28,16 @@ class ResearchOperations:
         """
         self.db_session = db_session
     
-    async def create_search(self, user_id: UUID, enterprise_id: UUID, query: str, 
+    async def create_search(self, user_id: UUID, query: str, 
+                           enterprise_id: Optional[UUID] = None,
                            search_params: Optional[Dict] = None) -> Tuple[Optional[UUID], Dict[str, Any]]:
         """
         Create and execute a new search, persisting it and its messages.
         
         Args:
             user_id: UUID of the user initiating the search
-            enterprise_id: UUID of the user's enterprise
             query: The search query
+            enterprise_id: Optional UUID of the user's enterprise
             search_params: Optional parameters for the search
             
         Returns:

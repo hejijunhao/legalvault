@@ -210,7 +210,7 @@ async def delete_search(
         raise HTTPException(status_code=500, detail="Failed to delete search")
 
 # Helper function to get user's enterprise ID
-async def get_user_enterprise(current_user: Union[dict, UUID], db: AsyncSession) -> UUID:
+async def get_user_enterprise(current_user: Union[dict, UUID], db: AsyncSession) -> Optional[UUID]:
     """
     Get the enterprise ID for a user.
     
@@ -219,10 +219,7 @@ async def get_user_enterprise(current_user: Union[dict, UUID], db: AsyncSession)
         db: SQLAlchemy async session
         
     Returns:
-        UUID of the user's enterprise
-        
-    Raises:
-        HTTPException: If user has no associated enterprise
+        UUID of the user's enterprise or None if user has no associated enterprise
     """
     from sqlalchemy import text
     
@@ -241,7 +238,5 @@ async def get_user_enterprise(current_user: Union[dict, UUID], db: AsyncSession)
     result = await db.execute(query, {"user_id": user_id})
     enterprise_id = result.scalar_one_or_none()
     
-    if not enterprise_id:
-        raise HTTPException(status_code=400, detail="User not associated with an enterprise")
-    
+    # Return None instead of raising an exception if user has no associated enterprise
     return enterprise_id

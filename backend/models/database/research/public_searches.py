@@ -44,8 +44,8 @@ class PublicSearch(VaultBase, TimestampMixin):
                     nullable=False, index=True,
                     comment="User who created this search")
     enterprise_id = Column(UUID(as_uuid=True), ForeignKey('vault.enterprises.id'), 
-                          nullable=False, index=True,
-                          comment="Enterprise the user belongs to")
+                          nullable=True, index=True,
+                          comment="Enterprise the user belongs to (optional)")
     
     # Search parameters/metadata
     search_params = Column(JSONB, nullable=True,
