@@ -4,17 +4,20 @@ from typing import List, Optional, Union
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from core.database import get_db
 from core.auth import get_current_user, get_user_permissions
 from models.database.user import User
 from models.domain.research.search_operations import ResearchOperations
+from services.workflow.research.search_workflow import ResearchSearchWorkflow
 from models.schemas.research.search import (
     SearchCreate,
     SearchContinue,
     SearchResponse,
     SearchListResponse,
-    SearchUpdate
+    SearchUpdate,
+    QueryStatus
 )
 
 router = APIRouter(
@@ -38,21 +41,22 @@ async def create_search(
     # Get enterprise_id from user context (implementation depends on your auth system)
     enterprise_id = await get_user_enterprise(current_user, db)
     
+    # Use the operations class to handle the search creation and persistence
     operations = ResearchOperations(db)
-    search_id, response = await operations.create_search(
+    search_result = await operations.create_search(
         user_id=current_user["id"],
-        enterprise_id=enterprise_id,
         query=data.query,
+        enterprise_id=enterprise_id,
         search_params=data.search_params
     )
     
     # Check for errors
-    if not search_id or "error" in response:
-        error_message = response.get("error", "Failed to create search")
+    if not search_result or isinstance(search_result, dict) and "error" in search_result:
+        error_message = search_result.get("error", "Failed to create search") if isinstance(search_result, dict) else "Failed to create search"
         raise HTTPException(status_code=500, detail=error_message)
     
     # Return the full search with messages
-    search_data = await operations.get_search_by_id(search_id)
+    search_data = await operations.get_search_by_id(search_result)
     if not search_data:
         raise HTTPException(status_code=500, detail="Search created but failed to retrieve details")
     
@@ -86,7 +90,7 @@ async def continue_search(
     )
     
     # Check for errors
-    if "error" in response:
+    if isinstance(response, dict) and "error" in response:
         error_message = response.get("error", "Failed to continue search")
         raise HTTPException(status_code=500, detail=error_message)
     
@@ -124,6 +128,7 @@ async def get_search(
 @router.get("/", response_model=SearchListResponse)
 async def list_searches(
     featured_only: bool = Query(False, description="Only return featured searches"),
+    status: Optional[QueryStatus] = Query(None, description="Filter by search status"),
     limit: int = Query(20, ge=1, le=100, description="Maximum number of results"),
     offset: int = Query(0, ge=0, description="Pagination offset"),
     current_user: dict = Depends(get_current_user),
@@ -134,7 +139,7 @@ async def list_searches(
     List searches with optional filtering.
     
     Returns a list of searches created by the current user. Can be filtered to show
-    only featured searches.
+    only featured searches or by status.
     """
     # Get enterprise_id from user context
     enterprise_id = await get_user_enterprise(current_user, db)
@@ -145,7 +150,8 @@ async def list_searches(
         enterprise_id=enterprise_id,
         limit=limit,
         offset=offset,
-        featured_only=featured_only
+        featured_only=featured_only,
+        status=status if status else None
     )
     
     return searches
@@ -161,7 +167,7 @@ async def update_search(
     """
     Update search metadata.
     
-    Updates the title, description, featured status, or tags of a search.
+    Updates the title, description, featured status, tags, category, type or status of a search.
     """
     operations = ResearchOperations(db)
     
@@ -171,12 +177,10 @@ async def update_search(
         raise HTTPException(status_code=404, detail="Search not found")
     
     # Update search
+    update_data = data.model_dump(exclude_unset=True)
     success = await operations.update_search_metadata(
         search_id=search_id,
-        title=data.title,
-        description=data.description,
-        tags=data.tags,
-        is_featured=data.is_featured
+        **update_data
     )
     
     if not success:
@@ -201,8 +205,12 @@ async def delete_search(
     
     # Verify ownership of search
     search = await operations.get_search_by_id(search_id)
-    if not search or str(search["user_id"]) != str(current_user["id"]):
+    if not search:
         raise HTTPException(status_code=404, detail="Search not found")
+    
+    # Only allow deletion by owner or admin
+    if str(search["user_id"]) != str(current_user["id"]) and "admin" not in user_permissions:
+        raise HTTPException(status_code=403, detail="Not authorized to delete this search")
     
     # Delete search
     success = await operations.delete_search(search_id)
@@ -221,22 +229,9 @@ async def get_user_enterprise(current_user: Union[dict, UUID], db: AsyncSession)
     Returns:
         UUID of the user's enterprise or None if user has no associated enterprise
     """
-    from sqlalchemy import text
+    user_id = current_user["id"] if isinstance(current_user, dict) else current_user
     
-    # If current_user is a dictionary with enterprise_id
-    if isinstance(current_user, dict) and "enterprise_id" in current_user:
-        return current_user["enterprise_id"]
-    
-    # Otherwise, query the database using the UUID
-    user_id = current_user if isinstance(current_user, UUID) else current_user["id"]
-    
-    # Use direct SQL query to avoid ORM relationship issues
-    query = text("""
-        SELECT enterprise_id FROM vault.users WHERE id = :user_id
-    """)
-    
-    result = await db.execute(query, {"user_id": user_id})
-    enterprise_id = result.scalar_one_or_none()
-    
-    # Return None instead of raising an exception if user has no associated enterprise
-    return enterprise_id
+    # Use SQLAlchemy ORM to query the user's enterprise_id
+    stmt = select(User.enterprise_id).where(User.id == user_id)
+    result = await db.execute(stmt)
+    return result.scalar_one_or_none()

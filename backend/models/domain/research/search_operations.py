@@ -12,6 +12,8 @@ from models.database.research.public_searches import PublicSearch
 from models.domain.research.search import ResearchSearch
 from models.domain.research.search_message_operations import SearchMessageOperations
 from models.database.research.public_search_messages import PublicSearchMessage
+# Import the workflow and LLM service
+from services.workflow.research.search_workflow import ResearchSearchWorkflow, GPT4oMiniService
 
 class ResearchOperations:
     """
@@ -44,32 +46,21 @@ class ResearchOperations:
             Tuple of (search_id, search_response) or (None, error_response)
         """
         try:
-            # Execute search using the domain model
-            search_domain = ResearchSearch(user_id=user_id, enterprise_id=enterprise_id)
-            response = await search_domain.start_search(query, search_params)
+            # Initialize the workflow with an LLM service
+            llm_service = GPT4oMiniService()
+            workflow = ResearchSearchWorkflow(llm_service)
+            
+            # Execute search using the workflow layer
+            response = await workflow.execute_search(user_id, query, enterprise_id, search_params)
             
             # If search execution failed, return the error
             if "error" in response:
                 return None, response
             
-            # Create search record
+            # Create search record in the database
             search_id = uuid4()
-            db_search = PublicSearch(
-                id=search_id,
-                title=query[:255],
-                user_id=user_id,
-                enterprise_id=enterprise_id,
-                search_params=search_params or {}
-            )
-            self.db_session.add(db_search)
-        
-            # Use SearchMessageOperations to create messages
-            message_ops = SearchMessageOperations(self.db_session)
-            message_ops.create_message(search_id, "user", {"text": query}, 0)
-            message_ops.create_message(search_id, "assistant", response, 1)
-        
-            # Commit everything
-            await self.db_session.commit()
+            await self.create_search_record(search_id, user_id, query, enterprise_id, search_params, response)
+            
             return search_id, response
         except Exception as e:
             await self.db_session.rollback()
@@ -103,38 +94,113 @@ class ResearchOperations:
             last_msg = thread_result.scalars().first()
             thread_id = last_msg.content.get("thread_id") if last_msg else None
             
-            # If thread_id is missing, log and handle gracefully
-            if not thread_id:
-                print(f"Warning: No thread_id found for search {search_id}, starting new conversation context")
+            # Initialize the workflow with an LLM service
+            llm_service = GPT4oMiniService()
+            workflow = ResearchSearchWorkflow(llm_service)
             
-            # Get next sequence
-            seq_query = select(func.max(PublicSearchMessage.sequence)).where(
-                PublicSearchMessage.search_id == search_id
+            # Execute follow-up using the workflow layer
+            response = await workflow.execute_follow_up(
+                user_id=db_search.user_id,
+                enterprise_id=db_search.enterprise_id,
+                follow_up_query=follow_up_query,
+                thread_id=thread_id,
+                search_params=db_search.search_params
             )
-            seq_result = await self.db_session.execute(seq_query)
-            next_seq = (seq_result.scalar() or -1) + 1
-            
-            # Execute follow-up using domain model
-            search_domain = ResearchSearch(user_id=db_search.user_id, enterprise_id=db_search.enterprise_id)
-            response = await search_domain.continue_search(follow_up_query, thread_id) if thread_id else \
-                       await search_domain.start_search(follow_up_query, db_search.search_params)
             
             # If search execution failed, return the error
             if "error" in response:
                 return response
             
-            # Use SearchMessageOperations to create messages
-            message_ops = SearchMessageOperations(self.db_session)
-            message_ops.create_message(search_id, "user", {"text": follow_up_query}, next_seq)
-            message_ops.create_message(search_id, "assistant", response, next_seq + 1)
+            # Persist the follow-up query and response
+            await self.add_search_messages(search_id, follow_up_query, response)
             
-            # Update timestamp
-            db_search.updated_at = datetime.utcnow()
-            await self.db_session.commit()
             return response
         except Exception as e:
             await self.db_session.rollback()
             return {"error": f"Database error: {str(e)}"}
+    
+    async def create_search_record(self, 
+                                 search_id: UUID,
+                                 user_id: UUID, 
+                                 query: str,
+                                 enterprise_id: Optional[UUID] = None,
+                                 search_params: Optional[Dict] = None,
+                                 response: Dict[str, Any] = None,
+                                 metadata: Optional[Dict] = None) -> UUID:
+        """
+        Create a search record in the database without executing the search.
+        
+        Args:
+            search_id: UUID for the new search
+            user_id: UUID of the user initiating the search
+            query: The original search query
+            enterprise_id: Optional UUID of the user's enterprise
+            search_params: Optional parameters for the search
+            response: The processed search response
+            metadata: Optional metadata about the search execution
+            
+        Returns:
+            The created search ID
+        """
+        # Create search record
+        db_search = PublicSearch(
+            id=search_id,
+            title=query[:255],
+            user_id=user_id,
+            enterprise_id=enterprise_id,
+            search_params=search_params or {}
+        )
+        
+        # Add metadata if provided
+        if metadata:
+            # Store metadata as JSONB in search_params
+            db_search.search_params = {
+                **(db_search.search_params or {}),
+                "metadata": metadata
+            }
+        
+        self.db_session.add(db_search)
+
+        # Use SearchMessageOperations to create messages if response is provided
+        if response:
+            message_ops = SearchMessageOperations(self.db_session)
+            message_ops.create_message(search_id, "user", {"text": query}, 0)
+            message_ops.create_message(search_id, "assistant", response, 1)
+
+        # Commit everything
+        await self.db_session.commit()
+        return search_id
+    
+    async def add_search_messages(self,
+                               search_id: UUID,
+                               user_query: str,
+                               assistant_response: Dict[str, Any]) -> None:
+        """
+        Add user query and assistant response messages to an existing search.
+        
+        Args:
+            search_id: UUID of the existing search
+            user_query: Query from the user
+            assistant_response: Response from the assistant
+        """
+        # Get next sequence
+        seq_query = select(func.max(PublicSearchMessage.sequence)).where(
+            PublicSearchMessage.search_id == search_id
+        )
+        seq_result = await self.db_session.execute(seq_query)
+        next_seq = (seq_result.scalar() or -1) + 1
+        
+        # Use SearchMessageOperations to create messages
+        message_ops = SearchMessageOperations(self.db_session)
+        message_ops.create_message(search_id, "user", {"text": user_query}, next_seq)
+        message_ops.create_message(search_id, "assistant", assistant_response, next_seq + 1)
+        
+        # Update timestamp
+        update_stmt = update(PublicSearch).where(PublicSearch.id == search_id).values(
+            updated_at=datetime.utcnow()
+        )
+        await self.db_session.execute(update_stmt)
+        await self.db_session.commit()
     
     async def get_search_by_id(self, search_id: UUID) -> Optional[Dict[str, Any]]:
         """
@@ -161,7 +227,7 @@ class ResearchOperations:
                 "title": db_search.title,
                 "description": db_search.description,
                 "user_id": str(db_search.user_id),
-                "enterprise_id": str(db_search.enterprise_id),
+                "enterprise_id": str(db_search.enterprise_id) if db_search.enterprise_id else None,
                 "is_featured": db_search.is_featured,
                 "tags": db_search.tags,
                 "search_params": db_search.search_params,
@@ -235,7 +301,7 @@ class ResearchOperations:
                     "title": db_search.title,
                     "description": db_search.description,
                     "user_id": str(db_search.user_id),
-                    "enterprise_id": str(db_search.enterprise_id),
+                    "enterprise_id": str(db_search.enterprise_id) if db_search.enterprise_id else None,
                     "is_featured": db_search.is_featured,
                     "tags": db_search.tags,
                     "created_at": db_search.created_at.isoformat() if db_search.created_at else None,
@@ -322,3 +388,26 @@ class ResearchOperations:
         except Exception as e:
             await self.db_session.rollback()
             return False
+    
+    async def get_search_status(self, search_id: UUID) -> Dict[str, Any]:
+        """
+        Get the current status of a search.
+        
+        Args:
+            search_id: UUID of the search
+            
+        Returns:
+            Dictionary with search status information
+        """
+        search_data = await self.get_search_by_id(search_id)
+        if not search_data:
+            return {"error": "Search not found"}
+            
+        # Extract status information from search data
+        return {
+            "id": search_data["id"],
+            "status": "completed",  # Default status for now
+            "created_at": search_data["created_at"],
+            "updated_at": search_data["updated_at"],
+            "message_count": len(search_data["messages"]) if "messages" in search_data else 0
+        }
