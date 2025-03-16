@@ -8,6 +8,8 @@ export interface ApiError {
   statusText: string
   message: string
   details?: any
+  code?: string
+  retryAfter?: number  // For rate limiting errors
 }
 
 export async function getAuthHeader() {
@@ -41,11 +43,72 @@ async function handleApiError(response: Response): Promise<never> {
     console.error('Failed to parse error response', e)
   }
   
+  // Create a base error object
   const apiError: ApiError = {
     status: response.status,
     statusText: response.statusText,
     message: errorMessage,
     details: errorDetails
+  }
+  
+  // Add specific handling for common error codes
+  switch (response.status) {
+    case 401:
+      apiError.message = 'Your session has expired. Please log in again.'
+      apiError.code = 'AUTH_REQUIRED'
+      break
+    case 403:
+      apiError.message = 'You do not have permission to perform this action.'
+      apiError.code = 'PERMISSION_DENIED'
+      break
+    case 404:
+      apiError.message = 'The requested resource was not found.'
+      apiError.code = 'NOT_FOUND'
+      break
+    case 409:
+      apiError.message = 'This operation conflicts with the current state.'
+      apiError.code = 'CONFLICT'
+      break
+    case 429:
+      apiError.message = 'Too many requests. Please try again later.'
+      apiError.code = 'RATE_LIMITED'
+      
+      // Check for Retry-After header (common in rate limiting responses)
+      const retryAfter = response.headers.get('Retry-After')
+      if (retryAfter) {
+        apiError.retryAfter = parseInt(retryAfter, 10)
+        if (!isNaN(apiError.retryAfter)) {
+          apiError.message = `Rate limit exceeded. Please try again in ${apiError.retryAfter} seconds.`
+        }
+      }
+      
+      // Special handling for Perplexity Sonar API rate limiting
+      if (errorDetails?.error?.includes?.('rate limit') || 
+          errorDetails?.message?.toLowerCase?.().includes('rate limit') ||
+          errorDetails?.detail?.toLowerCase?.().includes('rate limit') ||
+          errorDetails?.message?.toLowerCase?.().includes('perplexity') ||
+          errorDetails?.detail?.toLowerCase?.().includes('perplexity') ||
+          errorDetails?.message?.toLowerCase?.().includes('sonar') ||
+          errorDetails?.detail?.toLowerCase?.().includes('sonar')) {
+        apiError.code = 'PERPLEXITY_RATE_LIMITED'
+        apiError.message = 'Perplexity API rate limit reached. Please try again later.'
+      }
+      break
+    case 500:
+    case 502:
+    case 503:
+    case 504:
+      apiError.message = 'A server error occurred. Please try again later.'
+      apiError.code = 'SERVER_ERROR'
+      break
+  }
+  
+  // If we have more specific error details from the API, use those instead
+  if (errorDetails?.detail || errorDetails?.message) {
+    // But keep our specific code if we assigned one
+    const code = apiError.code
+    apiError.message = errorDetails.detail || errorDetails.message
+    if (code) apiError.code = code
   }
   
   throw apiError

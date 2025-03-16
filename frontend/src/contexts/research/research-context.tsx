@@ -130,10 +130,74 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
     
     if (err && 'status' in err) {
       // Handle ApiError from our API service
+      let message = err.message || defaultMessage
+      let code = err.status.toString()
+      let details = err.details ? JSON.stringify(err.details) : err.statusText
+      
+      // Handle specific error codes with user-friendly messages
+      if (err.code) {
+        code = err.code
+        
+        // Add specific UI actions or guidance based on error code
+        switch (err.code) {
+          case 'AUTH_REQUIRED':
+            message = 'Your session has expired. Please log in again.'
+            // Could trigger a redirect to login page here
+            break
+          case 'PERMISSION_DENIED':
+            message = 'You do not have permission to perform this action.'
+            details = 'Please contact your administrator if you need access.'
+            break
+          case 'RATE_LIMITED':
+            if (err.retryAfter) {
+              message = `Too many requests. Please try again in ${err.retryAfter} seconds.`
+            } else {
+              message = 'Too many requests. Please try again in a few moments.'
+            }
+            details = 'Our system limits the number of requests to ensure optimal performance for all users.'
+            break
+          case 'PERPLEXITY_RATE_LIMITED':
+            message = 'The research service is currently at capacity.'
+            details = 'Perplexity API rate limit reached. Please try again in a few minutes.'
+            break
+          case 'SERVER_ERROR':
+            message = 'A server error occurred. Our team has been notified.'
+            details = 'Please try again later. If the problem persists, contact support.'
+            break
+        }
+      } else if (err.status === 401) {
+        message = 'Authentication required. Please log in again.'
+        code = 'AUTH_REQUIRED'
+      } else if (err.status === 403) {
+        message = 'You do not have permission to perform this action.'
+        code = 'PERMISSION_DENIED'
+      } else if (err.status === 429) {
+        message = 'Too many requests. Please try again later.'
+        code = 'RATE_LIMITED'
+        
+        // Check for Perplexity-specific errors in the message
+        if (err.message?.toLowerCase().includes('perplexity') || 
+            (typeof err.details === 'string' && err.details.toLowerCase().includes('perplexity')) ||
+            err.message?.toLowerCase().includes('sonar') ||
+            (typeof err.details === 'string' && err.details.toLowerCase().includes('sonar'))) {
+          message = 'The research service is currently at capacity.'
+          details = 'Please try again in a few minutes.'
+          code = 'PERPLEXITY_RATE_LIMITED'
+        }
+        
+        // Handle retry-after information if available
+        if (err.retryAfter) {
+          message = `Too many requests. Please try again in ${err.retryAfter} seconds.`
+        }
+      } else if (err.status >= 500) {
+        message = 'A server error occurred. Please try again later.'
+        code = 'SERVER_ERROR'
+      }
+      
       return {
-        message: err.message || defaultMessage,
-        code: err.status.toString(),
-        details: err.details ? JSON.stringify(err.details) : err.statusText
+        message,
+        code,
+        details
       }
     }
     
