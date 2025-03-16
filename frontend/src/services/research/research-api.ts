@@ -28,6 +28,62 @@ interface SearchListResponse {
   limit: number
 }
 
+/**
+ * Utility function to retry API calls with exponential backoff
+ * @param fn The async function to retry
+ * @param maxRetries Maximum number of retry attempts
+ * @param retryDelay Initial delay in milliseconds
+ * @param shouldRetry Function to determine if the error is retryable
+ * @returns The result of the function call
+ */
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  maxRetries: number = 3,
+  retryDelay: number = 1000,
+  shouldRetry: (error: any) => boolean = (error) => {
+    // By default, retry on network errors and 5xx server errors
+    if (error instanceof Error && error.message.includes('network')) {
+      return true
+    }
+    if (error && 'status' in error) {
+      // Retry on server errors (5xx)
+      return error.status >= 500 && error.status < 600
+    }
+    return false
+  }
+): Promise<T> {
+  let lastError: any
+  
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn()
+    } catch (error) {
+      lastError = error
+      
+      // Don't retry if we've reached max retries or if the error isn't retryable
+      if (attempt >= maxRetries || !shouldRetry(error)) {
+        throw error
+      }
+      
+      // If this is a rate limiting error with a retry-after header, use that time
+      if (error && typeof error === 'object' && 'retryAfter' in error && typeof error.retryAfter === 'number') {
+        // Use type assertion to tell TypeScript that retryAfter is a number
+        const typedError = error as { retryAfter: number }
+        await new Promise(resolve => setTimeout(resolve, typedError.retryAfter * 1000))
+      } else {
+        // Otherwise use exponential backoff
+        const delay = retryDelay * Math.pow(2, attempt)
+        await new Promise(resolve => setTimeout(resolve, delay))
+      }
+      
+      console.log(`Retrying API call (attempt ${attempt + 1}/${maxRetries})...`)
+    }
+  }
+  
+  // This should never be reached due to the throw in the loop, but TypeScript needs it
+  throw lastError
+}
+
 // Helper function to handle API errors
 async function handleApiError(response: Response): Promise<never> {
   let errorMessage = `HTTP ${response.status}: ${response.statusText}`
@@ -130,7 +186,7 @@ export async function fetchSessions(options?: {
   if (options?.offset) params.append('offset', options.offset.toString())
   
   const queryString = params.toString() ? `?${params.toString()}` : ''
-  const response = await fetch(`/api/research/searches${queryString}`, { headers })
+  const response = await withRetry(() => fetch(`/api/research/searches${queryString}`, { headers }))
   
   if (!response.ok) return handleApiError(response)
   return await response.json()
@@ -138,7 +194,7 @@ export async function fetchSessions(options?: {
 
 export async function fetchSession(sessionId: string): Promise<ResearchSession> {
   const headers = await getAuthHeader()
-  const response = await fetch(`/api/research/searches/${sessionId}`, { headers })
+  const response = await withRetry(() => fetch(`/api/research/searches/${sessionId}`, { headers }))
   
   if (!response.ok) return handleApiError(response)
   return await response.json()
@@ -146,14 +202,14 @@ export async function fetchSession(sessionId: string): Promise<ResearchSession> 
 
 export async function createNewSession(query: string, searchParams?: SearchParams): Promise<ResearchSession> {
   const headers = await getAuthHeader()
-  const response = await fetch('/api/research/searches', {
+  const response = await withRetry(() => fetch('/api/research/searches', {
     method: 'POST',
     headers,
     body: JSON.stringify({ 
       query,
       search_params: searchParams || {}
     })
-  })
+  }))
   
   if (!response.ok) return handleApiError(response)
   return await response.json()
@@ -161,11 +217,40 @@ export async function createNewSession(query: string, searchParams?: SearchParam
 
 export async function sendSessionMessage(sessionId: string, content: string): Promise<ResearchSession> {
   const headers = await getAuthHeader()
-  const response = await fetch(`/api/research/searches/${sessionId}/continue`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({ follow_up_query: content })
-  })
+  
+  // Use a more aggressive retry strategy for sendSessionMessage due to Perplexity API issues
+  const response = await withRetry(
+    () => fetch(`/api/research/searches/${sessionId}/continue`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ follow_up_query: content })
+    }),
+    // More retries for this specific endpoint
+    5,
+    // Longer initial delay
+    2000,
+    // Custom retry condition that specifically looks for Perplexity-related errors
+    (error) => {
+      // Always retry server errors
+      if (error && typeof error === 'object' && 'status' in error && 
+          (error as { status: number }).status >= 500 && (error as { status: number }).status < 600) {
+        return true
+      }
+      
+      // Retry network errors
+      if (error instanceof Error && error.message.includes('network')) {
+        return true
+      }
+      
+      // Specifically retry Perplexity rate limiting errors
+      if (error && typeof error === 'object' && 'code' in error && 
+          ((error as { code: string }).code === 'PERPLEXITY_RATE_LIMITED' || (error as { code: string }).code === 'RATE_LIMITED')) {
+        return true
+      }
+      
+      return false
+    }
+  )
   
   if (!response.ok) return handleApiError(response)
   return await response.json()
@@ -181,11 +266,11 @@ export async function updateSessionMetadata(sessionId: string, updates: {
   status?: QueryStatus
 }): Promise<ResearchSession> {
   const headers = await getAuthHeader()
-  const response = await fetch(`/api/research/searches/${sessionId}`, {
+  const response = await withRetry(() => fetch(`/api/research/searches/${sessionId}`, {
     method: 'PATCH',
     headers,
     body: JSON.stringify(updates)
-  })
+  }))
   
   if (!response.ok) return handleApiError(response)
   return await response.json()
@@ -193,10 +278,10 @@ export async function updateSessionMetadata(sessionId: string, updates: {
 
 export async function deleteSession(sessionId: string): Promise<void> {
   const headers = await getAuthHeader()
-  const response = await fetch(`/api/research/searches/${sessionId}`, {
+  const response = await withRetry(() => fetch(`/api/research/searches/${sessionId}`, {
     method: 'DELETE',
     headers
-  })
+  }))
   
   if (!response.ok) return handleApiError(response)
 }

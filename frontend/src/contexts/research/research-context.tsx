@@ -90,6 +90,14 @@ interface ResearchContextType {
   sessions: ResearchSession[]
   currentSession: ResearchSession | null
   isLoading: boolean
+  loadingStates: {
+    fetchingSessions: boolean
+    fetchingSession: boolean
+    creatingSession: boolean
+    sendingMessage: boolean
+    updatingSession: boolean
+    deletingSession: boolean
+  }
   error: ErrorType | null
   createSession: (query: string, searchParams?: SearchParams) => Promise<string>
   sendMessage: (sessionId: string, content: string) => Promise<void>
@@ -120,6 +128,14 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
   const [sessions, setSessions] = useState<ResearchSession[]>([])
   const [currentSession, setCurrentSession] = useState<ResearchSession | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [loadingStates, setLoadingStates] = useState({
+    fetchingSessions: false,
+    fetchingSession: false,
+    creatingSession: false,
+    sendingMessage: false,
+    updatingSession: false,
+    deletingSession: false
+  })
   const [error, setError] = useState<ErrorType | null>(null)
   const [totalSessions, setTotalSessions] = useState(0)
 
@@ -235,6 +251,7 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
     limit?: number
     offset?: number
   }) => {
+    setLoadingStates(prev => ({ ...prev, fetchingSessions: true }))
     setIsLoading(true)
     setError(null)
     
@@ -246,6 +263,7 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       setError(handleApiError(err, "Failed to fetch research searches"))
     } finally {
+      setLoadingStates(prev => ({ ...prev, fetchingSessions: false }))
       setIsLoading(false)
     }
   }
@@ -259,6 +277,7 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
       return
     }
 
+    setLoadingStates(prev => ({ ...prev, fetchingSession: true }))
     setIsLoading(true)
     setError(null)
     
@@ -270,6 +289,7 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       setError(handleApiError(err, "Failed to fetch research search"))
     } finally {
+      setLoadingStates(prev => ({ ...prev, fetchingSession: false }))
       setIsLoading(false)
     }
   }
@@ -289,6 +309,7 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
       throw error
     }
 
+    setLoadingStates(prev => ({ ...prev, creatingSession: true }))
     setIsLoading(true)
     setError(null)
     
@@ -302,6 +323,7 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
       setError(errorData)
       throw new Error(errorData.message)
     } finally {
+      setLoadingStates(prev => ({ ...prev, creatingSession: false }))
       setIsLoading(false)
     }
   }
@@ -333,6 +355,7 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
       return
     }
 
+    setLoadingStates(prev => ({ ...prev, sendingMessage: true }))
     setIsLoading(true)
     setError(null)
     
@@ -365,6 +388,7 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
       updateSessionInList(currentSession)
       setError(handleApiError(err, "Failed to send message"))
     } finally {
+      setLoadingStates(prev => ({ ...prev, sendingMessage: false }))
       setIsLoading(false)
     }
   }
@@ -412,6 +436,7 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
     }
     updateSessionInList(optimisticSession)
     
+    setLoadingStates(prev => ({ ...prev, updatingSession: true }))
     setIsLoading(true)
     setError(null)
     
@@ -430,6 +455,7 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
       updateSessionInList(sessionToUpdate)
       setError(handleApiError(err, "Failed to update search"))
     } finally {
+      setLoadingStates(prev => ({ ...prev, updatingSession: false }))
       setIsLoading(false)
     }
   }
@@ -443,6 +469,7 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
       return
     }
 
+    setLoadingStates(prev => ({ ...prev, deletingSession: true }))
     setIsLoading(true)
     setError(null)
     
@@ -465,6 +492,7 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
       setCurrentSession(previousCurrentSession)
       setError(handleApiError(err, "Failed to delete search"))
     } finally {
+      setLoadingStates(prev => ({ ...prev, deletingSession: false }))
       setIsLoading(false)
     }
   }
@@ -475,6 +503,7 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
         sessions,
         currentSession,
         isLoading,
+        loadingStates,
         error,
         createSession,
         sendMessage,
