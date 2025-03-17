@@ -44,16 +44,16 @@ router = APIRouter(
     tags=["research"]
 )
 
+# Dependency to get research operations
+def get_research_operations(db: AsyncSession = Depends(get_db)) -> ResearchOperations:
+    """Get a ResearchOperations instance with database session."""
+    return ResearchOperations(db)
+
 # Dependency to get workflow service
 def get_search_workflow(operations: ResearchOperations = Depends(get_research_operations)) -> ResearchSearchWorkflow:
     """Get a configured ResearchSearchWorkflow instance with injected operations."""
     llm_service = GPT4oMiniService()
     return ResearchSearchWorkflow(llm_service, operations)
-
-# Dependency to get research operations
-def get_research_operations(db: AsyncSession = Depends(get_db)) -> ResearchOperations:
-    """Get a ResearchOperations instance with database session."""
-    return ResearchOperations(db)
 
 # Conversion functions for DTOs to API response models
 def search_dto_to_response(search_dto: SearchDTO) -> SearchResponse:
