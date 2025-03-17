@@ -1,7 +1,7 @@
 # api/routes/research/search.py
 
 from typing import List, Optional, Union
-from uuid import UUID
+from uuid import UUID, uuid4
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -10,7 +10,7 @@ from core.database import get_db
 from core.auth import get_current_user, get_user_permissions
 from models.database.user import User
 from models.domain.research.search_operations import ResearchOperations
-from services.workflow.research.search_workflow import ResearchSearchWorkflow
+from services.workflow.research.search_workflow import ResearchSearchWorkflow, GPT4oMiniService, LLMService
 from models.schemas.research.search import (
     SearchCreate,
     SearchContinue,
@@ -27,12 +27,24 @@ router = APIRouter(
     tags=["research"]
 )
 
+# Dependency to get workflow service
+def get_search_workflow() -> ResearchSearchWorkflow:
+    """Get a configured ResearchSearchWorkflow instance."""
+    llm_service = GPT4oMiniService()
+    return ResearchSearchWorkflow(llm_service)
+
+# Dependency to get research operations
+def get_research_operations(db: AsyncSession = Depends(get_db)) -> ResearchOperations:
+    """Get a ResearchOperations instance with database session."""
+    return ResearchOperations(db)
+
 @router.post("/", response_model=SearchResponse)
 async def create_search(
     data: SearchCreate,
     current_user: dict = Depends(get_current_user),
     user_permissions: List[str] = Depends(get_user_permissions),
-    db: AsyncSession = Depends(get_db)
+    workflow: ResearchSearchWorkflow = Depends(get_search_workflow),
+    operations: ResearchOperations = Depends(get_research_operations)
 ):
     """
     Create a new legal research search.
@@ -41,28 +53,37 @@ async def create_search(
     storing both the query and results for future reference.
     """
     # Get enterprise_id from user context (implementation depends on your auth system)
-    enterprise_id = await get_user_enterprise(current_user, db)
+    enterprise_id = await get_user_enterprise(current_user, operations.db_session)
     
-    # Use the operations class to handle the search creation and persistence
-    operations = ResearchOperations(db)
-    search_result = await operations.create_search(
+    # Execute search using workflow
+    response = await workflow.execute_search(
         user_id=current_user["id"],
         query=data.query,
         enterprise_id=enterprise_id,
         search_params=data.search_params
     )
     
-    # Check for errors
-    if not search_result or isinstance(search_result, dict) and "error" in search_result:
-        error_message = search_result.get("error", "Failed to create search") if isinstance(search_result, dict) else "Failed to create search"
-        raise HTTPException(status_code=500, detail=error_message)
+    # Handle workflow errors
+    if "error" in response:
+        raise HTTPException(status_code=400, detail=response["error"])
     
-    # Return the full search with messages
-    search_data = await operations.get_search_by_id(search_result)
-    if not search_data:
-        raise HTTPException(status_code=500, detail="Search created but failed to retrieve details")
+    # Create search record in database
+    search_id = uuid4()
+    search_id, search_data = await operations.create_search_record(
+        search_id=search_id,
+        user_id=current_user["id"],
+        query=data.query,
+        enterprise_id=enterprise_id,
+        search_params=data.search_params,
+        response=response
+    )
     
-    return search_data
+    # Handle database errors
+    if "error" in search_data:
+        raise HTTPException(status_code=500, detail=search_data["error"])
+    
+    # Return as Pydantic model
+    return SearchResponse(**search_data)
 
 @router.post("/{search_id}/continue", response_model=SearchResponse)
 async def continue_search(
@@ -70,7 +91,8 @@ async def continue_search(
     data: SearchContinue,
     current_user: dict = Depends(get_current_user),
     user_permissions: List[str] = Depends(get_user_permissions),
-    db: AsyncSession = Depends(get_db)
+    workflow: ResearchSearchWorkflow = Depends(get_search_workflow),
+    operations: ResearchOperations = Depends(get_research_operations)
 ):
     """
     Continue an existing search with a follow-up query.
@@ -78,54 +100,83 @@ async def continue_search(
     Adds a follow-up question to an existing search thread, maintaining context
     from previous interactions.
     """
-    operations = ResearchOperations(db)
-    
-    # Verify ownership of search
-    search = await operations.get_search_by_id(search_id)
-    if not search or str(search["user_id"]) != str(current_user["id"]):
+    # Verify search exists and user has access
+    search_data = await operations.get_search_by_id(search_id)
+    if not search_data:
         raise HTTPException(status_code=404, detail="Search not found")
     
-    # Process follow-up
-    response = await operations.continue_search(
-        search_id=search_id,
-        follow_up_query=data.follow_up_query
+    # Verify ownership or permissions
+    if str(search_data["user_id"]) != str(current_user["id"]) and "admin" not in user_permissions:
+        raise HTTPException(status_code=403, detail="Not authorized to access this search")
+    
+    # Get thread_id from last assistant message
+    thread_id = None
+    previous_messages = []
+    if "messages" in search_data and search_data["messages"]:
+        for msg in sorted(search_data["messages"], key=lambda m: m["sequence"], reverse=True):
+            if msg["role"] == "assistant" and "content" in msg and "metadata" in msg["content"]:
+                thread_id = msg["content"]["metadata"].get("thread_id")
+                if thread_id:
+                    break
+        # Format messages for API
+        previous_messages = [
+            {"role": msg["role"], "content": msg["content"].get("text", "")} 
+            for msg in sorted(search_data["messages"], key=lambda m: m["sequence"])
+        ]
+    
+    # Execute follow-up using workflow
+    response = await workflow.execute_follow_up(
+        user_id=current_user["id"],
+        enterprise_id=search_data.get("enterprise_id"),
+        follow_up_query=data.follow_up_query,
+        thread_id=thread_id,
+        search_params=search_data.get("search_params"),
+        previous_messages=previous_messages
     )
     
-    # Check for errors
-    if isinstance(response, dict) and "error" in response:
-        error_message = response.get("error", "Failed to continue search")
-        raise HTTPException(status_code=500, detail=error_message)
+    # Handle workflow errors
+    if "error" in response:
+        raise HTTPException(status_code=400, detail=response["error"])
     
-    # Return updated search
+    # Add messages to search
+    success = await operations.add_search_messages(
+        search_id=search_id,
+        user_query=data.follow_up_query,
+        response=response
+    )
+    
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to save search messages")
+    
+    # Get updated search data
     updated_search = await operations.get_search_by_id(search_id)
     if not updated_search:
-        raise HTTPException(status_code=500, detail="Failed to retrieve updated search")
+        raise HTTPException(status_code=404, detail="Search not found after update")
     
-    return updated_search
+    # Return as Pydantic model
+    return SearchResponse(**updated_search)
 
 @router.get("/{search_id}", response_model=SearchResponse)
 async def get_search(
     search_id: UUID,
     current_user: dict = Depends(get_current_user),
     user_permissions: List[str] = Depends(get_user_permissions),
-    db: AsyncSession = Depends(get_db)
+    operations: ResearchOperations = Depends(get_research_operations)
 ):
     """
     Get a specific search by ID.
     
     Retrieves the full details of a search, including all messages in the conversation.
     """
-    operations = ResearchOperations(db)
-    search = await operations.get_search_by_id(search_id)
-    
-    if not search:
+    search_data = await operations.get_search_by_id(search_id)
+    if not search_data:
         raise HTTPException(status_code=404, detail="Search not found")
     
-    # Check if user has access to this search
-    if str(search["user_id"]) != str(current_user["id"]) and "admin" not in user_permissions:
+    # Verify ownership or permissions
+    if str(search_data["user_id"]) != str(current_user["id"]) and "admin" not in user_permissions:
         raise HTTPException(status_code=403, detail="Not authorized to access this search")
     
-    return search
+    return SearchResponse(**search_data)
 
 @router.get("/{search_id}/messages", response_model=SearchMessageListResponse)
 async def get_search_messages(
@@ -134,7 +185,7 @@ async def get_search_messages(
     offset: int = Query(0, ge=0, description="Pagination offset"),
     current_user: dict = Depends(get_current_user),
     user_permissions: List[str] = Depends(get_user_permissions),
-    db: AsyncSession = Depends(get_db)
+    operations: ResearchOperations = Depends(get_research_operations)
 ):
     """
     Get all messages for a specific search with pagination.
@@ -143,14 +194,14 @@ async def get_search_messages(
     Returns messages in sequence order (oldest first).
     """
     # Verify user has access to the search
-    search_ops = ResearchOperations(db)
+    search_ops = ResearchOperations(operations.db_session)
     search = await search_ops.get_search_by_id(search_id)
     
     if not search or (str(search["user_id"]) != str(current_user["id"]) and "admin" not in user_permissions):
         raise HTTPException(status_code=403, detail="Not authorized to access this search")
     
     # Get messages with pagination
-    message_ops = SearchMessageOperations(db)
+    message_ops = SearchMessageOperations(operations.db_session)
     return await message_ops.get_messages_list_response(search_id, limit, offset)
 
 @router.get("/", response_model=SearchListResponse)
@@ -161,7 +212,7 @@ async def list_searches(
     offset: int = Query(0, ge=0, description="Pagination offset"),
     current_user: dict = Depends(get_current_user),
     user_permissions: List[str] = Depends(get_user_permissions),
-    db: AsyncSession = Depends(get_db)
+    operations: ResearchOperations = Depends(get_research_operations)
 ):
     """
     List searches with optional filtering.
@@ -170,9 +221,8 @@ async def list_searches(
     only featured searches or by status.
     """
     # Get enterprise_id from user context
-    enterprise_id = await get_user_enterprise(current_user, db)
+    enterprise_id = await get_user_enterprise(current_user, operations.db_session)
     
-    operations = ResearchOperations(db)
     searches = await operations.list_searches(
         user_id=current_user["id"],
         enterprise_id=enterprise_id,
@@ -190,15 +240,13 @@ async def update_search(
     data: SearchUpdate,
     current_user: dict = Depends(get_current_user),
     user_permissions: List[str] = Depends(get_user_permissions),
-    db: AsyncSession = Depends(get_db)
+    operations: ResearchOperations = Depends(get_research_operations)
 ):
     """
     Update search metadata.
     
     Updates the title, description, featured status, tags, category, type or status of a search.
     """
-    operations = ResearchOperations(db)
-    
     # Verify ownership of search
     search = await operations.get_search_by_id(search_id)
     if not search or str(search["user_id"]) != str(current_user["id"]):
@@ -222,15 +270,13 @@ async def delete_search(
     search_id: UUID,
     current_user: dict = Depends(get_current_user),
     user_permissions: List[str] = Depends(get_user_permissions),
-    db: AsyncSession = Depends(get_db)
+    operations: ResearchOperations = Depends(get_research_operations)
 ):
     """
     Delete a search.
     
     Permanently removes a search and all its messages.
     """
-    operations = ResearchOperations(db)
-    
     # Verify ownership of search
     search = await operations.get_search_by_id(search_id)
     if not search:

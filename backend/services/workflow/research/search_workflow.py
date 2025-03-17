@@ -12,12 +12,6 @@ import json
 from abc import ABC, abstractmethod
 from openai import AsyncOpenAI
 
-from models.domain.research.search import ResearchSearch
-from models.domain.research.search_operations import ResearchOperations
-from models.domain.research.search_message_operations import SearchMessageOperations
-
-logger = logging.getLogger(__name__)
-
 # Enums
 class QueryCategory(str, Enum):
     CLEAR = "clear"
@@ -458,7 +452,8 @@ class ResearchSearchWorkflow:
         user_id: UUID, 
         query: str,
         enterprise_id: Optional[UUID] = None, 
-        search_params: Optional[Dict] = None
+        search_params: Optional[Dict] = None,
+        search_domain: Optional[ResearchSearch] = None
     ) -> Dict[str, Any]:
         """
         Execute a new search query, orchestrating domain models and API calls.
@@ -468,11 +463,11 @@ class ResearchSearchWorkflow:
             query: The search query
             enterprise_id: Optional UUID of the user's enterprise
             search_params: Optional parameters for the search
+            search_domain: Optional ResearchSearch domain model
             
         Returns:
             Search response or error response
         """
-        # Create execution context for logging
         context = {
             "user_id": str(user_id),
             "timestamp": datetime.utcnow().isoformat(),
@@ -486,7 +481,8 @@ class ResearchSearchWorkflow:
         
         start_time = datetime.utcnow()
         
-        search_domain = ResearchSearch(user_id=user_id, enterprise_id=enterprise_id if enterprise_id else None)
+        if not search_domain:
+            search_domain = ResearchSearch(user_id=user_id, enterprise_id=enterprise_id if enterprise_id else None)
         
         if not search_domain.validate_query(query):
             logger.warning("Invalid query rejected", extra=context)
@@ -544,18 +540,20 @@ class ResearchSearchWorkflow:
         follow_up_query: str,
         thread_id: Optional[str] = None,
         search_params: Optional[Dict] = None,
-        previous_messages: Optional[List[Dict[str, str]]] = None
+        previous_messages: Optional[List[Dict[str, str]]] = None,
+        search_domain: Optional[ResearchSearch] = None
     ) -> Dict[str, Any]:
         """
         Execute a follow-up query for an existing search.
         
         Args:
             user_id: UUID of the user for context tracking
-            enterprise_id: Optional UUID of the enterprise for context tracking
+            enterprise_id: Optional UUID of the user's enterprise
             follow_up_query: Follow-up query from the user
             thread_id: Optional thread_id from previous response for context continuity
             search_params: Optional search parameters
             previous_messages: Optional list of previous messages in the conversation
+            search_domain: Optional ResearchSearch domain model
             
         Returns:
             Search response or error dict
@@ -575,10 +573,11 @@ class ResearchSearchWorkflow:
         
         start_time = datetime.utcnow()
         
-        search_domain = ResearchSearch(
-            user_id=user_id,
-            enterprise_id=enterprise_id
-        )
+        if not search_domain:
+            search_domain = ResearchSearch(
+                user_id=user_id,
+                enterprise_id=enterprise_id
+            )
         
         if not search_domain.validate_query(follow_up_query):
             logger.warning("Invalid follow-up query rejected", extra=context)
