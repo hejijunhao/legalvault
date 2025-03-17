@@ -1,7 +1,7 @@
 // src/services/research/research-api.ts
 
 import { supabase } from '@/lib/supabase'
-import { Message, ResearchSession, SearchParams, QueryStatus, QueryCategory, QueryType } from '@/contexts/research/research-context'
+import { Message, ResearchSession, SearchParams, QueryStatus, QueryCategory, QueryType, Citation } from '@/contexts/research/research-context'
 
 export interface ApiError {
   status: number
@@ -284,4 +284,223 @@ export async function deleteSession(sessionId: string): Promise<void> {
   }))
   
   if (!response.ok) return handleApiError(response)
+}
+
+// Message-specific API functions
+
+export interface MessageListResponse {
+  items: Message[]
+  total: number
+  offset: number
+  limit: number
+}
+
+export async function fetchMessage(messageId: string): Promise<Message> {
+  const headers = await getAuthHeader()
+  const response = await withRetry(() => fetch(`/api/research/messages/${messageId}`, { headers }))
+  
+  if (!response.ok) return handleApiError(response)
+  return await response.json()
+}
+
+export async function fetchMessagesForSearch(
+  searchId: string,
+  options?: {
+    limit?: number
+    offset?: number
+  }
+): Promise<MessageListResponse> {
+  const headers = await getAuthHeader()
+  
+  // Build query parameters
+  const params = new URLSearchParams()
+  if (options?.limit) params.append('limit', options.limit.toString())
+  if (options?.offset) params.append('offset', options.offset.toString())
+  
+  const queryString = params.toString() ? `?${params.toString()}` : ''
+  const response = await withRetry(() => 
+    fetch(`/api/research/messages/search/${searchId}${queryString}`, { headers })
+  )
+  
+  if (!response.ok) return handleApiError(response)
+  return await response.json()
+}
+
+export async function updateMessage(
+  messageId: string, 
+  updates: {
+    content?: { text: string, citations?: Citation[] }
+    status?: QueryStatus
+  }
+): Promise<Message> {
+  const headers = await getAuthHeader()
+  const response = await withRetry(() => fetch(`/api/research/messages/${messageId}`, {
+    method: 'PATCH',
+    headers,
+    body: JSON.stringify(updates)
+  }))
+  
+  if (!response.ok) return handleApiError(response)
+  return await response.json()
+}
+
+export async function deleteMessage(messageId: string): Promise<void> {
+  const headers = await getAuthHeader()
+  const response = await withRetry(() => fetch(`/api/research/messages/${messageId}`, {
+    method: 'DELETE',
+    headers
+  }))
+  
+  if (!response.ok) return handleApiError(response)
+}
+
+export async function forwardMessage(
+  messageId: string,
+  destination: string,
+  destinationType: 'email' | 'user' | 'workspace'
+): Promise<any> {
+  const headers = await getAuthHeader()
+  const response = await withRetry(() => fetch(`/api/research/messages/${messageId}/forward`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      destination,
+      destination_type: destinationType
+    })
+  }))
+  
+  if (!response.ok) return handleApiError(response)
+  return await response.json()
+}
+
+// WebSocket connection for real-time updates
+
+export interface WebSocketMessage {
+  type: string;
+  data?: any;
+  message?: string;
+  search_id?: string;
+  status?: string;
+  subscribed_to?: string[];
+}
+
+export interface WebSocketConnection {
+  disconnect: () => void;
+  send: (data: any) => void;
+  isConnected: boolean;
+}
+
+/**
+ * Establishes a WebSocket connection for real-time message updates
+ * @param searchId The ID of the search/conversation to connect to
+ * @param onMessage Callback function for handling incoming messages
+ * @param onError Callback function for handling errors
+ * @param onClose Optional callback function for handling connection close
+ * @returns A WebSocketConnection object with methods to interact with the connection
+ */
+export async function connectToMessageUpdates(
+  searchId: string,
+  onMessage: (message: WebSocketMessage) => void,
+  onError: (error: any) => void,
+  onClose?: () => void
+): Promise<WebSocketConnection> {
+  // Get the auth token
+  const headers = await getAuthHeader();
+  const token = headers.Authorization.replace('Bearer ', '');
+  
+  // Create WebSocket connection
+  const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const wsHost = window.location.host;
+  const wsUrl = `${wsProtocol}//${wsHost}/api/research/messages/ws/${searchId}?token=${token}`;
+  
+  console.log(`Connecting to WebSocket at ${wsUrl}`);
+  const socket = new WebSocket(wsUrl);
+  let isConnected = false;
+  
+  // Connection opened
+  socket.addEventListener('open', () => {
+    console.log('WebSocket connection established');
+    isConnected = true;
+    
+    // Subscribe to all message types
+    socket.send(JSON.stringify({
+      command: 'subscribe',
+      message_types: ['user', 'assistant']
+    }));
+  });
+  
+  // Listen for messages
+  socket.addEventListener('message', (event) => {
+    try {
+      const message = JSON.parse(event.data) as WebSocketMessage;
+      console.log('Received WebSocket message:', message);
+      onMessage(message);
+    } catch (error) {
+      console.error('Error parsing WebSocket message:', error);
+      onError(error);
+    }
+  });
+  
+  // Listen for errors
+  socket.addEventListener('error', (event) => {
+    console.error('WebSocket error:', event);
+    onError(event);
+  });
+  
+  // Listen for connection close
+  socket.addEventListener('close', (event) => {
+    console.log(`WebSocket connection closed: ${event.code} ${event.reason}`);
+    isConnected = false;
+    if (onClose) onClose();
+  });
+  
+  // Return connection interface
+  return {
+    disconnect: () => {
+      if (socket.readyState === WebSocket.OPEN) {
+        socket.close();
+      }
+    },
+    send: (data: any) => {
+      if (socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify(data));
+      } else {
+        console.warn('Cannot send message: WebSocket is not open');
+      }
+    },
+    get isConnected() {
+      return isConnected;
+    }
+  };
+}
+
+/**
+ * Helper function to request latest messages via WebSocket
+ * @param connection The WebSocketConnection to use
+ * @param limit Maximum number of messages to retrieve
+ * @param offset Pagination offset
+ */
+export function requestLatestMessages(connection: WebSocketConnection, limit: number = 10, offset: number = 0): void {
+  if (!connection.isConnected) {
+    console.warn('Cannot request messages: WebSocket is not connected');
+    return;
+  }
+  
+  connection.send({
+    command: 'get_latest',
+    limit,
+    offset
+  });
+}
+
+/**
+ * Helper function to notify the server that the user is typing
+ * @param connection The WebSocketConnection to use
+ */
+export function sendTypingNotification(connection: WebSocketConnection): void {
+  if (!connection.isConnected) return;
+  
+  connection.send({
+    command: 'typing'
+  });
 }

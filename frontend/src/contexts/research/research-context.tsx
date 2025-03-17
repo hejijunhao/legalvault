@@ -10,7 +10,12 @@ import {
   sendSessionMessage,
   updateSessionMetadata,
   deleteSession,
-  ApiError
+  ApiError,
+  connectToMessageUpdates,
+  WebSocketConnection,
+  WebSocketMessage,
+  requestLatestMessages,
+  sendTypingNotification
 } from "@/services/research/research-api"
 
 // Define enum types that mirror the backend
@@ -42,9 +47,11 @@ export interface Citation {
 }
 
 export interface Message {
+  id: string
   role: "user" | "assistant" | "system"
   content: { text: string, citations?: Citation[] }
   sequence: number
+  status?: QueryStatus
 }
 
 export interface SearchParams {
@@ -120,6 +127,9 @@ interface ResearchContextType {
   deleteSession: (sessionId: string) => Promise<void>
   clearError: () => void
   totalSessions: number
+  isConnected: boolean
+  connectToWebSocket: (sessionId: string) => Promise<void>
+  disconnectWebSocket: () => void
 }
 
 const ResearchContext = createContext<ResearchContextType | undefined>(undefined)
@@ -138,6 +148,8 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
   })
   const [error, setError] = useState<ErrorType | null>(null)
   const [totalSessions, setTotalSessions] = useState(0)
+  const [isConnected, setIsConnected] = useState(false)
+  const [wsConnection, setWsConnection] = useState<WebSocketConnection | null>(null)
 
   const clearError = () => setError(null)
 
@@ -361,6 +373,7 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
     
     // Create optimistic update with user message
     const optimisticMessage: Message = {
+      id: Math.random().toString(36).substr(2, 9), // Generate a random id for the optimistic update
       role: "user",
       content: { text: trimmedContent },
       sequence: currentSession.messages.length
@@ -497,6 +510,90 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  const connectToWebSocket = async (sessionId: string) => {
+    // Disconnect any existing connection first
+    if (wsConnection) {
+      wsConnection.disconnect();
+      setWsConnection(null);
+      setIsConnected(false);
+    }
+    
+    try {
+      const connection = await connectToMessageUpdates(
+        sessionId,
+        (message: WebSocketMessage) => {
+          // Handle incoming WebSocket messages
+          console.log('Received WebSocket message:', message);
+          
+          if (message.type === 'messages' && message.data) {
+            // Update the current session with new messages
+            setCurrentSession(prev => {
+              if (!prev || prev.id !== sessionId) return prev;
+              
+              // Merge new messages with existing ones, avoiding duplicates
+              const existingMessageIds = new Set(prev.messages.map(m => m.id));
+              const newMessages = message.data.filter((m: Message) => !existingMessageIds.has(m.id));
+              
+              if (newMessages.length === 0) return prev;
+              
+              return {
+                ...prev,
+                messages: [...prev.messages, ...newMessages].sort((a, b) => a.sequence - b.sequence)
+              };
+            });
+          } else if (message.type === 'connection_established') {
+            console.log('WebSocket connection established with server');
+            // Request the latest messages
+            if (connection) {
+              requestLatestMessages(connection);
+            }
+          }
+        },
+        (error) => {
+          console.error('WebSocket error:', error);
+          setError({
+            message: 'Error in real-time connection',
+            details: error.message || 'Unknown error'
+          });
+          setIsConnected(false);
+        },
+        () => {
+          // Handle connection close
+          console.log('WebSocket connection closed');
+          setIsConnected(false);
+          setWsConnection(null);
+        }
+      );
+      
+      setWsConnection(connection);
+      setIsConnected(true);
+      
+    } catch (error) {
+      console.error('Failed to connect to WebSocket:', error);
+      setError(handleApiError(error, 'Failed to establish real-time connection'));
+    }
+  };
+
+  const disconnectWebSocket = () => {
+    if (wsConnection) {
+      wsConnection.disconnect();
+      setWsConnection(null);
+      setIsConnected(false);
+    }
+  };
+  
+  // Auto-connect to WebSocket when current session changes
+  useEffect(() => {
+    if (currentSession?.id && !wsConnection) {
+      connectToWebSocket(currentSession.id);
+    }
+    
+    // Cleanup on unmount
+    return () => {
+      disconnectWebSocket();
+    };
+  }, [currentSession?.id, wsConnection]);
+
   return (
     <ResearchContext.Provider
       value={{
@@ -512,7 +609,10 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
         updateSession,
         deleteSession: deleteResearchSession,
         clearError,
-        totalSessions
+        totalSessions,
+        isConnected,
+        connectToWebSocket,
+        disconnectWebSocket
       }}
     >
       {children}
