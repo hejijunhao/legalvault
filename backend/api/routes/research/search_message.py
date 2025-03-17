@@ -2,6 +2,7 @@
 
 from typing import List, Optional
 from uuid import UUID
+import asyncio
 from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -222,6 +223,11 @@ async def websocket_endpoint(
     
     Allows clients to receive updates when new messages are added to a search.
     Authentication is handled via token in the query parameters.
+    
+    Features:
+    - Heartbeat mechanism to detect stale connections
+    - Command-based interaction (subscribe, get_latest, typing, ping)
+    - Authentication via token
     """
     # Authenticate user from token
     try:
@@ -251,53 +257,111 @@ async def websocket_endpoint(
         "message": "Connected to message updates for search"
     })
     
+    # Set up heartbeat task
+    heartbeat_interval = 30  # seconds
+    last_heartbeat = asyncio.get_event_loop().time()
+    
     # Set up subscription for message updates
     # This is a simplified example - in a real implementation, you would
     # set up a proper subscription system using something like Redis pub/sub
     # or a similar mechanism to notify this WebSocket when new messages are added
     
     try:
+        # Create a task for sending periodic heartbeats
+        async def send_heartbeat():
+            nonlocal last_heartbeat
+            while True:
+                await asyncio.sleep(heartbeat_interval)
+                current_time = asyncio.get_event_loop().time()
+                
+                # If we haven't received a ping in 2.5x the heartbeat interval, consider the connection stale
+                if current_time - last_heartbeat > (heartbeat_interval * 2.5):
+                    print(f"WebSocket connection for search {search_id} is stale. Closing.")
+                    await websocket.close(code=status.WS_1000_NORMAL_CLOSURE)
+                    return
+                
+                # Send a heartbeat
+                await websocket.send_json({
+                    "type": "heartbeat",
+                    "timestamp": current_time
+                })
+        
+        # Start the heartbeat task
+        heartbeat_task = asyncio.create_task(send_heartbeat())
+        
         while True:
-            # Wait for commands from the client
-            data = await websocket.receive_json()
-            command = data.get("command")
-            
-            if command == "get_latest":
-                # Fetch latest messages
-                message_ops = SearchMessageOperations(db)
-                messages = await message_ops.list_messages_by_search(
-                    search_id=search_id,
-                    limit=data.get("limit", 10),
-                    offset=data.get("offset", 0)
+            # Wait for commands from the client with a timeout
+            try:
+                # Use a timeout to ensure we can check for stale connections
+                data = await asyncio.wait_for(
+                    websocket.receive_json(),
+                    timeout=heartbeat_interval * 3
                 )
                 
-                # Convert to dict for JSON serialization
-                messages_data = [m.model_dump() for m in messages]
+                # Update last heartbeat time whenever we receive any message
+                last_heartbeat = asyncio.get_event_loop().time()
                 
-                await websocket.send_json({
-                    "type": "messages",
-                    "data": messages_data
-                })
+                command = data.get("command")
+                
+                if command == "get_latest":
+                    # Fetch latest messages
+                    message_ops = SearchMessageOperations(db)
+                    messages = await message_ops.list_messages_by_search(
+                        search_id=search_id,
+                        limit=data.get("limit", 10),
+                        offset=data.get("offset", 0)
+                    )
+                    
+                    # Convert to dict for JSON serialization
+                    messages_data = [m.model_dump() for m in messages]
+                    
+                    await websocket.send_json({
+                        "type": "messages",
+                        "data": messages_data
+                    })
+                
+                elif command == "typing":
+                    # Client is typing - could broadcast to other connected clients
+                    # This would be used in a collaborative environment
+                    pass
+                
+                elif command == "subscribe":
+                    # Subscribe to specific message types or events
+                    # This is a placeholder for a more sophisticated subscription system
+                    message_types = data.get("message_types", ["user", "assistant"])
+                    await websocket.send_json({
+                        "type": "subscription",
+                        "status": "success",
+                        "subscribed_to": message_types
+                    })
+                
+                elif command == "ping":
+                    # Client sent a ping, respond with a pong
+                    await websocket.send_json({
+                        "type": "pong",
+                        "timestamp": asyncio.get_event_loop().time()
+                    })
             
-            elif command == "typing":
-                # Client is typing - could broadcast to other connected clients
-                # This would be used in a collaborative environment
-                pass
-            
-            elif command == "subscribe":
-                # Subscribe to specific message types or events
-                # This is a placeholder for a more sophisticated subscription system
-                message_types = data.get("message_types", ["user", "assistant"])
-                await websocket.send_json({
-                    "type": "subscription",
-                    "status": "success",
-                    "subscribed_to": message_types
-                })
+            except asyncio.TimeoutError:
+                # No message received within timeout, check if connection is still alive
+                current_time = asyncio.get_event_loop().time()
+                if current_time - last_heartbeat > (heartbeat_interval * 2.5):
+                    print(f"WebSocket connection for search {search_id} timed out. Closing.")
+                    await websocket.close(code=status.WS_1000_NORMAL_CLOSURE)
+                    break
     
     except WebSocketDisconnect:
         # Handle disconnect
-        pass
+        print(f"WebSocket disconnected for search {search_id}")
     except Exception as e:
         # Log the error
-        print(f"WebSocket error: {str(e)}")
+        print(f"WebSocket error for search {search_id}: {str(e)}")
         await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
+    finally:
+        # Cancel the heartbeat task if it's still running
+        if 'heartbeat_task' in locals() and not heartbeat_task.done():
+            heartbeat_task.cancel()
+            try:
+                await heartbeat_task
+            except asyncio.CancelledError:
+                pass
