@@ -19,6 +19,8 @@ from models.schemas.research.search import (
     SearchUpdate,
     QueryStatus
 )
+from models.schemas.research.search_message import SearchMessageListResponse
+from models.domain.research.search_message_operations import SearchMessageOperations
 
 router = APIRouter(
     prefix="/research/searches",
@@ -124,6 +126,32 @@ async def get_search(
         raise HTTPException(status_code=403, detail="Not authorized to access this search")
     
     return search
+
+@router.get("/{search_id}/messages", response_model=SearchMessageListResponse)
+async def get_search_messages(
+    search_id: UUID,
+    limit: int = Query(100, ge=1, le=500, description="Maximum number of messages"),
+    offset: int = Query(0, ge=0, description="Pagination offset"),
+    current_user: dict = Depends(get_current_user),
+    user_permissions: List[str] = Depends(get_user_permissions),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get all messages for a specific search with pagination.
+    
+    This endpoint provides a convenient way to access messages directly from the search context.
+    Returns messages in sequence order (oldest first).
+    """
+    # Verify user has access to the search
+    search_ops = ResearchOperations(db)
+    search = await search_ops.get_search_by_id(search_id)
+    
+    if not search or (str(search["user_id"]) != str(current_user["id"]) and "admin" not in user_permissions):
+        raise HTTPException(status_code=403, detail="Not authorized to access this search")
+    
+    # Get messages with pagination
+    message_ops = SearchMessageOperations(db)
+    return await message_ops.get_messages_list_response(search_id, limit, offset)
 
 @router.get("/", response_model=SearchListResponse)
 async def list_searches(

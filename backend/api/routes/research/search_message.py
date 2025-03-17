@@ -10,10 +10,10 @@ from core.auth import get_current_user, get_user_permissions, decode_access_toke
 from models.domain.research.search_operations import ResearchOperations
 from models.domain.research.search_message_operations import SearchMessageOperations
 from models.schemas.research.search_message import (
-    MessageResponse,
-    MessageUpdate,
-    MessageListResponse,
-    MessageForwardRequest
+    SearchMessageResponse,
+    SearchMessageUpdate,
+    SearchMessageListResponse,
+    SearchMessageForwardRequest
 )
 
 router = APIRouter(
@@ -22,7 +22,7 @@ router = APIRouter(
 )
 
 
-@router.get("/{message_id}", response_model=MessageResponse)
+@router.get("/{message_id}", response_model=SearchMessageResponse)
 async def get_message(
     message_id: UUID,
     current_user: dict = Depends(get_current_user),
@@ -42,7 +42,7 @@ async def get_message(
     
     # Verify user has access to the search this message belongs to
     search_ops = ResearchOperations(db)
-    search = await search_ops.get_search_by_id(message["search_id"])
+    search = await search_ops.get_search_by_id(message.search_id)
     
     if not search or (str(search["user_id"]) != str(current_user["id"]) and "admin" not in user_permissions):
         raise HTTPException(status_code=403, detail="Not authorized to access this message")
@@ -50,7 +50,7 @@ async def get_message(
     return message
 
 
-@router.get("/search/{search_id}", response_model=MessageListResponse)
+@router.get("/search/{search_id}", response_model=SearchMessageListResponse)
 async def list_messages(
     search_id: UUID,
     limit: int = Query(100, ge=1, le=500, description="Maximum number of messages"),
@@ -71,25 +71,15 @@ async def list_messages(
     if not search or (str(search["user_id"]) != str(current_user["id"]) and "admin" not in user_permissions):
         raise HTTPException(status_code=403, detail="Not authorized to access this search")
     
-    # Get messages
+    # Get messages with pagination
     message_ops = SearchMessageOperations(db)
-    messages = await message_ops.list_messages_by_search(search_id, limit, offset)
-    
-    # Get total count for pagination using the optimized count method
-    total = await message_ops.count_messages_by_search(search_id)
-    
-    return {
-        "items": messages,
-        "total": total,
-        "offset": offset,
-        "limit": limit
-    }
+    return await message_ops.get_messages_list_response(search_id, limit, offset)
 
 
-@router.patch("/{message_id}", response_model=MessageResponse)
+@router.patch("/{message_id}", response_model=SearchMessageResponse)
 async def update_message(
     message_id: UUID,
-    data: MessageUpdate,
+    data: SearchMessageUpdate,
     current_user: dict = Depends(get_current_user),
     user_permissions: List[str] = Depends(get_user_permissions),
     db: AsyncSession = Depends(get_db)
@@ -108,13 +98,13 @@ async def update_message(
     
     # Verify user has access to the search this message belongs to
     search_ops = ResearchOperations(db)
-    search = await search_ops.get_search_by_id(message["search_id"])
+    search = await search_ops.get_search_by_id(message.search_id)
     
     if not search or str(search["user_id"]) != str(current_user["id"]):
         raise HTTPException(status_code=403, detail="Not authorized to update this message")
     
     # Only allow updating user messages, not assistant responses
-    if message["role"] != "user" and "admin" not in user_permissions:
+    if message.role != "user" and "admin" not in user_permissions:
         raise HTTPException(
             status_code=403,
             detail="Cannot update assistant messages"
@@ -170,7 +160,7 @@ async def delete_message(
 @router.post("/{message_id}/forward")
 async def forward_message(
     message_id: UUID,
-    data: MessageForwardRequest,
+    data: SearchMessageForwardRequest,
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -189,7 +179,7 @@ async def forward_message(
     
     # Verify user has access to the search this message belongs to
     search_ops = ResearchOperations(db)
-    search = await search_ops.get_search_by_id(message["search_id"])
+    search = await search_ops.get_search_by_id(message.search_id)
     
     if not search or str(search["user_id"]) != str(current_user["id"]):
         raise HTTPException(status_code=403, detail="Not authorized to forward this message")
@@ -197,30 +187,26 @@ async def forward_message(
     # Format message for forwarding using domain model
     from models.domain.research.search_message import ResearchMessage
     message_domain = ResearchMessage(
-        content=message["content"],
-        role=message["role"],
-        message_id=message_id
+        content=message.content,
+        role=message.role,
+        message_id=message.id,
+        sequence=message.sequence
     )
     
-    formatted_message = message_domain.format_for_external_sharing()
+    # Prepare forwarding data
+    forward_data = message_domain.forward_message(
+        destination=data.destination,
+        destination_type=data.destination_type
+    )
     
-    # Here you would implement the actual forwarding logic based on destination_type
-    # This is a placeholder that would be replaced with actual implementation
-    if data.destination_type == "email":
-        # Send email logic would go here
-        return {"status": "success", "message": "Message forwarded to email", "formatted_content": formatted_message}
-    elif data.destination_type == "user":
-        # Forward to another user logic would go here
-        return {"status": "success", "message": "Message forwarded to user", "formatted_content": formatted_message}
-    elif data.destination_type == "whatsapp":
-        # WhatsApp integration would go here
-        return {"status": "success", "message": "Message forwarded to WhatsApp", "formatted_content": formatted_message}
-    elif data.destination_type == "slack":
-        # Slack integration would go here
-        return {"status": "success", "message": "Message forwarded to Slack", "formatted_content": formatted_message}
-    
-    # This shouldn't be reached due to Pydantic validation
-    raise HTTPException(status_code=400, detail="Invalid destination type")
+    # Here you would integrate with your messaging service based on destination_type
+    # For now, we'll just return the formatted message
+    return {
+        "status": "success",
+        "message": "Message prepared for forwarding",
+        "formatted_message": message_domain.format_for_external_sharing(),
+        "forward_data": forward_data
+    }
 
 
 # WebSocket for real-time message updates
@@ -239,16 +225,12 @@ async def websocket_endpoint(
     """
     # Authenticate user from token
     try:
-        payload = decode_access_token(token)
-        user_id = payload.get("sub")
-        if not user_id:
+        user_data = decode_access_token(token)
+        if not user_data:
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
             return
-        
-        # Get user enterprise_id from token if available
-        user_enterprise_id = payload.get("enterprise_id")
-    except Exception as e:
-        print(f"WebSocket authentication error: {str(e)}")
+        user_id = user_data.get("sub")
+    except Exception:
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
     
@@ -256,65 +238,66 @@ async def websocket_endpoint(
     search_ops = ResearchOperations(db)
     search = await search_ops.get_search_by_id(search_id)
     
-    if not search:
-        await websocket.close(code=status.WS_1003_UNSUPPORTED_DATA)
-        return
-    
-    # Verify user owns the search
-    if str(search["user_id"]) != str(user_id):
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-        return
-    
-    # Verify enterprise match if we have enterprise_id from token
-    if user_enterprise_id and str(search["enterprise_id"]) != str(user_enterprise_id):
+    if not search or str(search["user_id"]) != str(user_id):
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
     
     await websocket.accept()
     
+    # Send initial message
+    await websocket.send_json({
+        "type": "connection_established",
+        "search_id": str(search_id),
+        "message": "Connected to message updates for search"
+    })
+    
+    # Set up subscription for message updates
+    # This is a simplified example - in a real implementation, you would
+    # set up a proper subscription system using something like Redis pub/sub
+    # or a similar mechanism to notify this WebSocket when new messages are added
+    
     try:
-        # Send initial connection confirmation
-        await websocket.send_json({
-            "type": "connection_established",
-            "search_id": str(search_id)
-        })
-        
-        # In a production implementation, you would set up a background task
-        # to watch for new messages and send them to the client
-        # For example, using Supabase's real-time features or a message queue
-        
-        # Simple message handling loop
         while True:
+            # Wait for commands from the client
             data = await websocket.receive_json()
             command = data.get("command")
             
-            if command == "subscribe":
-                # Handle subscription to specific message types
-                # This is a placeholder for actual subscription logic
-                message_type = data.get("message_type", "all")
+            if command == "get_latest":
+                # Fetch latest messages
+                message_ops = SearchMessageOperations(db)
+                messages = await message_ops.list_messages_by_search(
+                    search_id=search_id,
+                    limit=data.get("limit", 10),
+                    offset=data.get("offset", 0)
+                )
+                
+                # Convert to dict for JSON serialization
+                messages_data = [m.model_dump() for m in messages]
+                
                 await websocket.send_json({
-                    "type": "subscription_confirmed",
-                    "message_type": message_type
+                    "type": "messages",
+                    "data": messages_data
                 })
             
             elif command == "typing":
-                # Handle typing indicators
-                # In a real implementation, this would broadcast to other connected clients
-                is_typing = data.get("is_typing", False)
+                # Client is typing - could broadcast to other connected clients
+                # This would be used in a collaborative environment
+                pass
+            
+            elif command == "subscribe":
+                # Subscribe to specific message types or events
+                # This is a placeholder for a more sophisticated subscription system
+                message_types = data.get("message_types", ["user", "assistant"])
                 await websocket.send_json({
-                    "type": "typing_acknowledged",
-                    "is_typing": is_typing
+                    "type": "subscription",
+                    "status": "success",
+                    "subscribed_to": message_types
                 })
     
     except WebSocketDisconnect:
-        # Handle disconnect gracefully
-        # In a real implementation, you would clean up any subscriptions
-        print(f"WebSocket disconnected for search {search_id} and user {user_id}")
+        # Handle disconnect
         pass
     except Exception as e:
+        # Log the error
         print(f"WebSocket error: {str(e)}")
         await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
-
-
-
-

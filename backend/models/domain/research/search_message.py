@@ -1,12 +1,13 @@
 # models/domain/research/search_message.py
 
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Literal
 from uuid import UUID
 
 class ResearchMessage:
     """Domain model for search message operations within a public search conversation."""
 
-    def __init__(self, content: Dict[str, Any], role: str, message_id: Optional[UUID] = None):
+    def __init__(self, content: Dict[str, Any], role: str, message_id: Optional[UUID] = None, 
+                 sequence: Optional[int] = None):
         """
         Initialize a ResearchMessage.
         
@@ -14,10 +15,12 @@ class ResearchMessage:
             content: Dictionary containing message text and metadata (e.g., citations).
             role: Role of the sender ('user' or 'assistant').
             message_id: Optional UUID of the message, if already persisted.
+            sequence: Optional sequence number for ordering within a conversation.
         """
         self.content = content
         self.role = role
         self.message_id = message_id
+        self.sequence = sequence
         self._validate()
 
     def _validate(self) -> None:
@@ -44,7 +47,8 @@ class ResearchMessage:
         return {
             "original_text": self.content.get('text', ''),
             "reply_to_message_id": self.message_id,
-            "role": "assistant" if self.role == "user" else "user"
+            "role": "assistant" if self.role == "user" else "user",
+            "sequence": self.sequence
         }
 
     def forward_message(self, destination: str, destination_type: str) -> Dict[str, Any]:
@@ -65,7 +69,36 @@ class ResearchMessage:
             "content": self.content,
             "role": self.role,
             "destination": destination,
-            "destination_type": destination_type
+            "destination_type": destination_type,
+            "sequence": self.sequence
         }
-
         
+    def categorize_message(self) -> Literal["question", "answer", "clarification", "citation"]:
+        """
+        Categorize the message based on its content and role.
+        
+        Returns:
+            Message category as a string.
+        """
+        if self.role == "user":
+            text = self.content.get('text', '').lower()
+            if any(q in text for q in ["?", "how", "what", "when", "where", "why", "who"]):
+                return "question"
+            elif any(c in text for c in ["clarify", "explain", "elaborate", "mean"]):
+                return "clarification"
+            else:
+                return "question"  # Default for user messages
+        else:
+            if self.content.get('citations', []):
+                return "citation"
+            else:
+                return "answer"
+                
+    def is_system_message(self) -> bool:
+        """
+        Check if this is a system message.
+        
+        Returns:
+            True if this is a system message, False otherwise.
+        """
+        return self.role == "assistant" and self.content.get('is_system', False)

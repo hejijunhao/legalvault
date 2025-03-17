@@ -6,7 +6,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field, validator
 
 
-class MessageBase(BaseModel):
+class SearchMessageBase(BaseModel):
     """Base schema with common message fields"""
     role: Literal["user", "assistant"] = Field(
         ...,
@@ -24,13 +24,13 @@ class MessageBase(BaseModel):
         return v
 
 
-class MessageCreate(MessageBase):
+class SearchMessageCreate(SearchMessageBase):
     """Schema for creating a new message"""
     search_id: UUID = Field(..., description="ID of the parent search")
     sequence: int = Field(..., description="Sequence number for ordering")
 
 
-class MessageUpdate(BaseModel):
+class SearchMessageUpdate(BaseModel):
     """Schema for updating a message"""
     content: Optional[Dict[str, Any]] = Field(
         None,
@@ -44,10 +44,11 @@ class MessageUpdate(BaseModel):
         return v
 
 
-class MessageResponse(MessageBase):
+class SearchMessageResponse(SearchMessageBase):
     """Schema for message responses"""
     id: UUID = Field(..., description="Unique message ID")
     search_id: UUID = Field(..., description="ID of the parent search")
+    search_title: Optional[str] = Field(None, description="Title of the parent search")
     sequence: int = Field(..., description="Sequence number for ordering")
     created_at: datetime = Field(..., description="Message creation timestamp")
     updated_at: Optional[datetime] = Field(None, description="Last update timestamp")
@@ -55,15 +56,15 @@ class MessageResponse(MessageBase):
     model_config = {"from_attributes": True}
 
 
-class MessageListResponse(BaseModel):
+class SearchMessageListResponse(BaseModel):
     """Schema for paginated message list responses"""
-    items: List[MessageResponse] = Field(..., description="List of messages")
+    items: List[SearchMessageResponse] = Field(..., description="List of messages")
     total: int = Field(..., description="Total number of messages")
     offset: int = Field(..., description="Pagination offset")
     limit: int = Field(..., description="Pagination limit")
 
 
-class MessageForwardRequest(BaseModel):
+class SearchMessageForwardRequest(BaseModel):
     """Schema for forwarding a message"""
     destination: str = Field(..., description="Destination identifier (email, user ID, etc.)")
     destination_type: Literal["email", "user", "whatsapp", "slack"] = Field(
