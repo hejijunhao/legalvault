@@ -2,17 +2,28 @@
 
 "use client"
 
-import { useState, useRef, type ChangeEvent } from "react"
+import { useState, useRef, type ChangeEvent, KeyboardEvent } from "react"
 import { motion } from "framer-motion"
-import { ArrowRight, Link2, Globe, Shuffle } from "lucide-react"
+import { ArrowRight, Gavel, BookText, Building2, Loader2 } from "lucide-react"
 
 interface ResearchSearchProps {
   query: string
   onQueryChange: (value: string) => void
+  onSubmit?: () => void
+  isLoading?: boolean
 }
 
-export function ResearchSearch({ query, onQueryChange }: ResearchSearchProps) {
+// Define the query types matching the backend enum
+type QueryType = "court_case" | "legislative" | "commercial" | "general"
+
+export function ResearchSearch({ 
+  query, 
+  onQueryChange, 
+  onSubmit, 
+  isLoading = false 
+}: ResearchSearchProps) {
   const [isFocused, setIsFocused] = useState(false)
+  const [selectedType, setSelectedType] = useState<QueryType | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const handleTextareaChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
@@ -23,6 +34,26 @@ export function ResearchSearch({ query, onQueryChange }: ResearchSearchProps) {
       textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`
     }
   }
+
+  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    // Submit on Enter key (without Shift)
+    if (e.key === "Enter" && !e.shiftKey && query.trim() && query.trim().length >= 5) {
+      e.preventDefault()
+      onSubmit?.();
+    }
+  }
+
+  const toggleQueryType = (type: QueryType) => {
+    setSelectedType(selectedType === type ? null : type)
+  }
+
+  const handleSubmit = () => {
+    if (query.trim() && query.trim().length >= 5 && !isLoading && onSubmit) {
+      onSubmit()
+    }
+  }
+
+  const isValidQuery = query.trim() && query.trim().length >= 5
 
   return (
     <motion.div
@@ -40,6 +71,7 @@ export function ResearchSearch({ query, onQueryChange }: ResearchSearchProps) {
           ref={textareaRef}
           value={query}
           onChange={handleTextareaChange}
+          onKeyDown={handleKeyDown}
           onFocus={() => setIsFocused(true)}
           onBlur={() => setIsFocused(false)}
           placeholder="Ask anything..."
@@ -48,26 +80,69 @@ export function ResearchSearch({ query, onQueryChange }: ResearchSearchProps) {
         />
 
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <button className="flex items-center gap-2 rounded-full bg-gray-50 px-4 py-2 text-sm text-gray-600">
-              <Shuffle className="h-4 w-4" />
-              Auto
+          <div className="flex items-center gap-2">
+            {/* Courts Toggle */}
+            <button
+              onClick={() => toggleQueryType("court_case")}
+              className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-sm transition-colors ${
+                selectedType === "court_case"
+                  ? "bg-[#95C066] text-white"
+                  : "bg-gray-50 text-gray-600 hover:bg-gray-100"
+              }`}
+              aria-pressed={selectedType === "court_case"}
+              title="Search court cases and legal precedents"
+            >
+              <Gavel className="h-4 w-4" />
+              <span>Courts</span>
             </button>
-            <button className="rounded-lg p-2 text-gray-400 hover:text-gray-600">
-              <Globe className="h-5 w-5" />
+
+            {/* Legislative Toggle */}
+            <button
+              onClick={() => toggleQueryType("legislative")}
+              className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-sm transition-colors ${
+                selectedType === "legislative"
+                  ? "bg-[#95C066] text-white"
+                  : "bg-gray-50 text-gray-600 hover:bg-gray-100"
+              }`}
+              aria-pressed={selectedType === "legislative"}
+              title="Search legislation, statutes and regulations"
+            >
+              <BookText className="h-4 w-4" />
+              <span>Legislative</span>
+            </button>
+
+            {/* Commercial Toggle */}
+            <button
+              onClick={() => toggleQueryType("commercial")}
+              className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-sm transition-colors ${
+                selectedType === "commercial"
+                  ? "bg-[#95C066] text-white"
+                  : "bg-gray-50 text-gray-600 hover:bg-gray-100"
+              }`}
+              aria-pressed={selectedType === "commercial"}
+              title="Search commercial law and business regulations"
+            >
+              <Building2 className="h-4 w-4" />
+              <span>Commercial</span>
             </button>
           </div>
 
-          <div className="flex items-center gap-3">
-            <button className="rounded-lg p-2 text-gray-400 hover:text-gray-600">
-              <Link2 className="h-5 w-5" />
-            </button>
+          <div className="flex items-center">
             <button
+              onClick={handleSubmit}
+              disabled={!isValidQuery || isLoading}
               className={`rounded-full p-2 transition-colors ${
-                query.trim() ? "bg-[#95C066] text-white" : "bg-gray-100 text-gray-400"
+                isValidQuery && !isLoading
+                  ? "bg-[#95C066] text-white hover:bg-[#85b056] cursor-pointer"
+                  : "bg-gray-100 text-gray-400 cursor-not-allowed"
               }`}
+              aria-label="Search for legal insights"
             >
-              <ArrowRight className="h-5 w-5" />
+              {isLoading ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                <ArrowRight className="h-5 w-5" />
+              )}
             </button>
           </div>
         </div>
@@ -75,4 +150,3 @@ export function ResearchSearch({ query, onQueryChange }: ResearchSearchProps) {
     </motion.div>
   )
 }
-

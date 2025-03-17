@@ -7,10 +7,10 @@ import { motion } from "framer-motion"
 import { useRouter } from "next/navigation"
 import { ResearchSearch } from "@/components/research/research-search"
 import { ResearchBanner } from "@/components/research/research-banner"
-import { BookmarksBlock } from "@/components/research/bookmarks-block"
+import { ResearchPromptSuggestions } from "@/components/research/research-prompt-suggestions"
+import { PastSearchesGrid } from "@/components/research/past-searches-grid"
 import { useResearch } from "@/contexts/research/research-context"
-import { Button } from "@/components/ui/button"
-import { Loader2, AlertCircle } from "lucide-react"
+import { AlertCircle } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
 export default function ResearchPage() {
@@ -36,6 +36,10 @@ export default function ResearchPage() {
     }
   }
 
+  const handleSelectPrompt = (prompt: string) => {
+    setQuery(prompt)
+  }
+
   return (
     <div className="flex min-h-[calc(100vh-4rem)] flex-col items-center justify-start px-4 py-16">
       <motion.div
@@ -59,8 +63,16 @@ export default function ResearchPage() {
           transition={{ duration: 0.5, delay: 0.2 }}
           className="space-y-8"
         >
-          <div className="relative">
-            <ResearchSearch query={query} onQueryChange={setQuery} />
+          <div className="relative space-y-2">
+            <ResearchSearch 
+              query={query} 
+              onQueryChange={setQuery} 
+              onSubmit={handleSearch}
+              isLoading={isLoading}
+            />
+            
+            {/* Add the prompt suggestions component right after the search bar */}
+            <ResearchPromptSuggestions onSelectPrompt={handleSelectPrompt} />
             
             {error && (
               <Alert variant="destructive" className="mt-4">
@@ -68,28 +80,10 @@ export default function ResearchPage() {
                 <AlertDescription>{error.message}</AlertDescription>
               </Alert>
             )}
-            
-            {query.trim() && (
-              <div className="mt-4 flex justify-end">
-                <Button 
-                  onClick={handleSearch} 
-                  disabled={isLoading || !query.trim() || query.trim().length < 5}
-                  className="bg-[#95C066] hover:bg-[#85b056] text-white"
-                  aria-label="Search for legal insights"
-                >
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Searching...
-                    </>
-                  ) : (
-                    "Search"
-                  )}
-                </Button>
-              </div>
-            )}
           </div>
-          <BookmarksBlock />
+          
+          {/* Replace BookmarksBlock with PastSearchesGrid */}
+          <PastSearchesGrid />
         </motion.div>
 
         <motion.div
