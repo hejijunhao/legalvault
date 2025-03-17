@@ -11,16 +11,33 @@ from core.auth import get_current_user, get_user_permissions
 from models.database.user import User
 from models.domain.research.search_operations import ResearchOperations
 from services.workflow.research.search_workflow import ResearchSearchWorkflow, GPT4oMiniService, LLMService
+
+# Import schemas for API responses
 from models.schemas.research.search import (
     SearchCreate,
     SearchContinue,
     SearchResponse,
     SearchListResponse,
     SearchUpdate,
-    QueryStatus
+    QueryStatus,
+    SearchMessageResponse
 )
 from models.schemas.research.search_message import SearchMessageListResponse
 from models.domain.research.search_message_operations import SearchMessageOperations
+
+# Import DTOs
+from models.dtos.research.search_dto import (
+    SearchDTO, SearchListDTO, SearchStatusDTO, SearchCreateDTO, SearchUpdateDTO
+)
+from models.dtos.research.search_message_dto import (
+    SearchMessageDTO, SearchMessageListDTO
+)
+
+# Import custom exceptions
+from services.workflow.research.search_workflow import (
+    SearchWorkflowError, QueryValidationError, QueryClarificationError,
+    IrrelevantQueryError, APIError, PersistenceError
+)
 
 router = APIRouter(
     prefix="/research/searches",
@@ -28,23 +45,87 @@ router = APIRouter(
 )
 
 # Dependency to get workflow service
-def get_search_workflow() -> ResearchSearchWorkflow:
-    """Get a configured ResearchSearchWorkflow instance."""
+def get_search_workflow(operations: ResearchOperations = Depends(get_research_operations)) -> ResearchSearchWorkflow:
+    """Get a configured ResearchSearchWorkflow instance with injected operations."""
     llm_service = GPT4oMiniService()
-    return ResearchSearchWorkflow(llm_service)
+    return ResearchSearchWorkflow(llm_service, operations)
 
 # Dependency to get research operations
 def get_research_operations(db: AsyncSession = Depends(get_db)) -> ResearchOperations:
     """Get a ResearchOperations instance with database session."""
     return ResearchOperations(db)
 
+# Conversion functions for DTOs to API response models
+def search_dto_to_response(search_dto: SearchDTO) -> SearchResponse:
+    """Convert SearchDTO to SearchResponse for API layer."""
+    # Convert messages to SearchMessageResponse objects
+    messages = []
+    if search_dto.messages:
+        messages = [
+            SearchMessageResponse(
+                role=msg.role,
+                content=msg.content,
+                sequence=msg.sequence
+            ) for msg in search_dto.messages
+        ]
+    
+    # Create SearchResponse from DTO
+    return SearchResponse(
+        id=search_dto.id,
+        query=search_dto.title,  # Use title as query for API response
+        title=search_dto.title,
+        description=search_dto.description,
+        user_id=search_dto.user_id,
+        enterprise_id=search_dto.enterprise_id,
+        is_featured=search_dto.is_featured,
+        tags=search_dto.tags,
+        search_params=search_dto.search_params or {},
+        created_at=search_dto.created_at,
+        updated_at=search_dto.updated_at,
+        messages=messages,
+        status=search_dto.status,
+        category=search_dto.category,
+        query_type=search_dto.query_type
+    )
+
+def search_list_dto_to_response(search_list_dto: SearchListDTO) -> SearchListResponse:
+    """Convert SearchListDTO to SearchListResponse for API layer."""
+    items = [search_dto_to_response(search_dto) for search_dto in search_list_dto.items]
+    return SearchListResponse(
+        items=items,
+        total=search_list_dto.total,
+        offset=search_list_dto.offset,
+        limit=search_list_dto.limit
+    )
+
+def search_message_list_dto_to_response(message_list_dto: SearchMessageListDTO) -> SearchMessageListResponse:
+    """Convert SearchMessageListDTO to SearchMessageListResponse for API layer."""
+    items = []
+    for msg_dto in message_list_dto.items:
+        items.append(SearchMessageResponse(
+            id=msg_dto.id,
+            search_id=msg_dto.search_id,
+            search_title=msg_dto.search_title,
+            role=msg_dto.role,
+            content=msg_dto.content,
+            sequence=msg_dto.sequence,
+            created_at=msg_dto.created_at,
+            updated_at=msg_dto.updated_at
+        ))
+    
+    return SearchMessageListResponse(
+        items=items,
+        total=message_list_dto.total,
+        offset=message_list_dto.offset,
+        limit=message_list_dto.limit
+    )
+
 @router.post("/", response_model=SearchResponse)
 async def create_search(
     data: SearchCreate,
     current_user: dict = Depends(get_current_user),
     user_permissions: List[str] = Depends(get_user_permissions),
-    workflow: ResearchSearchWorkflow = Depends(get_search_workflow),
-    operations: ResearchOperations = Depends(get_research_operations)
+    workflow: ResearchSearchWorkflow = Depends(get_search_workflow)
 ):
     """
     Create a new legal research search.
@@ -53,37 +134,54 @@ async def create_search(
     storing both the query and results for future reference.
     """
     # Get enterprise_id from user context (implementation depends on your auth system)
-    enterprise_id = await get_user_enterprise(current_user, operations.db_session)
+    enterprise_id = await get_user_enterprise(current_user, workflow.research_operations.db_session)
     
-    # Execute search using workflow
-    response = await workflow.execute_search(
-        user_id=current_user["id"],
-        query=data.query,
-        enterprise_id=enterprise_id,
-        search_params=data.search_params
-    )
-    
-    # Handle workflow errors
-    if "error" in response:
-        raise HTTPException(status_code=400, detail=response["error"])
-    
-    # Create search record in database
-    search_id = uuid4()
-    search_id, search_data = await operations.create_search_record(
-        search_id=search_id,
-        user_id=current_user["id"],
-        query=data.query,
-        enterprise_id=enterprise_id,
-        search_params=data.search_params,
-        response=response
-    )
-    
-    # Handle database errors
-    if "error" in search_data:
-        raise HTTPException(status_code=500, detail=search_data["error"])
-    
-    # Return as Pydantic model
-    return SearchResponse(**search_data)
+    try:
+        # Execute search using workflow - now handles persistence internally
+        result = await workflow.execute_search(
+            user_id=current_user["id"],
+            query=data.query,
+            enterprise_id=enterprise_id,
+            search_params=data.search_params
+        )
+        
+        # Get the search record from the database using the search_id from metadata
+        search_id = UUID(result.metadata["search_id"]) if "search_id" in result.metadata else None
+        
+        if not search_id:
+            raise HTTPException(status_code=500, detail="Search creation failed: no search_id returned")
+        
+        search_dto = await workflow.research_operations.get_search_by_id(search_id)
+        
+        # Handle database errors
+        if not search_dto:
+            raise HTTPException(status_code=500, detail="Failed to retrieve created search")
+        
+        # Convert DTO to API response model
+        return search_dto_to_response(search_dto)
+        
+    except QueryValidationError as e:
+        raise HTTPException(status_code=400, detail=e.message)
+    except QueryClarificationError as e:
+        # Return a structured response with suggested clarifications
+        raise HTTPException(
+            status_code=400, 
+            detail={
+                "message": e.message,
+                "suggested_clarifications": e.suggested_clarifications
+            }
+        )
+    except IrrelevantQueryError as e:
+        raise HTTPException(status_code=400, detail=e.message)
+    except APIError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message)
+    except PersistenceError as e:
+        raise HTTPException(status_code=500, detail=e.message)
+    except SearchWorkflowError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message)
+    except Exception as e:
+        logger.error(f"Unexpected error in create_search: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
 
 @router.post("/{search_id}/continue", response_model=SearchResponse)
 async def continue_search(
@@ -91,8 +189,7 @@ async def continue_search(
     data: SearchContinue,
     current_user: dict = Depends(get_current_user),
     user_permissions: List[str] = Depends(get_user_permissions),
-    workflow: ResearchSearchWorkflow = Depends(get_search_workflow),
-    operations: ResearchOperations = Depends(get_research_operations)
+    workflow: ResearchSearchWorkflow = Depends(get_search_workflow)
 ):
     """
     Continue an existing search with a follow-up query.
@@ -100,61 +197,47 @@ async def continue_search(
     Adds a follow-up question to an existing search thread, maintaining context
     from previous interactions.
     """
-    # Verify search exists and user has access
-    search_data = await operations.get_search_by_id(search_id)
-    if not search_data:
-        raise HTTPException(status_code=404, detail="Search not found")
-    
-    # Verify ownership or permissions
-    if str(search_data["user_id"]) != str(current_user["id"]) and "admin" not in user_permissions:
-        raise HTTPException(status_code=403, detail="Not authorized to access this search")
-    
-    # Get thread_id from last assistant message
-    thread_id = None
-    previous_messages = []
-    if "messages" in search_data and search_data["messages"]:
-        for msg in sorted(search_data["messages"], key=lambda m: m["sequence"], reverse=True):
-            if msg["role"] == "assistant" and "content" in msg and "metadata" in msg["content"]:
-                thread_id = msg["content"]["metadata"].get("thread_id")
-                if thread_id:
-                    break
-        # Format messages for API
-        previous_messages = [
-            {"role": msg["role"], "content": msg["content"].get("text", "")} 
-            for msg in sorted(search_data["messages"], key=lambda m: m["sequence"])
-        ]
-    
-    # Execute follow-up using workflow
-    response = await workflow.execute_follow_up(
-        user_id=current_user["id"],
-        enterprise_id=search_data.get("enterprise_id"),
-        follow_up_query=data.follow_up_query,
-        thread_id=thread_id,
-        search_params=search_data.get("search_params"),
-        previous_messages=previous_messages
-    )
-    
-    # Handle workflow errors
-    if "error" in response:
-        raise HTTPException(status_code=400, detail=response["error"])
-    
-    # Add messages to search
-    success = await operations.add_search_messages(
-        search_id=search_id,
-        user_query=data.follow_up_query,
-        response=response
-    )
-    
-    if not success:
-        raise HTTPException(status_code=500, detail="Failed to save search messages")
-    
-    # Get updated search data
-    updated_search = await operations.get_search_by_id(search_id)
-    if not updated_search:
-        raise HTTPException(status_code=404, detail="Search not found after update")
-    
-    # Return as Pydantic model
-    return SearchResponse(**updated_search)
+    try:
+        # Execute follow-up using workflow - now handles persistence internally
+        result = await workflow.execute_follow_up(
+            search_id=search_id,
+            user_id=current_user["id"],
+            follow_up_query=data.follow_up_query,
+            enterprise_id=data.enterprise_id,
+            thread_id=data.thread_id,
+            previous_messages=data.previous_messages
+        )
+        
+        # Get updated search data
+        updated_search_dto = await workflow.research_operations.get_search_by_id(search_id)
+        if not updated_search_dto:
+            raise HTTPException(status_code=404, detail="Search not found after update")
+        
+        # Convert DTO to API response model
+        return search_dto_to_response(updated_search_dto)
+        
+    except QueryValidationError as e:
+        raise HTTPException(status_code=400, detail=e.message)
+    except QueryClarificationError as e:
+        # Return a structured response with suggested clarifications
+        raise HTTPException(
+            status_code=400, 
+            detail={
+                "message": e.message,
+                "suggested_clarifications": e.suggested_clarifications
+            }
+        )
+    except IrrelevantQueryError as e:
+        raise HTTPException(status_code=400, detail=e.message)
+    except APIError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message)
+    except PersistenceError as e:
+        raise HTTPException(status_code=500, detail=e.message)
+    except SearchWorkflowError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message)
+    except Exception as e:
+        logger.error(f"Unexpected error in continue_search: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
 
 @router.get("/{search_id}", response_model=SearchResponse)
 async def get_search(
@@ -168,15 +251,15 @@ async def get_search(
     
     Retrieves the full details of a search, including all messages in the conversation.
     """
-    search_data = await operations.get_search_by_id(search_id)
-    if not search_data:
+    search_dto = await operations.get_search_by_id(search_id)
+    if not search_dto:
         raise HTTPException(status_code=404, detail="Search not found")
     
     # Verify ownership or permissions
-    if str(search_data["user_id"]) != str(current_user["id"]) and "admin" not in user_permissions:
+    if str(search_dto.user_id) != str(current_user["id"]) and "admin" not in user_permissions:
         raise HTTPException(status_code=403, detail="Not authorized to access this search")
     
-    return SearchResponse(**search_data)
+    return search_dto_to_response(search_dto)
 
 @router.get("/{search_id}/messages", response_model=SearchMessageListResponse)
 async def get_search_messages(
@@ -195,21 +278,25 @@ async def get_search_messages(
     """
     # Verify user has access to the search
     search_ops = ResearchOperations(operations.db_session)
-    search = await search_ops.get_search_by_id(search_id)
+    search_dto = await search_ops.get_search_by_id(search_id)
     
-    if not search or (str(search["user_id"]) != str(current_user["id"]) and "admin" not in user_permissions):
+    if not search_dto or (str(search_dto.user_id) != str(current_user["id"]) and "admin" not in user_permissions):
         raise HTTPException(status_code=403, detail="Not authorized to access this search")
     
     # Get messages with pagination
     message_ops = SearchMessageOperations(operations.db_session)
-    return await message_ops.get_messages_list_response(search_id, limit, offset)
+    message_list_dto = await message_ops.list_messages_by_search(search_id, limit, offset)
+    
+    # Convert DTO to API response model
+    return search_message_list_dto_to_response(message_list_dto)
 
 @router.get("/", response_model=SearchListResponse)
 async def list_searches(
-    featured_only: bool = Query(False, description="Only return featured searches"),
     status: Optional[QueryStatus] = Query(None, description="Filter by search status"),
     limit: int = Query(20, ge=1, le=100, description="Maximum number of results"),
     offset: int = Query(0, ge=0, description="Pagination offset"),
+    sort_by: str = Query("created_at", description="Field to sort by (created_at, updated_at, title)"),
+    sort_order: str = Query("desc", description="Sort direction (asc or desc)"),
     current_user: dict = Depends(get_current_user),
     user_permissions: List[str] = Depends(get_user_permissions),
     operations: ResearchOperations = Depends(get_research_operations)
@@ -217,22 +304,24 @@ async def list_searches(
     """
     List searches with optional filtering.
     
-    Returns a list of searches created by the current user. Can be filtered to show
-    only featured searches or by status.
+    Returns a list of searches created by the current user. Can be filtered by status
+    and sorted by various fields.
     """
     # Get enterprise_id from user context
     enterprise_id = await get_user_enterprise(current_user, operations.db_session)
     
-    searches = await operations.list_searches(
+    search_list_dto = await operations.list_searches(
         user_id=current_user["id"],
         enterprise_id=enterprise_id,
         limit=limit,
         offset=offset,
-        featured_only=featured_only,
-        status=status if status else None
+        sort_by=sort_by,
+        sort_order=sort_order,
+        status=status.value if status else None
     )
     
-    return searches
+    # Convert DTO to API response model
+    return search_list_dto_to_response(search_list_dto)
 
 @router.patch("/{search_id}", response_model=SearchResponse)
 async def update_search(
@@ -248,22 +337,25 @@ async def update_search(
     Updates the title, description, featured status, tags, category, type or status of a search.
     """
     # Verify ownership of search
-    search = await operations.get_search_by_id(search_id)
-    if not search or str(search["user_id"]) != str(current_user["id"]):
+    search_dto = await operations.get_search_by_id(search_id)
+    if not search_dto or str(search_dto.user_id) != str(current_user["id"]):
         raise HTTPException(status_code=404, detail="Search not found")
     
-    # Update search
+    # Create DTO from update data
     update_data = data.model_dump(exclude_unset=True)
-    success = await operations.update_search_metadata(
+    update_dto = SearchUpdateDTO(**update_data)
+    
+    # Update search
+    updated_search_dto = await operations.update_search_metadata(
         search_id=search_id,
-        **update_data
+        updates=update_dto
     )
     
-    if not success:
+    if not updated_search_dto:
         raise HTTPException(status_code=404, detail="Search not found or update failed")
     
-    # Return updated search data
-    return await operations.get_search_by_id(search_id)
+    # Convert DTO to API response model
+    return search_dto_to_response(updated_search_dto)
 
 @router.delete("/{search_id}", status_code=204)
 async def delete_search(
@@ -278,12 +370,12 @@ async def delete_search(
     Permanently removes a search and all its messages.
     """
     # Verify ownership of search
-    search = await operations.get_search_by_id(search_id)
-    if not search:
+    search_dto = await operations.get_search_by_id(search_id)
+    if not search_dto:
         raise HTTPException(status_code=404, detail="Search not found")
     
     # Only allow deletion by owner or admin
-    if str(search["user_id"]) != str(current_user["id"]) and "admin" not in user_permissions:
+    if str(search_dto.user_id) != str(current_user["id"]) and "admin" not in user_permissions:
         raise HTTPException(status_code=403, detail="Not authorized to delete this search")
     
     # Delete search
@@ -305,7 +397,11 @@ async def get_user_enterprise(current_user: Union[dict, UUID], db: AsyncSession)
     """
     user_id = current_user["id"] if isinstance(current_user, dict) else current_user
     
-    # Use SQLAlchemy ORM to query the user's enterprise_id
-    stmt = select(User.enterprise_id).where(User.id == user_id)
-    result = await db.execute(stmt)
-    return result.scalar_one_or_none()
+    query = select(User).where(User.id == user_id)
+    result = await db.execute(query)
+    user = result.scalars().first()
+    
+    if user and user.enterprise_id:
+        return user.enterprise_id
+    
+    return None

@@ -1,7 +1,7 @@
 # services/workflow/research/search_workflow.py
 
 from typing import Dict, List, Optional, Any, Tuple
-from uuid import UUID
+from uuid import UUID, uuid4
 import logging
 import os
 import httpx
@@ -11,6 +11,14 @@ from enum import Enum
 import json
 from abc import ABC, abstractmethod
 from openai import AsyncOpenAI
+
+# Import domain models and operations
+from models.domain.research.search import ResearchSearch, QueryCategory, QueryType, QueryStatus
+from models.domain.research.search_operations import ResearchOperations
+from models.domain.research.search_message_operations import SearchMessageOperations
+
+# Import DTOs
+from models.dtos.research.search_dto import SearchDTO, SearchResultDTO
 
 # Enums
 class QueryCategory(str, Enum):
@@ -30,6 +38,42 @@ class QueryStatus(str, Enum):
     FAILED = "failed"
     NEEDS_CLARIFICATION = "needs_clarification"
     IRRELEVANT = "irrelevant_query"
+
+# Custom exceptions for more structured error handling
+class SearchWorkflowError(Exception):
+    """Base exception for search workflow errors."""
+    def __init__(self, message: str, error_code: str = "general_error", status_code: int = 400):
+        self.message = message
+        self.error_code = error_code
+        self.status_code = status_code
+        super().__init__(self.message)
+
+class QueryValidationError(SearchWorkflowError):
+    """Exception raised for query validation failures."""
+    def __init__(self, message: str = "Invalid query", error_code: str = "invalid_query"):
+        super().__init__(message, error_code, 400)
+
+class QueryClarificationError(SearchWorkflowError):
+    """Exception raised when a query needs clarification."""
+    def __init__(self, message: str = "Query needs clarification", error_code: str = "needs_clarification", 
+                 suggested_clarifications: List[str] = None):
+        self.suggested_clarifications = suggested_clarifications or []
+        super().__init__(message, error_code, 400)
+
+class IrrelevantQueryError(SearchWorkflowError):
+    """Exception raised for non-legal queries."""
+    def __init__(self, message: str = "Query is not related to legal research", error_code: str = "irrelevant_query"):
+        super().__init__(message, error_code, 400)
+
+class APIError(SearchWorkflowError):
+    """Exception raised for external API errors."""
+    def __init__(self, message: str, error_code: str = "api_error", status_code: int = 500):
+        super().__init__(message, error_code, status_code)
+
+class PersistenceError(SearchWorkflowError):
+    """Exception raised for database persistence errors."""
+    def __init__(self, message: str, error_code: str = "persistence_error"):
+        super().__init__(message, error_code, 500)
 
 # New LLM Service Classes
 class LLMService(ABC):
@@ -67,23 +111,27 @@ class ResearchSearchWorkflow:
     - LLM-based query analysis and classification
     - Query enhancement with legal context
     - Comprehensive logging
+    - Complete orchestration including persistence
     """
     
     def __init__(
         self,
         llm_service: LLMService,
+        research_operations: ResearchOperations,
         api_key: Optional[str] = None,
-        model: str = "sonar-pro"
+        model: str = "sonar"
     ):
         """
-        Initialize the workflow orchestrator with API configuration and LLM service.
+        Initialize the workflow orchestrator with API configuration, LLM service, and operations.
         
         Args:
             llm_service: Instance of LLMService for query analysis
+            research_operations: Operations class for database persistence
             api_key: Optional Perplexity API key (falls back to env var if not provided)
             model: Model name to use for API calls
         """
         self.llm_service = llm_service
+        self.research_operations = research_operations
         self._api_key = api_key or os.environ.get("PERPLEXITY_API_KEY", "")
         if not self._api_key:
             logger.warning("Perplexity API key not configured. API calls will fail.")
@@ -232,13 +280,14 @@ class ResearchSearchWorkflow:
         
         return payload
 
-    def _build_follow_up_payload(self, follow_up_query: str, previous_messages: List[Dict[str, str]]) -> Dict[str, Any]:
+    def _build_follow_up_payload(self, follow_up_query: str, thread_id: Optional[str] = None, previous_messages: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
         """
         Build the payload for a follow-up query.
         
         Args:
             follow_up_query: Follow-up query from the user
-            previous_messages: List of previous messages in the conversation
+            thread_id: Optional thread ID from previous API call
+            previous_messages: Optional list of previous messages in the conversation
             
         Returns:
             API payload dictionary
@@ -454,7 +503,7 @@ class ResearchSearchWorkflow:
         enterprise_id: Optional[UUID] = None, 
         search_params: Optional[Dict] = None,
         search_domain: Optional[ResearchSearch] = None
-    ) -> Dict[str, Any]:
+    ) -> SearchResultDTO:
         """
         Execute a new search query, orchestrating domain models and API calls.
         
@@ -466,7 +515,7 @@ class ResearchSearchWorkflow:
             search_domain: Optional ResearchSearch domain model
             
         Returns:
-            Search response or error response
+            SearchResultDTO containing the search results or error information
         """
         context = {
             "user_id": str(user_id),
@@ -486,22 +535,20 @@ class ResearchSearchWorkflow:
         
         if not search_domain.validate_query(query):
             logger.warning("Invalid query rejected", extra=context)
-            return {"error": "Invalid query"}
+            raise QueryValidationError("Invalid query")
         
         query_analysis = await self._analyze_query(query, search_params, context)
         
         if query_analysis.get("category") == "unclear":
             logger.info("Unclear query detected", extra={**context, "analysis": query_analysis})
-            return {
-                "error": "Query needs clarification",
-                "suggested_clarifications": query_analysis.get("suggested_clarifications", [])
-            }
+            raise QueryClarificationError(
+                "Query needs clarification",
+                suggested_clarifications=query_analysis.get("suggested_clarifications", [])
+            )
         
         if query_analysis.get("category") == "irrelevant":
             logger.info("Irrelevant (non-legal) query detected", extra={**context, "analysis": query_analysis})
-            return {
-                "error": "This query appears to be unrelated to legal research. LegalVault Research is designed specifically for legal professionals conducting law-related research."
-            }
+            raise IrrelevantQueryError("This query appears to be unrelated to legal research. LegalVault Research is designed specifically for legal professionals conducting law-related research.")
         
         enhanced_query = self._enhance_query_with_context(query, query_analysis)
         
@@ -515,7 +562,7 @@ class ResearchSearchWorkflow:
                 "error": response["error"],
                 "execution_time": execution_time
             })
-            return response
+            raise APIError(response["error"])
         
         processed_response = self._process_results(response)
         
@@ -526,103 +573,169 @@ class ResearchSearchWorkflow:
             "query_analysis": query_analysis
         }
         
+        # Create a SearchResultDTO from the processed response
+        result_dto = SearchResultDTO(
+            thread_id=processed_response.get("thread_id"),
+            text=processed_response.get("text", ""),
+            citations=processed_response.get("citations", []),
+            token_usage=processed_response.get("token_usage", 0),
+            metadata=processed_response.get("metadata", {})
+        )
+        
+        # Persist the search and its results
+        search_id = uuid4()
+        search_dto = await self.research_operations.create_search_record(
+            search_id=search_id,
+            user_id=user_id,
+            query=query,
+            enterprise_id=enterprise_id,
+            search_params=search_params,
+            response=processed_response
+        )
+        
+        # Handle database errors
+        if isinstance(search_dto, dict) and "error" in search_dto:
+            logger.error("Database error while persisting search", extra={
+                **context,
+                "error": search_dto["error"],
+                "execution_time": execution_time
+            })
+            raise PersistenceError(search_dto["error"])
+        else:
+            # Add search_id to metadata for reference
+            result_dto.metadata["search_id"] = str(search_id)
+        
         logger.info("Search executed successfully", extra={
             **context, 
-            "execution_time": execution_time
+            "execution_time": execution_time,
+            "search_id": str(search_id)
         })
         
-        return processed_response
+        return result_dto
 
     async def execute_follow_up(
         self,
+        search_id: UUID,
         user_id: UUID,
-        enterprise_id: Optional[UUID],
         follow_up_query: str,
+        enterprise_id: Optional[UUID] = None,
         thread_id: Optional[str] = None,
-        search_params: Optional[Dict] = None,
-        previous_messages: Optional[List[Dict[str, str]]] = None,
-        search_domain: Optional[ResearchSearch] = None
-    ) -> Dict[str, Any]:
+        previous_messages: Optional[List[Dict[str, Any]]] = None
+    ) -> SearchResultDTO:
         """
-        Execute a follow-up query for an existing search.
+        Execute a follow-up query for an existing search, maintaining context.
         
         Args:
-            user_id: UUID of the user for context tracking
+            search_id: UUID of the existing search
+            user_id: UUID of the user initiating the follow-up
+            follow_up_query: The follow-up query text
             enterprise_id: Optional UUID of the user's enterprise
-            follow_up_query: Follow-up query from the user
-            thread_id: Optional thread_id from previous response for context continuity
-            search_params: Optional search parameters
-            previous_messages: Optional list of previous messages in the conversation
-            search_domain: Optional ResearchSearch domain model
+            thread_id: Optional thread ID from previous API call
+            previous_messages: Optional list of previous messages
             
         Returns:
-            Search response or error dict
+            SearchResultDTO containing the search results or error information
+            
+        Raises:
+            QueryValidationError: If the query is invalid
+            APIError: If there's an error with the external API
+            PersistenceError: If there's an error persisting the results
         """
         context = {
+            "user_id": str(user_id),
+            "search_id": str(search_id),
             "timestamp": datetime.utcnow().isoformat(),
-            "follow_up_query": follow_up_query[:100] + "..." if len(follow_up_query) > 100 else follow_up_query,
-            "user_id": str(user_id)
+            "query_text": follow_up_query[:100] + "..." if len(follow_up_query) > 100 else follow_up_query
         }
         
         if enterprise_id:
             context["enterprise_id"] = str(enterprise_id)
-        if thread_id:
-            context["thread_id"] = thread_id
         
         logger.info("Processing follow-up query", extra=context)
         
         start_time = datetime.utcnow()
         
-        if not search_domain:
-            search_domain = ResearchSearch(
-                user_id=user_id,
-                enterprise_id=enterprise_id
-            )
+        # First, verify the search exists and belongs to this user
+        search_dto = await self.research_operations.get_search_by_id(search_id)
         
+        if not search_dto:
+            logger.warning("Search not found", extra=context)
+            raise SearchWorkflowError("Search not found", "search_not_found", 404)
+        
+        if search_dto.user_id != user_id:
+            logger.warning("Unauthorized access attempt", extra=context)
+            raise SearchWorkflowError("Unauthorized access to this search", "unauthorized", 403)
+        
+        # If no thread_id or previous_messages provided, try to get them from the search
+        if not thread_id or not previous_messages:
+            if search_dto.messages and len(search_dto.messages) >= 2:
+                # Extract thread_id and messages from the search
+                assistant_messages = [m for m in search_dto.messages if m.role == "assistant"]
+                if assistant_messages and "thread_id" in assistant_messages[-1].content:
+                    thread_id = assistant_messages[-1].content.get("thread_id")
+                
+                # Convert messages to the format expected by the API
+                previous_messages = []
+                for msg in search_dto.messages:
+                    if msg.role == "user":
+                        previous_messages.append({"role": "user", "content": msg.content.get("text", "")})
+                    elif msg.role == "assistant" and "text" in msg.content:
+                        previous_messages.append({"role": "assistant", "content": msg.content.get("text", "")})
+        
+        # Validate the follow-up query
+        search_domain = ResearchSearch(user_id=user_id, enterprise_id=enterprise_id)
         if not search_domain.validate_query(follow_up_query):
             logger.warning("Invalid follow-up query rejected", extra=context)
-            return {"error": "Invalid follow-up query"}
+            raise QueryValidationError("Invalid follow-up query")
         
-        # If no previous messages provided but thread_id exists, use thread_id for continuity
-        if not previous_messages and thread_id:
-            # Create a system message and build payload with thread_id
-            system_message = {
-                "role": "system",
-                "content": "Provide a concise, accurate, and legally relevant response to the follow-up query, prioritizing authoritative sources such as case law, statutes, and reputable legal commentary, tailored to the needs of a practicing lawyer."
-            }
-            previous_messages = [system_message]
-            
-        payload = self._build_follow_up_payload(follow_up_query, previous_messages or [])
-        
-        # If thread_id exists, include it in the payload for context continuity
-        if thread_id:
-            payload["thread_id"] = thread_id
-            
+        # Call the API with the follow-up query and context
+        payload = self._build_follow_up_payload(follow_up_query, thread_id, previous_messages or [])
         response = await self._call_perplexity_api(payload)
         
         execution_time = (datetime.utcnow() - start_time).total_seconds()
         
         if "error" in response:
-            logger.error("Error in API response for follow-up", extra={
+            logger.error("Error in API response", extra={
                 **context, 
                 "error": response["error"],
                 "execution_time": execution_time
             })
-            return response
-            
+            raise APIError(response["error"])
+        
         processed_response = self._process_results(response)
         
         # Add metadata to the response
         processed_response["metadata"] = {
-            "execution_time": execution_time
+            "execution_time": execution_time,
+            "is_follow_up": True
         }
         
-        logger.info("Follow-up executed successfully", extra={
+        # Create a SearchResultDTO from the processed response
+        result_dto = SearchResultDTO(
+            thread_id=processed_response.get("thread_id"),
+            text=processed_response.get("text", ""),
+            citations=processed_response.get("citations", []),
+            token_usage=processed_response.get("token_usage", 0),
+            metadata=processed_response.get("metadata", {})
+        )
+        
+        # Persist the follow-up query and response
+        success = await self.research_operations.add_search_messages(
+            search_id=search_id,
+            user_query=follow_up_query,
+            response=processed_response
+        )
+        
+        if not success:
+            logger.error("Failed to persist follow-up messages", extra=context)
+            raise PersistenceError("Failed to save follow-up messages")
+        
+        logger.info("Follow-up query executed successfully", extra={
             **context, 
             "execution_time": execution_time
         })
         
-        return processed_response
+        return result_dto
 
 # Future Enhancements:
 # 1. Caching Layer

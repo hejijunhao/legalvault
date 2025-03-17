@@ -7,13 +7,27 @@ from sqlalchemy import select, delete, update, func
 
 from models.database.research.public_search_messages import PublicSearchMessage
 from models.domain.research.search_message import ResearchMessage
-from models.schemas.research.search_message import SearchMessageResponse, SearchMessageListResponse
+
+# Import DTOs instead of schema models
+from models.dtos.research.search_message_dto import (
+    SearchMessageDTO, SearchMessageListDTO, SearchMessageCreateDTO, SearchMessageUpdateDTO,
+    to_search_message_dto, to_search_message_list_dto
+)
 
 class SearchMessageOperations:
     """Operations for managing PublicSearchMessage records in the database."""
 
     def __init__(self, db_session: AsyncSession):
         self.db = db_session
+
+    async def get_next_sequence(self, search_id: UUID) -> int:
+        """Get the next sequence number for a message in a search."""
+        query = select(func.max(PublicSearchMessage.sequence)).where(
+            PublicSearchMessage.search_id == search_id
+        )
+        result = await self.db.execute(query)
+        max_sequence = result.scalar() or 0
+        return max_sequence + 1
 
     def create_message(self, search_id: UUID, role: str, content: Dict[str, Any], sequence: int) -> PublicSearchMessage:
         """Create a new message and add it to the session without committing."""
@@ -27,44 +41,39 @@ class SearchMessageOperations:
         self.db.add(db_message)
         return db_message
 
-    async def get_message_by_id(self, message_id: UUID) -> Optional[SearchMessageResponse]:
+    async def get_message_by_id(self, message_id: UUID) -> Optional[SearchMessageDTO]:
         """Retrieve a message by its ID."""
         query = select(PublicSearchMessage).where(PublicSearchMessage.id == message_id)
         result = await self.db.execute(query)
         db_message = result.scalars().first()
         if db_message:
-            # Get search title if possible
-            search_title = None
-            if hasattr(db_message, 'search') and db_message.search:
-                search_title = db_message.search.title
-            
-            return SearchMessageResponse(
-                id=db_message.id,
-                search_id=db_message.search_id,
-                search_title=search_title,
-                role=db_message.role,
-                content=db_message.content,
-                sequence=db_message.sequence,
-                created_at=db_message.created_at,
-                updated_at=db_message.updated_at
-            )
+            return to_search_message_dto(db_message)
         return None
 
-    async def update_message(self, message_id: UUID, updates: Dict[str, Any]) -> bool:
+    async def update_message(self, message_id: UUID, updates: SearchMessageUpdateDTO) -> Optional[SearchMessageDTO]:
         """Update a message's content or other attributes."""
         query = select(PublicSearchMessage).where(PublicSearchMessage.id == message_id)
         result = await self.db.execute(query)
         db_message = result.scalars().first()
         if not db_message:
-            return False
-        if "content" in updates:
-            temp_message = ResearchMessage(content=updates["content"], role=db_message.role)
+            return None
+            
+        # Convert DTO to dict and update fields
+        updates_dict = updates.dict(exclude_unset=True)
+        if not updates_dict:
+            # No updates provided, return current state
+            return to_search_message_dto(db_message)
+            
+        if "content" in updates_dict:
+            temp_message = ResearchMessage(content=updates_dict["content"], role=db_message.role)
             db_message.content = temp_message.content
-        for key, value in updates.items():
-            if key != "content":
+        
+        for key, value in updates_dict.items():
+            if key != "content" and hasattr(db_message, key):
                 setattr(db_message, key, value)
+                
         await self.db.commit()
-        return True
+        return to_search_message_dto(db_message)
 
     async def delete_message(self, message_id: UUID) -> bool:
         """Delete a message from the database."""
@@ -73,47 +82,53 @@ class SearchMessageOperations:
         await self.db.commit()
         return result.rowcount > 0
 
-    async def list_messages_by_search(self, search_id: UUID, limit: int = 100, offset: int = 0) -> List[SearchMessageResponse]:
+    async def list_messages_by_search(self, search_id: UUID, limit: int = 100, offset: int = 0) -> SearchMessageListDTO:
         """List all messages for a given search with pagination."""
+        # Query for messages
         query = select(PublicSearchMessage).where(PublicSearchMessage.search_id == search_id)\
             .order_by(PublicSearchMessage.sequence).offset(offset).limit(limit)
         result = await self.db.execute(query)
         messages = result.scalars().all()
         
-        # Get search title if possible
-        search_title = None
-        if messages and hasattr(messages[0], 'search') and messages[0].search:
-            search_title = messages[0].search.title
-        
-        return [
-            SearchMessageResponse(
-                id=m.id,
-                search_id=m.search_id,
-                search_title=search_title,
-                role=m.role,
-                content=m.content,
-                sequence=m.sequence,
-                created_at=m.created_at,
-                updated_at=m.updated_at
-            )
-            for m in messages
-        ]
-
-    async def count_messages_by_search(self, search_id: UUID) -> int:
-        """Count the total number of messages for a given search without retrieving all records."""
-        query = select(func.count()).where(PublicSearchMessage.search_id == search_id)
-        result = await self.db.execute(query)
-        count = result.scalar_one()
-        return count
-        
-    async def get_messages_list_response(self, search_id: UUID, limit: int = 100, offset: int = 0) -> SearchMessageListResponse:
-        """Get a complete list response with pagination metadata."""
-        messages = await self.list_messages_by_search(search_id, limit, offset)
-        total = await self.count_messages_by_search(search_id)
-        
-        return SearchMessageListResponse(
-            items=messages,
-            total=total,
-            offset=offset,
-            limit=limit
+        # Count total messages
+        count_query = select(func.count()).select_from(PublicSearchMessage).where(
+            PublicSearchMessage.search_id == search_id
         )
+        count_result = await self.db.execute(count_query)
+        total_count = count_result.scalar() or 0
+        
+        # Convert to DTO
+        return to_search_message_list_dto(messages, total_count, search_id)
+
+    async def create_message_with_commit(self, message_create_dto: SearchMessageCreateDTO) -> SearchMessageDTO:
+        """Create a new message and commit it to the database."""
+        try:
+            # Create domain model for validation
+            message = ResearchMessage(
+                content=message_create_dto.content,
+                role=message_create_dto.role,
+                sequence=message_create_dto.sequence or 1
+            )
+            
+            # If sequence not provided, get the next sequence number
+            if message_create_dto.sequence is None:
+                message.sequence = await self.get_next_sequence(message_create_dto.search_id)
+            
+            # Create database record
+            db_message = PublicSearchMessage(
+                search_id=message_create_dto.search_id,
+                role=message.role,
+                content=message.content,
+                sequence=message.sequence
+            )
+            self.db.add(db_message)
+            await self.db.commit()
+            
+            # Refresh to get generated values
+            await self.db.refresh(db_message)
+            
+            # Return as DTO
+            return to_search_message_dto(db_message)
+        except Exception as e:
+            await self.db.rollback()
+            raise e
