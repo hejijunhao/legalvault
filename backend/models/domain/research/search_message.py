@@ -2,12 +2,13 @@
 
 from typing import Dict, Any, Optional, Literal
 from uuid import UUID
+from models.enums.research_enums import QueryStatus
 
 class ResearchMessage:
     """Domain model for search message operations within a public search conversation."""
 
     def __init__(self, content: Dict[str, Any], role: str, message_id: Optional[UUID] = None, 
-                 sequence: Optional[int] = None):
+                 sequence: Optional[int] = None, status: QueryStatus = QueryStatus.PENDING):
         """
         Initialize a ResearchMessage.
         
@@ -16,11 +17,13 @@ class ResearchMessage:
             role: Role of the sender ('user' or 'assistant').
             message_id: Optional UUID of the message, if already persisted.
             sequence: Optional sequence number for ordering within a conversation.
+            status: Status of the message (pending, completed, failed, etc.).
         """
         self.content = content
         self.role = role
         self.message_id = message_id
         self.sequence = sequence
+        self.status = status
         self._validate()
 
     def _validate(self) -> None:
@@ -48,7 +51,8 @@ class ResearchMessage:
             "original_text": self.content.get('text', ''),
             "reply_to_message_id": self.message_id,
             "role": "assistant" if self.role == "user" else "user",
-            "sequence": self.sequence
+            "sequence": self.sequence,
+            "status": self.status.value if hasattr(self.status, 'value') else self.status
         }
 
     def forward_message(self, destination: str, destination_type: str) -> Dict[str, Any]:
@@ -70,7 +74,8 @@ class ResearchMessage:
             "role": self.role,
             "destination": destination,
             "destination_type": destination_type,
-            "sequence": self.sequence
+            "sequence": self.sequence,
+            "status": self.status.value if hasattr(self.status, 'value') else self.status
         }
         
     def categorize_message(self) -> Literal["question", "answer", "clarification", "citation"]:
@@ -102,3 +107,30 @@ class ResearchMessage:
             True if this is a system message, False otherwise.
         """
         return self.role == "assistant" and self.content.get('is_system', False)
+        
+    def update_status(self, status: QueryStatus) -> None:
+        """
+        Update the status of this message.
+        
+        Args:
+            status: New status value
+        """
+        self.status = status
+        
+    def is_completed(self) -> bool:
+        """
+        Check if this message has been completed.
+        
+        Returns:
+            True if the message status is COMPLETED, False otherwise.
+        """
+        return self.status == QueryStatus.COMPLETED
+        
+    def is_failed(self) -> bool:
+        """
+        Check if this message has failed processing.
+        
+        Returns:
+            True if the message status is FAILED, False otherwise.
+        """
+        return self.status == QueryStatus.FAILED

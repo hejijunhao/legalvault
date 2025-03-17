@@ -5,6 +5,8 @@ from typing import Dict, List, Optional, Any, Union
 from uuid import UUID
 from pydantic import BaseModel, Field
 
+from models.enums.research_enums import QueryStatus
+
 class CitationDTO(BaseModel):
     """DTO for citations in search responses"""
     text: str
@@ -17,6 +19,7 @@ class SearchMessageDTO(BaseModel):
     role: str
     content: Dict[str, Any]
     sequence: int
+    status: str
     created_at: datetime
     updated_at: Optional[datetime] = None
     
@@ -29,11 +32,13 @@ class SearchMessageCreateDTO(BaseModel):
     role: str
     content: Dict[str, Any]
     sequence: Optional[int] = None
+    status: Optional[str] = QueryStatus.PENDING.value
 
 class SearchMessageUpdateDTO(BaseModel):
     """DTO for updating a search message"""
     content: Optional[Dict[str, Any]] = None
     sequence: Optional[int] = None
+    status: Optional[str] = None
 
 class SearchMessageListDTO(BaseModel):
     """DTO for transferring lists of search messages"""
@@ -44,12 +49,17 @@ class SearchMessageListDTO(BaseModel):
 # Conversion functions
 def to_search_message_dto(db_message: Any) -> SearchMessageDTO:
     """Convert database model to SearchMessageDTO"""
+    status = db_message.status
+    if hasattr(status, "value"):
+        status = status.value
+        
     return SearchMessageDTO(
         id=db_message.id,
         search_id=db_message.search_id,
         role=db_message.role,
         content=db_message.content,
         sequence=db_message.sequence,
+        status=status,
         created_at=db_message.created_at,
         updated_at=db_message.updated_at
     )
@@ -71,6 +81,7 @@ def format_message_for_workflow(message_dto: SearchMessageDTO) -> Dict[str, Any]
         "sequence": message_dto.sequence,
         "id": str(message_dto.id),
         "search_id": str(message_dto.search_id),
+        "status": message_dto.status,
         "created_at": message_dto.created_at.isoformat()
     }
 

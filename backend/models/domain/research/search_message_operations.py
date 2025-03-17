@@ -7,6 +7,7 @@ from sqlalchemy import select, delete, update, func
 
 from models.database.research.public_search_messages import PublicSearchMessage
 from models.domain.research.search_message import ResearchMessage
+from models.enums.research_enums import QueryStatus
 
 # Import DTOs instead of schema models
 from models.dtos.research.search_message_dto import (
@@ -29,14 +30,15 @@ class SearchMessageOperations:
         max_sequence = result.scalar() or 0
         return max_sequence + 1
 
-    def create_message(self, search_id: UUID, role: str, content: Dict[str, Any], sequence: int) -> PublicSearchMessage:
+    def create_message(self, search_id: UUID, role: str, content: Dict[str, Any], sequence: int, status: QueryStatus = QueryStatus.PENDING) -> PublicSearchMessage:
         """Create a new message and add it to the session without committing."""
         message = ResearchMessage(content=content, role=role, sequence=sequence)
         db_message = PublicSearchMessage(
             search_id=search_id,
             role=message.role,
             content=message.content,
-            sequence=sequence
+            sequence=sequence,
+            status=status
         )
         self.db.add(db_message)
         return db_message
@@ -75,6 +77,18 @@ class SearchMessageOperations:
         await self.db.commit()
         return to_search_message_dto(db_message)
 
+    async def update_message_status(self, message_id: UUID, status: QueryStatus) -> Optional[SearchMessageDTO]:
+        """Update a message's status."""
+        query = select(PublicSearchMessage).where(PublicSearchMessage.id == message_id)
+        result = await self.db.execute(query)
+        db_message = result.scalars().first()
+        if not db_message:
+            return None
+            
+        db_message.status = status
+        await self.db.commit()
+        return to_search_message_dto(db_message)
+
     async def delete_message(self, message_id: UUID) -> bool:
         """Delete a message from the database."""
         query = delete(PublicSearchMessage).where(PublicSearchMessage.id == message_id)
@@ -100,6 +114,15 @@ class SearchMessageOperations:
         # Convert to DTO
         return to_search_message_list_dto(messages, total_count, search_id)
 
+    async def list_messages_by_status(self, status: QueryStatus, limit: int = 100, offset: int = 0) -> List[SearchMessageDTO]:
+        """List messages by status with pagination."""
+        query = select(PublicSearchMessage).where(PublicSearchMessage.status == status)\
+            .order_by(PublicSearchMessage.created_at).offset(offset).limit(limit)
+        result = await self.db.execute(query)
+        messages = result.scalars().all()
+        
+        return [to_search_message_dto(msg) for msg in messages]
+
     async def create_message_with_commit(self, message_create_dto: SearchMessageCreateDTO) -> SearchMessageDTO:
         """Create a new message and commit it to the database."""
         try:
@@ -119,7 +142,8 @@ class SearchMessageOperations:
                 search_id=message_create_dto.search_id,
                 role=message.role,
                 content=message.content,
-                sequence=message.sequence
+                sequence=message.sequence,
+                status=message_create_dto.status if hasattr(message_create_dto, 'status') else QueryStatus.PENDING
             )
             self.db.add(db_message)
             await self.db.commit()

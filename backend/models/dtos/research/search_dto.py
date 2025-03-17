@@ -4,27 +4,11 @@ from datetime import datetime
 from typing import Dict, List, Optional, Any, Union
 from uuid import UUID
 from pydantic import BaseModel, Field
-from enum import Enum
 
-# Enums for DTO layer - these mirror the domain model enums
-class QueryCategoryDTO(str, Enum):
-    CLEAR = "clear"
-    UNCLEAR = "unclear"
-    IRRELEVANT = "irrelevant"
-    BORDERLINE = "borderline"
-
-class QueryTypeDTO(str, Enum):
-    COURT_CASE = "court_case"
-    LEGISLATIVE = "legislative"
-    COMMERCIAL = "commercial"
-    GENERAL = "general"
-
-class QueryStatusDTO(str, Enum):
-    PENDING = "pending"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    NEEDS_CLARIFICATION = "needs_clarification"
-    IRRELEVANT = "irrelevant_query"
+# Import enums from centralized location and rename with DTO suffix
+from models.enums.research_enums import QueryCategory as QueryCategoryDTO
+from models.enums.research_enums import QueryType as QueryTypeDTO
+from models.enums.research_enums import QueryStatus as QueryStatusDTO
 
 # Base DTOs
 class SearchMessageDTO(BaseModel):

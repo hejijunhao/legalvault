@@ -4,29 +4,10 @@ from typing import Dict, List, Optional, Any
 from uuid import UUID
 import logging
 from datetime import datetime
-from enum import Enum
+
+from models.enums.research_enums import QueryCategory, QueryType, QueryStatus
 
 logger = logging.getLogger(__name__)
-
-# Domain enums for search categorization
-class QueryCategory(str, Enum):
-    CLEAR = "clear"
-    UNCLEAR = "unclear"
-    IRRELEVANT = "irrelevant"
-    BORDERLINE = "borderline"  # For queries that might need review
-
-class QueryType(str, Enum):
-    COURT_CASE = "court_case"
-    LEGISLATIVE = "legislative"
-    COMMERCIAL = "commercial"
-    GENERAL = "general"
-
-class QueryStatus(str, Enum):
-    PENDING = "pending"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    NEEDS_CLARIFICATION = "needs_clarification"
-    IRRELEVANT = "irrelevant_query"
 
 class ResearchSearch:
     """

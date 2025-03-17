@@ -7,37 +7,20 @@ import os
 import httpx
 import asyncio
 from datetime import datetime
-from enum import Enum
 import json
 from abc import ABC, abstractmethod
 from openai import AsyncOpenAI
 
 # Import domain models and operations
-from models.domain.research.search import ResearchSearch, QueryCategory, QueryType, QueryStatus
+from models.domain.research.search import ResearchSearch
 from models.domain.research.search_operations import ResearchOperations
 from models.domain.research.search_message_operations import SearchMessageOperations
 
 # Import DTOs
 from models.dtos.research.search_dto import SearchDTO, SearchResultDTO
 
-# Enums
-class QueryCategory(str, Enum):
-    CLEAR = "clear"
-    UNCLEAR = "unclear"
-    IRRELEVANT = "irrelevant"
-    BORDERLINE = "borderline"  # For queries that might need review
-
-class QueryType(str, Enum):
-    COURT_CASE = "court_case"
-    LEGISLATIVE = "legislative"
-    COMMERCIAL = "commercial"
-    GENERAL = "general"
-
-class QueryStatus(str, Enum):
-    COMPLETED = "completed"
-    FAILED = "failed"
-    NEEDS_CLARIFICATION = "needs_clarification"
-    IRRELEVANT = "irrelevant_query"
+# Import centralized enums
+from models.enums.research_enums import QueryCategory, QueryType, QueryStatus
 
 # Custom exceptions for more structured error handling
 class SearchWorkflowError(Exception):
@@ -179,13 +162,13 @@ class ResearchSearchWorkflow:
             return {"error": "Failed to analyze query"}
 
         if analysis["relevance"].lower() != "yes":
-            category = "irrelevant"
+            category = QueryCategory.IRRELEVANT
         elif analysis["clarity"] < 0.6:
-            category = "unclear"
+            category = QueryCategory.UNCLEAR
         elif analysis["clarity"] < 0.8:
-            category = "borderline"
+            category = QueryCategory.BORDERLINE
         else:
-            category = "clear"
+            category = QueryCategory.CLEAR
 
         logger.info("Query analysis completed", extra={
             **context,
@@ -198,12 +181,12 @@ class ResearchSearchWorkflow:
 
         return {
             "category": category,
-            "query_type": analysis["type"],
+            "query_type": QueryType(analysis["type"]),
             "complexity_score": analysis["complexity"],
             "clarity_score": analysis["clarity"],
             "is_legal_query": analysis["relevance"].lower() == "yes",
             "confidence_score": 0.8 if analysis["relevance"].lower() == "yes" else 0.3,
-            "suggested_clarifications": analysis["clarifications"] if category == "unclear" else [],
+            "suggested_clarifications": analysis["clarifications"] if category == QueryCategory.UNCLEAR else [],
             "requires_citation": analysis["complexity"] > 0.5,
             "estimated_token_usage": len(query.split()) * 2  # Simple estimation
         }
@@ -213,21 +196,21 @@ class ResearchSearchWorkflow:
         Enhances the original query with legal context, specialized instructions, 
         and formatting requirements based on query type.
         """
-        query_type = query_analysis.get("query_type", "general")
+        query_type = query_analysis.get("query_type", QueryType.GENERAL)
         
         enhanced_query = query
         
-        if query_type == "court_case":
+        if query_type == QueryType.COURT_CASE:
             enhanced_query = f"""Legal Case Research Request: {enhanced_query}
             Please provide relevant case law, including case names, citations, key holdings,
             and their application to the query. Format citations according to standard legal citation practices."""
             
-        elif query_type == "legislative":
+        elif query_type == QueryType.LEGISLATIVE:
             enhanced_query = f"""Legal Statutory Research Request: {enhanced_query}
             Please provide relevant statutes, regulations, or codes, including their citations,
             effective dates, and interpretation in relevant jurisdictions."""
             
-        elif query_type == "commercial":
+        elif query_type == QueryType.COMMERCIAL:
             enhanced_query = f"""Legal Commercial Research Request: {enhanced_query}
             Please provide relevant market information, corporate data, or industry practices,
             focusing on legal implications and compliance considerations in relevant jurisdictions."""
@@ -539,14 +522,14 @@ class ResearchSearchWorkflow:
         
         query_analysis = await self._analyze_query(query, search_params, context)
         
-        if query_analysis.get("category") == "unclear":
+        if query_analysis.get("category") == QueryCategory.UNCLEAR:
             logger.info("Unclear query detected", extra={**context, "analysis": query_analysis})
             raise QueryClarificationError(
                 "Query needs clarification",
                 suggested_clarifications=query_analysis.get("suggested_clarifications", [])
             )
         
-        if query_analysis.get("category") == "irrelevant":
+        if query_analysis.get("category") == QueryCategory.IRRELEVANT:
             logger.info("Irrelevant (non-legal) query detected", extra={**context, "analysis": query_analysis})
             raise IrrelevantQueryError("This query appears to be unrelated to legal research. LegalVault Research is designed specifically for legal professionals conducting law-related research.")
         

@@ -1,11 +1,12 @@
 # models/database/research/public_search_messages.py
 
-from sqlalchemy import Column, String, ForeignKey, Text, Integer, Index
+from sqlalchemy import Column, String, ForeignKey, Text, Integer, Index, Enum as SQLAlchemyEnum
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 from typing import Optional, Dict, TYPE_CHECKING
 from models.database.base import VaultBase
 from models.database.mixins.timestamp_mixin import TimestampMixin
+from models.enums.research_enums import QueryStatus
 
 if TYPE_CHECKING:
     from models.database.research.public_searches import PublicSearch
@@ -39,6 +40,10 @@ class PublicSearchMessage(VaultBase, TimestampMixin):
     sequence = Column(Integer, nullable=False, default=0,
                      comment="Sequence number for ordering messages within a conversation")
     
+    # Message status
+    status = Column(SQLAlchemyEnum(QueryStatus), nullable=False, default=QueryStatus.PENDING, index=True,
+                   comment="Status of the message (pending, completed, failed, etc.)")
+    
     # Relationship to parent search
     search = relationship(
         "PublicSearch",
@@ -50,4 +55,4 @@ class PublicSearchMessage(VaultBase, TimestampMixin):
 
     
     def __repr__(self):
-        return f"PublicSearchMessage(id={self.id}, search_id={self.search_id}, role={self.role})"
+        return f"PublicSearchMessage(id={self.id}, search_id={self.search_id}, role={self.role}, status={self.status})"
