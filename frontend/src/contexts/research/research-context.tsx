@@ -15,7 +15,8 @@ import {
   WebSocketConnection,
   WebSocketMessage,
   requestLatestMessages,
-  sendTypingNotification
+  sendTypingNotification,
+  cache as researchCache
 } from "@/services/research/research-api"
 
 // Define enum types that mirror the backend
@@ -130,6 +131,7 @@ interface ResearchContextType {
   isConnected: boolean
   connectToWebSocket: (sessionId: string) => Promise<void>
   disconnectWebSocket: () => void
+  clearCache: () => void
 }
 
 const ResearchContext = createContext<ResearchContextType | undefined>(undefined)
@@ -150,6 +152,8 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
   const [totalSessions, setTotalSessions] = useState(0)
   const [isConnected, setIsConnected] = useState(false)
   const [wsConnection, setWsConnection] = useState<WebSocketConnection | null>(null)
+  const [reconnectionAttempts, setReconnectionAttempts] = useState(0)
+  const [lastHeartbeat, setLastHeartbeat] = useState<number | null>(null)
 
   const clearError = () => setError(null)
 
@@ -281,20 +285,25 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
   }
 
   const getSession = async (sessionId: string) => {
-    if (!sessionId?.trim()) {
-      setError({
-        message: "Invalid search ID",
-        details: "Search ID cannot be empty"
-      })
+    if (!sessionId) return
+    
+    // Check if we already have this session in our state
+    if (currentSession?.id === sessionId) {
       return
     }
-
+    
+    // Check cache before making API call
+    const cachedSession = researchCache.getSession(sessionId);
+    if (cachedSession) {
+      setCurrentSession(cachedSession);
+      return;
+    }
+    
     setLoadingStates(prev => ({ ...prev, fetchingSession: true }))
     setIsLoading(true)
     setError(null)
     
     try {
-      // Use the API service to fetch a session
       const session = await fetchSession(sessionId)
       setCurrentSession(session)
       updateSessionInList(session)
@@ -329,6 +338,7 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
       // Use the API service to create a session
       const newSession = await createNewSession(trimmedQuery, searchParams)
       updateSessionInList(newSession)
+      researchCache.clearAll()
       return newSession.id
     } catch (err) {
       const errorData = handleApiError(err, "Failed to create research search")
@@ -395,6 +405,7 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
       const updatedSession = await sendSessionMessage(sessionId, trimmedContent)
       setCurrentSession(updatedSession)
       updateSessionInList(updatedSession)
+      researchCache.invalidateSearch(sessionId)
     } catch (err) {
       // Revert to previous state on error
       setCurrentSession(currentSession)
@@ -460,6 +471,7 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
         setCurrentSession(updatedSession)
       }
       updateSessionInList(updatedSession)
+      researchCache.invalidateSearch(sessionId)
     } catch (err) {
       // Revert to previous state on error
       if (currentSession?.id === sessionId) {
@@ -499,6 +511,8 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
     try {
       await deleteSession(sessionId)
       // Already updated the UI optimistically, no need to do it again
+      researchCache.invalidateSearch(sessionId)
+      researchCache.clearAll()
     } catch (err) {
       // Rollback on error
       setSessions(previousSessions)
@@ -518,12 +532,21 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
       setIsConnected(false);
     }
     
+    // Reset reconnection attempts when intentionally connecting
+    setReconnectionAttempts(0);
+    
     try {
       const connection = await connectToMessageUpdates(
         sessionId,
         (message: WebSocketMessage) => {
           // Handle incoming WebSocket messages
           console.log('Received WebSocket message:', message);
+          
+          // Track heartbeats for connection health monitoring
+          if (message.type === 'heartbeat' || message.type === 'pong') {
+            setLastHeartbeat(Date.now());
+            return; // Don't process heartbeats further
+          }
           
           if (message.type === 'messages' && message.data) {
             // Update the current session with new messages
@@ -556,6 +579,17 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
             details: error.message || 'Unknown error'
           });
           setIsConnected(false);
+          
+          // Track reconnection attempts for monitoring connection stability
+          setReconnectionAttempts(prev => prev + 1);
+          
+          // If we've had too many reconnection attempts, show a more specific error
+          if (reconnectionAttempts > 3) {
+            setError({
+              message: 'Unstable connection to research service',
+              details: `Connection has been lost ${reconnectionAttempts} times. There may be network issues.`
+            });
+          }
         },
         () => {
           // Handle connection close
@@ -567,10 +601,12 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
       
       setWsConnection(connection);
       setIsConnected(true);
+      setLastHeartbeat(Date.now()); // Initialize heartbeat timestamp
       
     } catch (error) {
       console.error('Failed to connect to WebSocket:', error);
       setError(handleApiError(error, 'Failed to establish real-time connection'));
+      setReconnectionAttempts(prev => prev + 1);
     }
   };
 
@@ -594,6 +630,10 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
     };
   }, [currentSession?.id, wsConnection]);
 
+  const clearCache = () => {
+    researchCache.clearAll();
+  }
+
   return (
     <ResearchContext.Provider
       value={{
@@ -612,7 +652,8 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
         totalSessions,
         isConnected,
         connectToWebSocket,
-        disconnectWebSocket
+        disconnectWebSocket,
+        clearCache
       }}
     >
       {children}
