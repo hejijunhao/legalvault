@@ -246,6 +246,23 @@ class ResearchCache {
   }
   
   /**
+   * Invalidate message list cache for a specific search
+   * @param searchId The ID of the search to invalidate message lists for
+   */
+  invalidateMessageList(searchId: string): void {
+    if (!searchId) return;
+    
+    // Remove any message lists for this search
+    for (const [key, entry] of this.messageListCache.entries()) {
+      if (key.startsWith(`messages:${searchId}:`)) {
+        this.messageListCache.delete(key);
+      }
+    }
+    
+    this.saveToStorage();
+  }
+  
+  /**
    * Clear all cache entries
    */
   clear(): void {
@@ -258,13 +275,6 @@ class ResearchCache {
     if (typeof window !== 'undefined' && this.config.persistToStorage) {
       localStorage.removeItem('researchCache');
     }
-  }
-  
-  /**
-   * Alias for clear() method
-   */
-  clearAll(): void {
-    this.clear();
   }
   
   /**
@@ -492,8 +502,12 @@ async function withRetry<T>(
   throw lastError
 }
 
-// Helper function to handle API errors
-async function handleApiError(response: Response): Promise<never> {
+/**
+ * Helper function to handle API errors
+ * @param response The response object from the API call
+ * @returns A formatted ApiError object with user-friendly messages
+ */
+export async function handleApiError(response: Response): Promise<never> {
   let errorMessage = `HTTP ${response.status}: ${response.statusText}`
   let errorDetails: any = undefined
   
@@ -515,67 +529,94 @@ async function handleApiError(response: Response): Promise<never> {
     details: errorDetails
   }
   
+  // Check for Retry-After header (common in rate limiting responses)
+  const retryAfter = response.headers.get('Retry-After')
+  if (retryAfter) {
+    const parsedRetryAfter = parseInt(retryAfter, 10)
+    if (!isNaN(parsedRetryAfter)) {
+      apiError.retryAfter = parsedRetryAfter
+    }
+  }
+  
+  // Format the error with user-friendly messages
+  const formattedError = formatApiError(apiError);
+  
+  throw formattedError
+}
+
+/**
+ * Formats an API error with user-friendly messages based on error codes
+ * This function can be used by both the API service and the context
+ * @param error The API error object to format
+ * @param defaultMessage Optional default message to use if no specific message is available
+ * @returns A formatted ApiError object with user-friendly messages
+ */
+export function formatApiError(error: ApiError, defaultMessage?: string): ApiError {
+  // Create a copy of the error to avoid mutating the original
+  const formattedError: ApiError = { ...error };
+  
+  // If a default message is provided and we don't have a message, use it
+  if (defaultMessage && !formattedError.message) {
+    formattedError.message = defaultMessage;
+  }
+  
   // Add specific handling for common error codes
-  switch (response.status) {
+  switch (formattedError.status) {
     case 401:
-      apiError.message = 'Your session has expired. Please log in again.'
-      apiError.code = 'AUTH_REQUIRED'
+      formattedError.message = 'Your session has expired. Please log in again.'
+      formattedError.code = 'AUTH_REQUIRED'
       break
     case 403:
-      apiError.message = 'You do not have permission to perform this action.'
-      apiError.code = 'PERMISSION_DENIED'
+      formattedError.message = 'You do not have permission to perform this action.'
+      formattedError.code = 'PERMISSION_DENIED'
       break
     case 404:
-      apiError.message = 'The requested resource was not found.'
-      apiError.code = 'NOT_FOUND'
+      formattedError.message = 'The requested resource was not found.'
+      formattedError.code = 'NOT_FOUND'
       break
     case 409:
-      apiError.message = 'This operation conflicts with the current state.'
-      apiError.code = 'CONFLICT'
+      formattedError.message = 'This operation conflicts with the current state.'
+      formattedError.code = 'CONFLICT'
       break
     case 429:
-      apiError.message = 'Too many requests. Please try again later.'
-      apiError.code = 'RATE_LIMITED'
+      formattedError.message = 'Too many requests. Please try again later.'
+      formattedError.code = 'RATE_LIMITED'
       
       // Check for Retry-After header (common in rate limiting responses)
-      const retryAfter = response.headers.get('Retry-After')
-      if (retryAfter) {
-        apiError.retryAfter = parseInt(retryAfter, 10)
-        if (!isNaN(apiError.retryAfter)) {
-          apiError.message = `Rate limit exceeded. Please try again in ${apiError.retryAfter} seconds.`
-        }
+      if (formattedError.retryAfter) {
+        formattedError.message = `Rate limit exceeded. Please try again in ${formattedError.retryAfter} seconds.`
       }
       
       // Special handling for Perplexity Sonar API rate limiting
-      if (errorDetails?.error?.includes?.('rate limit') || 
-          errorDetails?.message?.toLowerCase?.().includes('rate limit') ||
-          errorDetails?.detail?.toLowerCase?.().includes('rate limit') ||
-          errorDetails?.message?.toLowerCase?.().includes('perplexity') ||
-          errorDetails?.detail?.toLowerCase?.().includes('perplexity') ||
-          errorDetails?.message?.toLowerCase?.().includes('sonar') ||
-          errorDetails?.detail?.toLowerCase?.().includes('sonar')) {
-        apiError.code = 'PERPLEXITY_RATE_LIMITED'
-        apiError.message = 'Perplexity API rate limit reached. Please try again later.'
+      if (formattedError.details?.error?.includes?.('rate limit') || 
+          formattedError.details?.message?.toLowerCase?.().includes('rate limit') ||
+          formattedError.details?.detail?.toLowerCase?.().includes('rate limit') ||
+          formattedError.details?.message?.toLowerCase?.().includes('perplexity') ||
+          formattedError.details?.detail?.toLowerCase?.().includes('perplexity') ||
+          formattedError.details?.message?.toLowerCase?.().includes('sonar') ||
+          formattedError.details?.detail?.toLowerCase?.().includes('sonar')) {
+        formattedError.code = 'PERPLEXITY_RATE_LIMITED'
+        formattedError.message = 'Perplexity API rate limit reached. Please try again later.'
       }
       break
     case 500:
     case 502:
     case 503:
     case 504:
-      apiError.message = 'A server error occurred. Please try again later.'
-      apiError.code = 'SERVER_ERROR'
+      formattedError.message = 'A server error occurred. Please try again later.'
+      formattedError.code = 'SERVER_ERROR'
       break
   }
   
   // If we have more specific error details from the API, use those instead
-  if (errorDetails?.detail || errorDetails?.message) {
+  if (formattedError.details?.detail || formattedError.details?.message) {
     // But keep our specific code if we assigned one
-    const code = apiError.code
-    apiError.message = errorDetails.detail || errorDetails.message
-    if (code) apiError.code = code
+    const code = formattedError.code
+    formattedError.message = formattedError.details.detail || formattedError.details.message
+    if (code) formattedError.code = code
   }
   
-  throw apiError
+  return formattedError;
 }
 
 /**
@@ -585,7 +626,7 @@ async function handleApiError(response: Response): Promise<never> {
  */
 export function scheduleCacheClear(minutes: number = 60): () => void {
   const timeoutId = setTimeout(() => {
-    cache.clearAll();
+    cache.clear();
   }, minutes * 60 * 1000);
   
   // Return a function to cancel the scheduled cache clear
@@ -853,7 +894,7 @@ export async function fetchMessagesForSearch(
   
   const queryString = params.toString() ? `?${params.toString()}` : ''
   const response = await withRetry(() => 
-    fetch(`/api/research/messages/search/${searchId}${queryString}`, { headers })
+    fetch(`/api/research/searches/${searchId}/messages${queryString}`, { headers })
   )
   
   if (!response.ok) return handleApiError(response)
@@ -1215,8 +1256,9 @@ export function sendTypingNotification(connection: WebSocketConnection): void {
 
 // Export cache functions for direct use
 export const cache = {
-  clearAll: () => researchCache.clearAll(),
+  clear: () => researchCache.clear(),
   invalidateSearch: (searchId: string) => researchCache.invalidateSearch(searchId),
+  invalidateMessageList: (searchId: string) => researchCache.invalidateMessageList(searchId),
   getSession: (sessionId: string) => researchCache.getSession(sessionId),
   getMessage: (messageId: string) => researchCache.getMessage(messageId),
   getSessionList: (options?: any) => researchCache.getSessionList(options),
