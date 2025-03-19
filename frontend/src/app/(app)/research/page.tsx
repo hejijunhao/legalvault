@@ -21,8 +21,9 @@ export default function ResearchPage() {
   // Clear context error when component mounts or unmounts
   useEffect(() => {
     clearError()
-    return () => clearError()
-  }, [clearError])
+    // Only clear on unmount, not on every render
+    return () => {}
+  }, []) // Empty dependency array to run only on mount
 
   // Fetch sessions when component mounts
   useEffect(() => {
@@ -45,6 +46,7 @@ export default function ResearchPage() {
       })
       router.push(`/research/${sessionId}`)
     } catch (err) {
+      // Error is already handled by the context provider
       console.error("Failed to create research session:", err)
     }
   }

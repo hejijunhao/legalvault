@@ -3,40 +3,69 @@
 "use client"
 
 import { useState } from "react"
-import { Bookmark, Share2, FolderPlus, FileText } from "lucide-react"
+import { Bookmark, Share2, FolderPlus, FileText, RefreshCw } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
+import { useResearch, QueryStatus } from "@/contexts/research/research-context"
+import { toast } from "sonner"
 
-// Mock citation data - in a real app, this would come from props or context
-const mockCitations = [
-  {
-    id: "1",
-    title: "Singapore Code on Take-overs and Mergers",
-    url: "https://www.mas.gov.sg/regulation/codes/code-on-take-overs-and-mergers",
-    publisher: "Monetary Authority of Singapore",
-    date: "2019",
-  },
-  {
-    id: "2",
-    title: "Temasek's Partial Offer for Keppel Corporation",
-    url: "https://links.sgx.com/FileOpen/Keppel-Offer%20Announcement.ashx?App=Announcement&FileID=583999",
-    publisher: "Singapore Exchange",
-    date: "2019",
-  },
-  {
-    id: "3",
-    title: "Securities and Futures Act (Chapter 289)",
-    url: "https://sso.agc.gov.sg/Act/SFA2001",
-    publisher: "Singapore Statutes Online",
-    date: "2020",
-  },
-]
+interface SearchActionsProps {
+  sessionId: string
+}
 
-export function SearchActions() {
+export function SearchActions({ sessionId }: SearchActionsProps) {
   const [showCitations, setShowCitations] = useState(false)
+  const { currentSession, sendMessage, isLoading } = useResearch()
+  
+  // Check if the session has failed or needs clarification
+  const hasFailedStatus = currentSession?.status === QueryStatus.FAILED ||
+    currentSession?.status === QueryStatus.NEEDS_CLARIFICATION
+
+  const handleRetry = async () => {
+    if (!currentSession) return
+    
+    try {
+      // Get the last user message to retry
+      const userMessages = currentSession.messages.filter(m => m.role === "user")
+      if (userMessages.length === 0) {
+        toast.error("No message to retry")
+        return
+      }
+      
+      const lastUserMessage = userMessages[userMessages.length - 1]
+      await sendMessage(sessionId, lastUserMessage.content.text)
+      toast.success("Message resent successfully")
+    } catch (error) {
+      // Error is already handled by the context provider
+      console.error("Error retrying message:", error)
+    }
+  }
+
+  // Get citations from the current session if available
+  const citations = currentSession?.messages
+    .filter(m => m.role === "assistant" && Array.isArray(m.content.citations) && m.content.citations.length > 0)
+    .flatMap(m => m.content.citations || [])
+    .map((citation, index) => ({
+      id: String(index),
+      title: citation.text.substring(0, 50) + (citation.text.length > 50 ? "..." : ""),
+      url: citation.url,
+      publisher: citation.metadata?.publisher || "Source",
+      date: citation.metadata?.date || new Date().getFullYear().toString()
+    })) || []
 
   return (
     <div className="mb-6">
       <div className="flex justify-center gap-2">
+        {hasFailedStatus && (
+          <button 
+            className="flex items-center gap-[6px] rounded-[12px] bg-[rgba(239,68,68,0.15)] px-2 py-1 hover:bg-[rgba(239,68,68,0.25)]"
+            onClick={handleRetry}
+            disabled={isLoading}
+            aria-label="Retry failed message"
+          >
+            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+            <span className="text-sm text-[#1C1C1C]">Retry</span>
+          </button>
+        )}
         <button className="flex items-center gap-[6px] rounded-[12px] bg-[rgba(137,146,169,0.30)] px-2 py-1">
           <Bookmark className="h-4 w-4" />
           <span className="text-sm text-[#1C1C1C]">Bookmark</span>
@@ -52,6 +81,7 @@ export function SearchActions() {
         <button
           className="flex items-center gap-[6px] rounded-[12px] bg-[rgba(159,232,112,0.20)] px-2 py-1 hover:bg-[rgba(159,232,112,0.30)]"
           onClick={() => setShowCitations(!showCitations)}
+          disabled={citations.length === 0}
         >
           <FileText className="h-4 w-4" />
           <span className="text-sm text-[#1C1C1C]">Citations</span>
@@ -59,7 +89,7 @@ export function SearchActions() {
       </div>
 
       <AnimatePresence>
-        {showCitations && (
+        {showCitations && citations.length > 0 && (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
@@ -70,7 +100,7 @@ export function SearchActions() {
             <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
               <h3 className="mb-3 text-sm font-medium text-gray-700">Sources & Citations</h3>
               <div className="space-y-3">
-                {mockCitations.map((citation) => (
+                {citations.map((citation) => (
                   <div key={citation.id} className="text-sm">
                     <a
                       href={citation.url}
@@ -93,5 +123,3 @@ export function SearchActions() {
     </div>
   )
 }
-
-

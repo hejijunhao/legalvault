@@ -39,6 +39,7 @@ export enum QueryType {
 }
 
 export enum QueryStatus {
+  PENDING = "pending",
   COMPLETED = "completed",
   FAILED = "failed",
   NEEDS_CLARIFICATION = "needs_clarification",
@@ -161,7 +162,8 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
   const [reconnectionAttempts, setReconnectionAttempts] = useState(0)
   const [lastHeartbeat, setLastHeartbeat] = useState<number | null>(null)
 
-  const clearError = () => setError(null)
+  // Use useCallback to memoize the clearError function to prevent infinite loops
+  const clearError = useCallback(() => setError(null), [setError])
 
   const handleApiError = (err: any, defaultMessage: string): ErrorType => {
     console.error(`API Error: ${defaultMessage}`, err)

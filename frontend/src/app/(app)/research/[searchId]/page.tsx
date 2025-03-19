@@ -9,7 +9,7 @@ import { SearchActions } from "@/components/research/search/search-actions"
 import { ResearchInput } from "@/components/research/search/research-input"
 import { BackButton } from "@/components/ui/back-button"
 import { UserMessages } from "@/components/research/search/user-messages"
-import { useResearch } from "@/contexts/research/research-context"
+import { useResearch, QueryStatus } from "@/contexts/research/research-context"
 import { Loader2, AlertCircle } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
@@ -23,7 +23,7 @@ export default function ResearchPage() {
   useEffect(() => {
     clearError()
     return () => clearError()
-  }, [])
+  }, [clearError])
 
   useEffect(() => {
     if (searchId) {
@@ -37,6 +37,7 @@ export default function ResearchPage() {
     try {
       await sendMessage(searchId, content)
     } catch (err) {
+      // Error is already handled by the context provider
       console.error("Error sending message:", err)
     }
   }
@@ -99,7 +100,11 @@ export default function ResearchPage() {
                   <AlertDescription>{error.message}</AlertDescription>
                 </Alert>
               )}
-              <UserMessages messages={currentSession.messages} />
+              <UserMessages 
+                messages={currentSession.messages} 
+                isStreaming={currentSession.status === QueryStatus.PENDING}
+                streamingMessageId={currentSession.messages.find(m => m.status === QueryStatus.PENDING)?.id}
+              />
             </>
           )}
         </div>

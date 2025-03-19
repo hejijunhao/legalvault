@@ -9,9 +9,12 @@ import { getDisplayNameFromPath, formatBackLinkText } from "@/lib/navigation"
 
 interface BackButtonProps {
   customText?: string;
+  className?: string;
+  onClick?: () => void;
+  "aria-label"?: string;
 }
 
-export function BackButton({ customText }: BackButtonProps) {
+export function BackButton({ customText, className, onClick, "aria-label": ariaLabel }: BackButtonProps) {
   const router = useRouter()
   const [backText, setBackText] = useState("Back")
 
@@ -57,6 +60,12 @@ export function BackButton({ customText }: BackButtonProps) {
   }, [customText]);
 
   const handleBack = () => {
+    // If custom onClick is provided, use that instead
+    if (onClick) {
+      onClick();
+      return;
+    }
+    
     // Use browser history if available
     if (window.history.length > 1) {
       router.back();
@@ -85,7 +94,8 @@ export function BackButton({ customText }: BackButtonProps) {
   return (
     <button
       onClick={handleBack}
-      className="inline-flex items-center text-sm text-[#525766] transition-colors hover:text-[#1c1c1c]"
+      className={`inline-flex items-center text-sm text-[#525766] transition-colors hover:text-[#1c1c1c] ${className || ''}`}
+      aria-label={ariaLabel || `Go back to ${backText}`}
     >
       <ChevronLeft className="mr-1 h-4 w-4" />
       {backText}

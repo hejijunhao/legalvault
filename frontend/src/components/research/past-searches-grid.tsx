@@ -49,7 +49,7 @@ export function PastSearchesGrid() {
     }
 
     return () => observer.disconnect()
-  }, [getSessions, hasMore, loadingStates.fetchingSessions, offset])
+  }, [getSessions, hasMore, loadingStates.fetchingSessions, offset, ITEMS_PER_PAGE])
 
   const handleSearchClick = (id: string) => {
     router.push(`/research/${id}`)
