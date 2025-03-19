@@ -9,27 +9,40 @@ import { ResearchSearch } from "@/components/research/research-search"
 import { ResearchBanner } from "@/components/research/research-banner"
 import { ResearchPromptSuggestions } from "@/components/research/research-prompt-suggestions"
 import { PastSearchesGrid } from "@/components/research/past-searches-grid"
-import { useResearch } from "@/contexts/research/research-context"
+import { useResearch, QueryType } from "@/contexts/research/research-context"
 import { AlertCircle } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
 export default function ResearchPage() {
   const [query, setQuery] = useState("")
-  const { createSession, isLoading, error, clearError } = useResearch()
+  const { createSession, getSessions, isLoading, error, clearError } = useResearch()
   const router = useRouter()
 
   // Clear context error when component mounts or unmounts
   useEffect(() => {
     clearError()
     return () => clearError()
-  }, [])
+  }, [clearError])
 
-  const handleSearch = async () => {
+  // Fetch sessions when component mounts
+  useEffect(() => {
+    getSessions({ limit: 12 }) // Show up to 12 recent searches
+  }, [getSessions])
+
+  const handleSearch = async (queryType: QueryType | null) => {
     const trimmedQuery = query.trim()
     if (!trimmedQuery || trimmedQuery.length < 5) return
     
     try {
-      const sessionId = await createSession(trimmedQuery)
+      // Create session with search parameters including query type
+      const sessionId = await createSession(trimmedQuery, {
+        // Search parameters
+        temperature: 0.7, // Default temperature for balanced responses
+        max_tokens: 2048, // Reasonable length limit
+        top_p: 0.95, // High value for more focused responses
+        top_k: 50, // Standard value for diverse but relevant results
+        query_type: queryType || QueryType.GENERAL // Set query type in search params
+      })
       router.push(`/research/${sessionId}`)
     } catch (err) {
       console.error("Failed to create research session:", err)
@@ -82,7 +95,7 @@ export default function ResearchPage() {
             )}
           </div>
           
-          {/* Replace BookmarksBlock with PastSearchesGrid */}
+          {/* Past searches grid will handle its own loading and error states */}
           <PastSearchesGrid />
         </motion.div>
 

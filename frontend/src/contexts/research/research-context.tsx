@@ -65,6 +65,7 @@ export interface SearchParams {
   top_p?: number
   top_k?: number
   jurisdiction?: string
+  query_type?: QueryType
 }
 
 export interface ResearchSession {
@@ -119,6 +120,7 @@ interface ResearchContextType {
     status?: QueryStatus
     limit?: number
     offset?: number
+    append?: boolean
   }) => Promise<void>
   updateSession: (sessionId: string, updates: {
     title?: string
@@ -225,6 +227,7 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
     status?: QueryStatus
     limit?: number
     offset?: number
+    append?: boolean
   }) => {
     setLoadingStates(prev => ({ ...prev, fetchingSessions: true }))
     setIsLoading(true)
@@ -233,7 +236,9 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
     try {
       // Use the API service to fetch sessions
       const data = await fetchSessions(options)
-      setSessions(data.items)
+      
+      // Either append or replace sessions based on the append flag
+      setSessions(prev => options?.append ? [...prev, ...data.items] : data.items)
       setTotalSessions(data.total)
     } catch (err) {
       setError(handleApiError(err, "Failed to fetch research searches"))

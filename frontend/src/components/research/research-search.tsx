@@ -5,16 +5,14 @@
 import { useState, useRef, type ChangeEvent, KeyboardEvent } from "react"
 import { motion } from "framer-motion"
 import { ArrowRight, Gavel, BookText, Building2, Loader2 } from "lucide-react"
+import { QueryType } from "@/contexts/research/research-context"
 
 interface ResearchSearchProps {
   query: string
   onQueryChange: (value: string) => void
-  onSubmit?: () => void
+  onSubmit?: (queryType: QueryType | null) => void
   isLoading?: boolean
 }
-
-// Define the query types matching the backend enum
-type QueryType = "court_case" | "legislative" | "commercial" | "general"
 
 export function ResearchSearch({ 
   query, 
@@ -39,7 +37,7 @@ export function ResearchSearch({
     // Submit on Enter key (without Shift)
     if (e.key === "Enter" && !e.shiftKey && query.trim() && query.trim().length >= 5) {
       e.preventDefault()
-      onSubmit?.();
+      onSubmit?.(selectedType)
     }
   }
 
@@ -49,7 +47,7 @@ export function ResearchSearch({
 
   const handleSubmit = () => {
     if (query.trim() && query.trim().length >= 5 && !isLoading && onSubmit) {
-      onSubmit()
+      onSubmit(selectedType)
     }
   }
 
@@ -83,13 +81,13 @@ export function ResearchSearch({
           <div className="flex items-center gap-2">
             {/* Courts Toggle */}
             <button
-              onClick={() => toggleQueryType("court_case")}
+              onClick={() => toggleQueryType(QueryType.COURT_CASE)}
               className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-sm transition-colors ${
-                selectedType === "court_case"
+                selectedType === QueryType.COURT_CASE
                   ? "bg-[#95C066] text-white"
                   : "bg-gray-50 text-gray-600 hover:bg-gray-100"
               }`}
-              aria-pressed={selectedType === "court_case"}
+              aria-pressed={selectedType === QueryType.COURT_CASE}
               title="Search court cases and legal precedents"
             >
               <Gavel className="h-4 w-4" />
@@ -98,13 +96,13 @@ export function ResearchSearch({
 
             {/* Legislative Toggle */}
             <button
-              onClick={() => toggleQueryType("legislative")}
+              onClick={() => toggleQueryType(QueryType.LEGISLATIVE)}
               className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-sm transition-colors ${
-                selectedType === "legislative"
+                selectedType === QueryType.LEGISLATIVE
                   ? "bg-[#95C066] text-white"
                   : "bg-gray-50 text-gray-600 hover:bg-gray-100"
               }`}
-              aria-pressed={selectedType === "legislative"}
+              aria-pressed={selectedType === QueryType.LEGISLATIVE}
               title="Search legislation, statutes and regulations"
             >
               <BookText className="h-4 w-4" />
@@ -113,13 +111,13 @@ export function ResearchSearch({
 
             {/* Commercial Toggle */}
             <button
-              onClick={() => toggleQueryType("commercial")}
+              onClick={() => toggleQueryType(QueryType.COMMERCIAL)}
               className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-sm transition-colors ${
-                selectedType === "commercial"
+                selectedType === QueryType.COMMERCIAL
                   ? "bg-[#95C066] text-white"
                   : "bg-gray-50 text-gray-600 hover:bg-gray-100"
               }`}
-              aria-pressed={selectedType === "commercial"}
+              aria-pressed={selectedType === QueryType.COMMERCIAL}
               title="Search commercial law and business regulations"
             >
               <Building2 className="h-4 w-4" />
