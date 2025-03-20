@@ -566,9 +566,6 @@ interface SearchListResponse {
  * @returns Response from fetch
  */
 async function fetchWithSelfSignedCert(url: string, options?: RequestInit): Promise<Response> {
-  // In development, we've set NODE_TLS_REJECT_UNAUTHORIZED=0 in package.json
-  // This should allow self-signed certificates, but we need to handle any remaining issues
-  
   // Add timeout to fetch requests
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
@@ -579,78 +576,51 @@ async function fetchWithSelfSignedCert(url: string, options?: RequestInit): Prom
       signal: controller.signal,
     };
     
-    // For absolute URLs, use them directly
-    // For relative URLs, use the base URL from the environment or default to localhost
+    // Construct the URL based on environment
     let fetchUrl: string;
-    try {
-      fetchUrl = url.startsWith('http') 
-        ? url 
-        : `${process.env.NEXT_PUBLIC_API_URL || 'https://localhost:8000'}${url.startsWith('/') ? url : `/${url}`}`;
-    } catch (urlError) {
-      console.error('Error constructing URL:', urlError);
-      fetchUrl = url; // Fallback to original URL
-    }
-    
-    console.log(`Fetching: ${fetchUrl}`);
-    
-    // Check if fetch is available
-    if (typeof fetch !== 'function') {
-      throw new Error('Fetch API is not available in this environment');
+    if (url.startsWith('http')) {
+      // If it's already an absolute URL, use it directly
+      fetchUrl = url;
+    } else {
+      // Get the API URL from environment variables only
+      // This should be configured in .env.local for development
+      // and in environment variables for production
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 
+                     (process.env.NODE_ENV === 'development' 
+                      ? 'https://localhost:8000'   // Development default with SSL
+                      : ''); // No default for production - must be configured
+      
+      if (!baseUrl && process.env.NODE_ENV === 'production') {
+        console.error('NEXT_PUBLIC_API_URL is not configured in production environment');
+      }
+      
+      fetchUrl = `${baseUrl}${url.startsWith('/') ? url : `/${url}`}`;
+      
+      if (process.env.NODE_ENV !== 'production') {
+        console.log(`Using API base URL: ${baseUrl} for ${process.env.NODE_ENV} environment`);
+      }
     }
     
     const response = await fetch(fetchUrl, fetchOptions);
     clearTimeout(timeoutId);
+    
     return response;
   } catch (error) {
     clearTimeout(timeoutId);
     
-    // Log detailed error information
-    console.error('Fetch error details:', {
-      url,
-      error: error instanceof Error ? error.message : String(error),
-      code: (error as any)?.code,
-      type: error instanceof Error ? error.constructor.name : typeof error,
-      stack: error instanceof Error ? error.stack : undefined
-    });
+    // Only log detailed errors in development
+    if (process.env.NODE_ENV !== 'production') {
+      console.error(`Fetch error for ${url}:`, error);
+    }
     
-    // Handle specific error types
-    if (error instanceof Error) {
-      // Handle abort error (timeout)
-      if (error.name === 'AbortError') {
-        throw new Error(`Request timeout after 30 seconds: ${url}`);
-      }
+    // Provide helpful error messages based on environment
+    if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
+      const errorMessage = process.env.NODE_ENV === 'production'
+        ? `Network Error: Could not connect to the API server. Please try again later.`
+        : `Network Error: Could not connect to the server. ` +
+          `Make sure the backend server is running with SSL enabled.`;
       
-      // Handle certificate errors
-      if (error.message.includes('certificate') || 
-          error.message.includes('SSL') || 
-          error.message.includes('UNABLE_TO_VERIFY_LEAF_SIGNATURE') || 
-          (error as any).code === 'UNABLE_TO_VERIFY_LEAF_SIGNATURE' ||
-          (error as any).code === 'ECONNRESET') {
-        
-        console.warn('Certificate or connection error detected. Make sure the backend is running with SSL enabled.');
-        console.warn('Backend should be started with: uvicorn main:app --reload --ssl-keyfile localhost+2-key.pem --ssl-certfile localhost+2.pem');
-        
-        // If we're in development, provide a more helpful error
-        if (process.env.NODE_ENV === 'development') {
-          throw new Error(
-            `SSL Certificate or Connection Error: ${error.message}. ` +
-            `Make sure the backend is running with SSL enabled and that the certificates are trusted. ` +
-            `Check that NODE_TLS_REJECT_UNAUTHORIZED=0 is set in your environment.`
-          );
-        }
-      }
-      
-      // Handle network errors
-      if (error.message.includes('network') || 
-          error.message.includes('fetch') ||
-          error.message.includes('Failed to fetch') ||
-          (error as any).code === 'ENOTFOUND' ||
-          (error as any).code === 'ECONNREFUSED') {
-        throw new Error(
-          `Network Error: Could not connect to the server at ${url}. ` +
-          `Make sure the backend server is running and accessible.`
-        );
-      }
+      throw new Error(errorMessage);
     }
     
     // Rethrow the original error
@@ -936,7 +906,7 @@ export async function fetchSessions(options?: {
   featuredOnly?: boolean
   status?: QueryStatus
   limit?: number
-  offset?: number
+  offset?: number;
   append?: boolean
   skipAuthCheck?: boolean
 } | null | undefined): Promise<SearchListResponse> {
@@ -973,7 +943,22 @@ export async function fetchSessions(options?: {
   // Get auth header for request
   console.log('Getting auth header for fetchSessions');
   const headers = await getAuthHeader();
-  console.log('Headers being sent:', headers);
+  console.log('Headers received:', Object.keys(headers));
+  console.log('Authorization header present:', headers.hasOwnProperty('Authorization'));
+  
+  // Check if we have a valid session in Supabase
+  try {
+    const { data: sessionData } = await supabase.auth.getSession();
+    console.log('Current Supabase session:', sessionData.session ? 'Present' : 'None');
+    if (sessionData.session && sessionData.session.expires_at) {
+      console.log('Session expires at:', new Date(sessionData.session.expires_at * 1000).toISOString());
+      console.log('Current time:', new Date().toISOString());
+    } else if (sessionData.session) {
+      console.log('Session exists but expiration time not available');
+    }
+  } catch (error) {
+    console.error('Error checking Supabase session:', error);
+  }
   
   // If no auth token and not explicitly skipping auth check, return empty results
   if (!headers.Authorization && !options?.skipAuthCheck) {
@@ -992,99 +977,106 @@ export async function fetchSessions(options?: {
   const baseUrl = '/api/research/searches/';
   const url = `${baseUrl}${queryString}`;
   console.log(`Making API request to: ${url} (baseUrl: ${baseUrl}, queryString: ${queryString})`);
+  console.log('API request headers:', headers);
   
-  // Use a lower retry count for authentication-related requests to prevent excessive retries
-  const response = await withRetry(
-    () => fetchWithSelfSignedCert(url, { headers }),
-    1,  // Only retry once for this endpoint
-    1000,
-    (error) => {
-      // Don't retry on authentication errors (401)
-      if (error && typeof error === 'object' && 'status' in error && error.status === 401) {
-        console.log('Not retrying due to authentication error (401)');
-        return false;
-      }
-      
-      // Don't retry on redirect loops
-      if (error && typeof error === 'object' && 'status' in error && error.status === 307) {
-        console.log('Not retrying due to redirect (307)');
-        return false;
-      }
-      
-      // Only retry on server errors (5xx)
-      return error && typeof error === 'object' && 'status' in error && 
-             error.status >= 500 && error.status < 600;
-    }
-  );
-  console.log(`API response status: ${response.status} ${response.statusText}`);
-  
-  // Handle 401 Unauthorized errors specifically
-  if (response.status === 401) {
-    console.error('Authentication error (401 Unauthorized)');
-    
-    // Try to refresh the token
-    try {
-      console.log('Attempting to refresh the token after 401 error');
-      const { data, error } = await supabase.auth.refreshSession();
-      if (error) {
-        console.error('Failed to refresh token:', error);
-      } else if (data.session) {
-        console.log('Token refreshed successfully, user should retry the operation');
-      }
-    } catch (refreshError) {
-      console.error('Error refreshing token:', refreshError);
-    }
-    
-    const emptyResponse: SearchListResponse = {
-      items: [],
-      total: 0,
-      offset: options?.offset || 0,
-      limit: options?.limit || 10
-    };
-    return emptyResponse;
-  }
-  
-  if (!response.ok) {
-    console.error('Error response from API:', response.status, response.statusText);
-    return handleApiError(response)
-  }
-  
-  // Parse the response with error handling
-  let data: any;
   try {
-    data = await response.json()
-    console.log('Successfully parsed API response:', {
-      itemsCount: data?.items?.length || 0,
-      total: data?.total,
-      hasItems: Array.isArray(data?.items)
-    });
-  } catch (parseError) {
-    console.error('Error parsing JSON response:', parseError)
-    throw new Error(`Failed to parse server response: ${parseError instanceof Error ? parseError.message : String(parseError)}`)
-  }
-  
-  // Validate the response structure
-  if (!data || typeof data !== 'object') {
-    console.error('Invalid response format:', data)
-    throw new Error('Server returned an invalid response format')
-  }
-  
-  if (!Array.isArray(data.items)) {
-    console.error('Response missing items array:', data)
-    // Try to recover by creating a default structure
-    data = {
-      items: [],
-      total: 0,
-      offset: options?.offset || 0,
-      limit: options?.limit || 10,
-      ...data // Keep any other fields that might be present
+    // Use a lower retry count for authentication-related requests to prevent excessive retries
+    const response = await withRetry(
+      () => fetchWithSelfSignedCert(url, { headers }),
+      1,  // Only retry once for this endpoint
+      1000,
+      (error) => {
+        // Don't retry on authentication errors (401)
+        if (error && typeof error === 'object' && 'status' in error && error.status === 401) {
+          console.log('Not retrying due to authentication error (401)');
+          return false;
+        }
+        
+        // Don't retry on redirect loops
+        if (error && typeof error === 'object' && 'status' in error && error.status === 307) {
+          console.log('Not retrying due to redirect (307)');
+          return false;
+        }
+        
+        // Only retry on server errors (5xx)
+        return error && typeof error === 'object' && 'status' in error && 
+               error.status >= 500 && error.status < 600;
+      }
+    );
+    console.log(`API response status: ${response.status} ${response.statusText}`);
+    console.log('API response headers:', response.headers);
+    
+    // Handle 401 Unauthorized errors specifically
+    if (response.status === 401) {
+      console.error('Authentication error (401 Unauthorized)');
+      
+      // Try to refresh the token
+      try {
+        console.log('Attempting to refresh the token after 401 error');
+        const { data, error } = await supabase.auth.refreshSession();
+        if (error) {
+          console.error('Failed to refresh token:', error);
+        } else if (data.session) {
+          console.log('Token refreshed successfully, user should retry the operation');
+        }
+      } catch (refreshError) {
+        console.error('Error refreshing token:', refreshError);
+      }
+      
+      const emptyResponse: SearchListResponse = {
+        items: [],
+        total: 0,
+        offset: options?.offset || 0,
+        limit: options?.limit || 10
+      };
+      return emptyResponse;
     }
+  
+    if (!response.ok) {
+      console.error('Error response from API:', response.status, response.statusText);
+      return handleApiError(response)
+    }
+  
+    // Parse the response with error handling
+    let data: any;
+    try {
+      data = await response.json()
+      console.log('Successfully parsed API response:', {
+        itemsCount: data?.items?.length || 0,
+        total: data?.total,
+        hasItems: Array.isArray(data?.items)
+      });
+    } catch (parseError) {
+      console.error('Error parsing JSON response:', parseError)
+      throw new Error(`Failed to parse server response: ${parseError instanceof Error ? parseError.message : String(parseError)}`)
+    }
+  
+    // Validate the response structure
+    if (!data || typeof data !== 'object') {
+      console.error('Invalid response format:', data)
+      throw new Error('Server returned an invalid response format')
+    }
+  
+    if (!Array.isArray(data.items)) {
+      console.error('Response missing items array:', data)
+      // Try to recover by creating a default structure
+      data = {
+        items: [],
+        total: 0,
+        offset: options?.offset || 0,
+        limit: options?.limit || 10,
+        ...data // Keep any other fields that might be present
+      }
+    }
+  
+    // Cache the response
+    researchCache.setSessionList(data, options);
+  
+    return data
+  } catch (error) {
+    console.error('Error in fetchSessions:', error);
+    throw error;
   }
-  
-  // Cache the response
-  researchCache.setSessionList(data, options);
-  
-  return data
 }
 
 /**
