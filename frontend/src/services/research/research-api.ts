@@ -529,28 +529,23 @@ export async function getAuthHeader(): Promise<Record<string, string>> {
   }
   
   try {
-    // Use the auth manager to get the current session
-    console.log('getAuthHeader: Attempting to get current session');
-    const session = await authManager.getCurrentSession();
-    console.log('getAuthHeader: Session object:', session ? 'Session exists' : 'No session', 
-                session ? { 
-                  hasAccessToken: !!session.access_token,
-                  expiresAt: session.expires_at,
-                  expiresIn: session.expires_at ? (session.expires_at * 1000 - Date.now()) / 1000 : 'unknown',
-                  user: session.user ? { id: session.user.id } : 'No user'
-                } : null);
+    // Use the auth manager to get the access token directly
+    console.log('getAuthHeader: Attempting to get access token');
+    const accessToken = await authManager.getAccessToken();
+    
+    // Log token status (but not the actual token for security)
+    console.log('getAuthHeader: Access token obtained:', accessToken ? 'Yes' : 'No');
     
     // Only add Authorization if we have a token
-    if (session?.access_token) {
-      console.log('getAuthHeader: Auth token obtained successfully');
-      headers['Authorization'] = `Bearer ${session.access_token}`;
+    if (accessToken) {
+      headers['Authorization'] = `Bearer ${accessToken}`;
     } else {
       console.warn('getAuthHeader: Proceeding with request without Authorization header');
     }
     
     return headers;
   } catch (error) {
-    console.error('getAuthHeader: Error getting session:', error);
+    console.error('getAuthHeader: Error getting access token:', error);
     
     // Return headers without Authorization as a fallback
     return headers;

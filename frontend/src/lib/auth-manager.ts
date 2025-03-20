@@ -166,6 +166,13 @@ class AuthManager {
           type: 'TOKEN_REFRESH_FAILED',
           error
         });
+        
+        // If refresh fails, try to get a new session
+        const currentSession = await this.getCurrentSession();
+        if (currentSession) {
+          // We still have a valid session, schedule refresh based on that
+          this.scheduleTokenRefresh(currentSession);
+        }
       } else {
         console.log('Token refreshed successfully');
         this.notifyListeners({
@@ -186,6 +193,15 @@ class AuthManager {
     } finally {
       this.isRefreshing = false;
     }
+  }
+  
+  /**
+   * Get the current access token
+   * @returns Promise resolving to the current access token or null
+   */
+  async getAccessToken(): Promise<string | null> {
+    const session = await this.getCurrentSession();
+    return session?.access_token || null;
   }
   
   /**
