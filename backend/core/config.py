@@ -1,7 +1,7 @@
 # core/config.py
 
 from typing import Any, Dict, List, Optional
-from pydantic import field_validator, model_validator, AnyHttpUrl, PostgresDsn
+from pydantic import AnyHttpUrl, PostgresDsn, field_validator
 from pydantic_settings import BaseSettings
 from functools import lru_cache
 import os
@@ -18,18 +18,6 @@ class Settings(BaseSettings):
     VERSION: str = "1.0.0"
     API_V1_STR: str = "/api/v1"
     BASE_URL: str = "http://localhost:8000"
-    
-    # CORS Settings
-    BACKEND_CORS_ORIGINS: List[str] = []
-
-    @field_validator("BACKEND_CORS_ORIGINS", mode="before")
-    @classmethod
-    def assemble_cors_origins(cls, v: str | List[str]) -> List[str]:
-        if isinstance(v, str) and not v.startswith("["):
-            return [i.strip() for i in v.split(",")]
-        elif isinstance(v, (list, str)):
-            return v
-        return []
     
     # Security Settings
     SECRET_KEY: str
@@ -52,39 +40,6 @@ class Settings(BaseSettings):
         
         return None
     
-    # Redis Settings
-    REDIS_HOST: str = "localhost"
-    REDIS_PORT: int = 6379
-    REDIS_PASSWORD: Optional[str] = None
-    
-    # Rate Limiting
-    RATE_LIMIT_DEFAULT: int = 100  # requests per minute
-    RATE_LIMIT_PREMIUM: int = 500  # requests per minute
-    
-    # Integration Settings
-    OAUTH_STATE_TOKEN_EXPIRE_MINUTES: int = 10
-    DEFAULT_INTEGRATION_TIMEOUT: float = 30.0  # seconds
-    
-    # Supabase Settings
-    SUPABASE_URL: Optional[str] = None
-    SUPABASE_ANON_KEY: Optional[str] = None
-    SUPABASE_JWT_SECRET: Optional[str] = None
-    
-    # Email Settings
-    SMTP_TLS: bool = True
-    SMTP_PORT: Optional[int] = None
-    SMTP_HOST: Optional[str] = None
-    SMTP_USER: Optional[str] = None
-    SMTP_PASSWORD: Optional[str] = None
-    EMAILS_FROM_EMAIL: Optional[str] = None
-    EMAILS_FROM_NAME: Optional[str] = None
-    
-    # AWS Settings (if needed)
-    AWS_ACCESS_KEY_ID: Optional[str] = None
-    AWS_SECRET_ACCESS_KEY: Optional[str] = None
-    AWS_REGION: Optional[str] = None
-    S3_BUCKET: Optional[str] = None
-
     # Config for Pydantic v2
     model_config = {
         "case_sensitive": True,

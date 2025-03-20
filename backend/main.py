@@ -19,19 +19,18 @@ from core.config import settings
 logger = getLogger(__name__)
 app = FastAPI()
 
-# Configure CORS - Use settings from config.py
-origins = settings.BACKEND_CORS_ORIGINS
+# Hardcode CORS origins for now to get things working
+origins = [
+    "http://localhost:3000",      # Local development HTTP
+    "https://localhost:3000",     # Local development HTTPS
+]
 
-# In development, always include localhost
-if not origins:
-    logger.warning("No CORS origins configured. Using default development origins.")
-    origins = [
-        "http://localhost:3000",      # Local development HTTP
-        "https://localhost:3000",     # Local development HTTPS
-    ]
-    # Log a warning in production
-    if settings.ENV == "production":
-        logger.error("WARNING: No CORS origins configured in production environment!")
+# In production, add production domains
+if settings.ENV == "production":
+    # Add your production domains when ready
+    # origins.append("https://legalvault.ai")
+    # origins.append("https://platform.legalvault.ai")
+    logger.info("Running in production mode")
 
 logger.info(f"Configured CORS origins: {origins}")
 
