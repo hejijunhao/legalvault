@@ -50,43 +50,37 @@ async def get_current_user(
     
     print(f"Executing query with user_id: {token_data.user_id}")
     
-    result = await session.execute(query, {"user_id": token_data.user_id})
-    user_data = result.fetchone()
-    
-    print(f"Query result by ID: {user_data}")
-    
-    # If not found by ID, try by auth_user_id
-    if user_data is None:
-        print("User not found by ID, trying by auth_user_id")
-        query = text("""
-            SELECT id, auth_user_id, first_name, last_name, name, role, email, virtual_paralegal_id, enterprise_id, created_at, updated_at
-            FROM vault.users WHERE auth_user_id = :auth_user_id
-        """)
-        result = await session.execute(query, {"auth_user_id": token_data.user_id})
-        user_data = result.fetchone()
-        print(f"Query result by auth_user_id: {user_data}")
-    
-    if user_data is None:
-        print("User data is still None after both queries, raising credentials exception")
+    try:
+        result = await session.execute(query, {"user_id": token_data.user_id})
+        user_row = result.fetchone()
+        
+        if not user_row:
+            print(f"No user found with ID {token_data.user_id}, trying with email: {token_data.email}")
+            
+            # If no user found by ID, try by email
+            query = text("""
+                SELECT id, auth_user_id, first_name, last_name, name, role, email, virtual_paralegal_id, enterprise_id, created_at, updated_at
+                FROM vault.users WHERE email = :email
+            """)
+            
+            result = await session.execute(query, {"email": token_data.email})
+            user_row = result.fetchone()
+            
+            if not user_row:
+                print(f"No user found with email {token_data.email} either, raising credentials exception")
+                raise credentials_exception
+        
+        # Convert row to dict
+        user_dict = {}
+        for idx, column_name in enumerate(result.keys()):
+            user_dict[column_name] = user_row[idx]
+            
+        print(f"Found user: {user_dict['email']} (ID: {user_dict['id']})")
+        return user_dict
+        
+    except Exception as e:
+        print(f"Error querying user: {str(e)}")
         raise credentials_exception
-    
-    print(f"Successfully found user: {user_data[0]} with role: {user_data[5]}")
-    print("===== End Authentication Debug =====\n\n")
-    
-    # Return user data as a dictionary instead of creating a User instance
-    return {
-        "id": user_data[0],
-        "auth_user_id": user_data[1],
-        "first_name": user_data[2],
-        "last_name": user_data[3],
-        "name": user_data[4],
-        "role": user_data[5],
-        "email": user_data[6],
-        "virtual_paralegal_id": user_data[7],
-        "enterprise_id": user_data[8],
-        "created_at": user_data[9],
-        "updated_at": user_data[10]
-    }
 
 async def get_user_permissions(
     user: dict = Depends(get_current_user)

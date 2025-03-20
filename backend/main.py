@@ -13,15 +13,31 @@ from sqlalchemy.sql import text
 
 from api.routes import api_router
 from api.routes.auth.webhooks import router as webhook_router
+from core.config import settings
 
 
 logger = getLogger(__name__)
 app = FastAPI()
 
-# Configure CORS
+# Configure CORS - Use settings from config.py
+origins = settings.BACKEND_CORS_ORIGINS
+
+# In development, always include localhost
+if not origins:
+    logger.warning("No CORS origins configured. Using default development origins.")
+    origins = [
+        "http://localhost:3000",      # Local development HTTP
+        "https://localhost:3000",     # Local development HTTPS
+    ]
+    # Log a warning in production
+    if settings.ENV == "production":
+        logger.error("WARNING: No CORS origins configured in production environment!")
+
+logger.info(f"Configured CORS origins: {origins}")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Your frontend URL
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -424,6 +424,9 @@ class UserOperations:
                 logger.error("SUPABASE_JWT_SECRET environment variable is not set")
                 return None
                 
+            # Log token details (first 10 chars only for security)
+            logger.info(f"Decoding token: {token[:10]}...")
+                
             # Decode token with options to disable audience validation
             # This is necessary because Supabase tokens have an audience claim that may not match our expectations
             payload = jwt.decode(
@@ -433,12 +436,29 @@ class UserOperations:
                 options={"verify_aud": False}  # Disable audience validation
             )
             
+            # Log the payload for debugging (excluding sensitive parts)
+            safe_payload = {k: v for k, v in payload.items() if k not in ["sub"]}
+            logger.info(f"Token payload: {safe_payload}")
+            
             user_id = payload.get("sub")
             if user_id is None:
                 logger.warning("Token missing 'sub' claim")
                 return None
-                
-            return TokenData(user_id=UUID(user_id))
+            
+            # Extract email from payload if available
+            email = None
+            if "email" in payload:
+                email = payload.get("email")
+                logger.info(f"Email from token: {email}")
+            
+            # Return TokenData with both user_id and email
+            return TokenData(user_id=UUID(user_id), email=email)
+        except jwt.ExpiredSignatureError:
+            logger.error("Token has expired")
+            return None
+        except jwt.InvalidTokenError:
+            logger.error("Invalid token")
+            return None
         except Exception as e:
             logger.error(f"Token validation error: {str(e)}")
             return None

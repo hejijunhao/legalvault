@@ -7,6 +7,7 @@ from datetime import datetime
 
 class TokenData(BaseModel):
     user_id: UUID
+    email: Optional[str] = None
     exp: Optional[datetime] = None
 
 class TokenResponse(BaseModel):

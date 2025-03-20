@@ -4,9 +4,15 @@ from typing import Any, Dict, List, Optional
 from pydantic import field_validator, model_validator, AnyHttpUrl, PostgresDsn
 from pydantic_settings import BaseSettings
 from functools import lru_cache
+import os
+from logging import getLogger
 
+logger = getLogger(__name__)
 
 class Settings(BaseSettings):
+    # Environment
+    ENV: str = "development"  # Options: development, staging, production
+    
     # API Settings
     PROJECT_NAME: str = "LegalVault"
     VERSION: str = "1.0.0"
@@ -14,7 +20,16 @@ class Settings(BaseSettings):
     BASE_URL: str = "http://localhost:8000"
     
     # CORS Settings
-    BACKEND_CORS_ORIGINS: List[AnyHttpUrl] = []
+    BACKEND_CORS_ORIGINS: List[str] = []
+
+    @field_validator("BACKEND_CORS_ORIGINS", mode="before")
+    @classmethod
+    def assemble_cors_origins(cls, v: str | List[str]) -> List[str]:
+        if isinstance(v, str) and not v.startswith("["):
+            return [i.strip() for i in v.split(",")]
+        elif isinstance(v, (list, str)):
+            return v
+        return []
     
     # Security Settings
     SECRET_KEY: str
