@@ -2,12 +2,24 @@
 
 import { supabase } from '@/lib/supabase'
 import { Message, ResearchSession, SearchParams, QueryStatus, QueryCategory, QueryType, Citation } from '@/contexts/research/research-context'
+import authManager from '@/lib/auth-manager'
+
+// Define sensitive fields that should not be stored in localStorage
+type SensitiveField = 'access_token' | 'refresh_token' | 'token' | 'password' | 'secret';
 
 // Cache configuration
 interface CacheConfig {
   ttl: number;  // Time to live in milliseconds
   maxSize?: number; // Maximum number of items to store in memory
   persistToStorage?: boolean; // Whether to persist cache to localStorage
+  security?: CacheSecurityConfig; // Security configuration
+}
+
+// Configuration for cache security
+interface CacheSecurityConfig {
+  sanitizeForStorage: boolean; // Whether to sanitize data before storing in localStorage
+  sensitiveFields: SensitiveField[]; // Fields to remove or encrypt
+  encryptSensitiveData: boolean; // Whether to encrypt sensitive data instead of removing it
 }
 
 interface CacheEntry<T> {
@@ -16,11 +28,19 @@ interface CacheEntry<T> {
   key: string;
 }
 
+// Default security configuration
+const DEFAULT_SECURITY_CONFIG: CacheSecurityConfig = {
+  sanitizeForStorage: true,
+  sensitiveFields: ['access_token', 'refresh_token', 'token', 'password', 'secret'],
+  encryptSensitiveData: false // Default to removing rather than encrypting
+};
+
 // Default cache configuration
 const DEFAULT_CACHE_CONFIG: CacheConfig = {
   ttl: 5 * 60 * 1000, // 5 minutes default TTL
   maxSize: 100, // Store up to 100 items in memory
-  persistToStorage: true // Persist to localStorage by default
+  persistToStorage: true, // Persist to localStorage by default
+  security: DEFAULT_SECURITY_CONFIG
 };
 
 // In-memory cache for sessions and messages
@@ -79,15 +99,15 @@ class ResearchCache {
   
   /**
    * Store a list of sessions in the cache
-   * @param options The options used to fetch the sessions
    * @param response The session list response to cache
+   * @param options The options used to fetch the sessions
    */
-  setSessionList(options: {
+  setSessionList(response: SearchListResponse, options?: {
     featuredOnly?: boolean;
     status?: QueryStatus;
     limit?: number;
     offset?: number;
-  } | undefined, response: SearchListResponse): void {
+  } | null): void {
     const key = this.generateOptionsKey(options);
     const entry: CacheEntry<SearchListResponse> = {
       data: response,
@@ -115,7 +135,7 @@ class ResearchCache {
     status?: QueryStatus;
     limit?: number;
     offset?: number;
-  }): SearchListResponse | undefined {
+  } | null): SearchListResponse | undefined {
     const key = this.generateOptionsKey(options);
     const entry = this.sessionListCache.get(key);
     if (!entry) return undefined;
@@ -129,8 +149,6 @@ class ResearchCache {
     
     return entry.data;
   }
-  
-  // Message cache methods
   
   /**
    * Store a message in the cache
@@ -147,7 +165,6 @@ class ResearchCache {
     };
     
     this.messageCache.set(key, entry);
-    this.saveToStorage();
   }
   
   /**
@@ -164,7 +181,6 @@ class ResearchCache {
     // Check if the entry is expired
     if (Date.now() - entry.timestamp > this.config.ttl) {
       this.messageCache.delete(messageId);
-      this.saveToStorage();
       return undefined;
     }
     
@@ -180,8 +196,10 @@ class ResearchCache {
   setMessageList(searchId: string, response: MessageListResponse, options?: {
     limit?: number;
     offset?: number;
-  }): void {
-    const key = this.generateMessageListKey(searchId, options);
+  } | null): void {
+    if (!searchId) return;
+    
+    const key = this.generateMessageOptionsKey(searchId, options);
     const entry: CacheEntry<MessageListResponse> = {
       data: response,
       timestamp: Date.now(),
@@ -194,8 +212,6 @@ class ResearchCache {
     response.items.forEach(message => {
       this.setMessage(message);
     });
-    
-    this.saveToStorage();
   }
   
   /**
@@ -207,15 +223,16 @@ class ResearchCache {
   getMessageList(searchId: string, options?: {
     limit?: number;
     offset?: number;
-  }): MessageListResponse | undefined {
-    const key = this.generateMessageListKey(searchId, options);
+  } | null): MessageListResponse | undefined {
+    if (!searchId) return undefined;
+    
+    const key = this.generateMessageOptionsKey(searchId, options);
     const entry = this.messageListCache.get(key);
     if (!entry) return undefined;
     
     // Check if the entry is expired
     if (Date.now() - entry.timestamp > this.config.ttl) {
       this.messageListCache.delete(key);
-      this.saveToStorage();
       return undefined;
     }
     
@@ -223,65 +240,13 @@ class ResearchCache {
   }
   
   /**
-   * Invalidate all cache entries related to a specific search
-   * @param searchId The ID of the search to invalidate
+   * Delete a session from the cache
+   * @param sessionId The ID of the session to delete
    */
-  invalidateSearch(searchId: string): void {
-    if (!searchId) return;
+  deleteSession(sessionId: string): void {
+    if (!sessionId) return;
     
-    // Remove the session from the cache
-    this.sessionCache.delete(searchId);
-    
-    // Remove any message lists for this search
-    for (const [key, entry] of this.messageListCache.entries()) {
-      if (key.startsWith(`messages:${searchId}:`)) {
-        this.messageListCache.delete(key);
-      }
-    }
-    
-    // Remove any session lists (they might contain this session)
-    this.clearSessionListCache();
-    
-    this.saveToStorage();
-  }
-  
-  /**
-   * Invalidate message list cache for a specific search
-   * @param searchId The ID of the search to invalidate message lists for
-   */
-  invalidateMessageList(searchId: string): void {
-    if (!searchId) return;
-    
-    // Remove any message lists for this search
-    for (const [key, entry] of this.messageListCache.entries()) {
-      if (key.startsWith(`messages:${searchId}:`)) {
-        this.messageListCache.delete(key);
-      }
-    }
-    
-    this.saveToStorage();
-  }
-  
-  /**
-   * Clear all cache entries
-   */
-  clear(): void {
-    this.sessionCache.clear();
-    this.clearSessionListCache();
-    this.clearMessageCache();
-    this.messageListCache.clear();
-    
-    // Clear localStorage
-    if (typeof window !== 'undefined' && this.config.persistToStorage) {
-      localStorage.removeItem('researchCache');
-    }
-  }
-  
-  /**
-   * Clear all session list cache entries
-   */
-  clearSessionListCache(): void {
-    this.sessionListCache.clear();
+    this.sessionCache.delete(sessionId);
     this.saveToStorage();
   }
   
@@ -290,105 +255,227 @@ class ResearchCache {
    * @param messageId The ID of the message to delete
    */
   deleteMessage(messageId: string): void {
+    if (!messageId) return;
+    
     this.messageCache.delete(messageId);
-    this.saveToStorage();
   }
-
+  
   /**
-   * Clear all message cache entries
+   * Invalidate all caches related to a search
+   * @param searchId The ID of the search to invalidate
    */
-  clearMessageCache(): void {
-    this.messageCache.clear();
+  invalidateSearch(searchId: string): void {
+    if (!searchId) return;
+    
+    // Delete the search from the session cache
+    this.sessionCache.delete(searchId);
+    
+    // Delete all message lists for this search
+    const messageListKeys = Array.from(this.messageListCache.keys())
+      .filter(key => key.startsWith(`search:${searchId}:`));
+    
+    messageListKeys.forEach(key => {
+      this.messageListCache.delete(key);
+    });
+    
     this.saveToStorage();
   }
   
   /**
-   * Generate a unique key for session list options
-   * @param options The options to generate a key for
+   * Invalidate the message list cache for a search
+   * @param searchId The ID of the search to invalidate
+   */
+  invalidateMessageList(searchId: string): void {
+    if (!searchId) return;
+    
+    // Delete all message lists for this search
+    const messageListKeys = Array.from(this.messageListCache.keys())
+      .filter(key => key.startsWith(`search:${searchId}:`));
+    
+    messageListKeys.forEach(key => {
+      this.messageListCache.delete(key);
+    });
+  }
+  
+  /**
+   * Clear the entire cache
+   */
+  clear(): void {
+    this.sessionCache.clear();
+    this.sessionListCache.clear();
+    this.messageCache.clear();
+    this.messageListCache.clear();
+    
+    // Clear localStorage
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem('research_session_cache');
+      localStorage.removeItem('research_session_list_cache');
+    }
+  }
+  
+  /**
+   * Clear the session list cache
+   */
+  clearSessionListCache(): void {
+    this.sessionListCache.clear();
+    
+    // Update localStorage
+    if (typeof localStorage !== 'undefined' && this.config.persistToStorage) {
+      localStorage.removeItem('research_session_list_cache');
+    }
+  }
+  
+  /**
+   * Clear the message cache
+   */
+  clearMessageCache(): void {
+    this.messageCache.clear();
+    this.messageListCache.clear();
+  }
+  
+  /**
+   * Generate a key for caching session lists based on options
+   * @param options The options used to fetch the sessions
    * @returns A string key
    */
-  private generateOptionsKey(options?: {
+  generateOptionsKey(options?: {
     featuredOnly?: boolean;
     status?: QueryStatus;
     limit?: number;
     offset?: number;
-  }): string {
-    return `sessions:${JSON.stringify(options || {})}`;
+  } | null): string {
+    if (!options) return 'all';
+    
+    return `featured:${options.featuredOnly || false}:status:${options.status || 'all'}:limit:${options.limit || 10}:offset:${options.offset || 0}`;
   }
   
   /**
-   * Generate a unique key for message list options
+   * Generate a key for caching message lists based on search ID and options
    * @param searchId The ID of the search
-   * @param options The options to generate a key for
+   * @param options The options used to fetch the messages
    * @returns A string key
    */
-  private generateMessageListKey(searchId: string, options?: {
+  private generateMessageOptionsKey(searchId: string, options?: {
     limit?: number;
     offset?: number;
-  }): string {
-    return `messages:${searchId}:${JSON.stringify(options || {})}`;
+  } | null): string {
+    if (!options) return `search:${searchId}:all`;
+    
+    return `search:${searchId}:limit:${options.limit || 10}:offset:${options.offset || 0}`;
   }
   
   /**
-   * Save the cache to localStorage
+   * Sanitize data before storing in localStorage
+   * Removes or encrypts sensitive fields
+   * @param data The data to sanitize
+   * @returns Sanitized data
    */
-  private saveToStorage(): void {
-    if (typeof window === 'undefined' || !this.config.persistToStorage) return;
-    
-    try {
-      // Only persist sessions to avoid localStorage size limits
-      const sessionsToStore: Record<string, CacheEntry<ResearchSession>> = {};
-      this.sessionCache.forEach((entry, key) => {
-        sessionsToStore[key] = entry;
-      });
-      
-      localStorage.setItem('researchCache', JSON.stringify({
-        sessions: sessionsToStore,
-        timestamp: Date.now()
-      }));
-    } catch (error) {
-      console.error('Failed to save research cache to localStorage:', error);
+  private sanitizeData<T>(data: T): T {
+    if (!this.config.security?.sanitizeForStorage) {
+      return data;
     }
-  }
-  
-  /**
-   * Load the cache from localStorage
-   */
-  private loadFromStorage(): void {
-    if (typeof window === 'undefined' || !this.config.persistToStorage) return;
     
-    try {
-      const storedCache = localStorage.getItem('researchCache');
-      if (!storedCache) return;
+    if (!data || typeof data !== 'object') {
+      return data;
+    }
+    
+    // Create a deep copy to avoid modifying the original
+    const sanitized = JSON.parse(JSON.stringify(data));
+    
+    // Get the list of sensitive fields
+    const sensitiveFields = this.config.security.sensitiveFields || DEFAULT_SECURITY_CONFIG.sensitiveFields;
+    
+    // Function to recursively sanitize objects
+    const sanitizeObject = (obj: any) => {
+      if (!obj || typeof obj !== 'object') return;
       
-      const parsed = JSON.parse(storedCache);
-      if (!parsed || !parsed.sessions || !parsed.timestamp) return;
-      
-      // Check if the entire cache is expired
-      if (Date.now() - parsed.timestamp > this.config.ttl) {
-        localStorage.removeItem('researchCache');
-        return;
-      }
-      
-      // Load sessions
-      Object.entries(parsed.sessions).forEach(([key, entry]: [string, any]) => {
-        if (entry && entry.data && entry.timestamp) {
-          // Check if the individual entry is expired
-          if (Date.now() - entry.timestamp <= this.config.ttl) {
-            this.sessionCache.set(key, entry as CacheEntry<ResearchSession>);
+      // Process each property
+      Object.keys(obj).forEach(key => {
+        // Check if this is a sensitive field
+        if (sensitiveFields.includes(key as SensitiveField)) {
+          if (this.config.security?.encryptSensitiveData) {
+            // Implement encryption here if needed
+            // For now, just mark as encrypted
+            obj[key] = '[ENCRYPTED]';
+          } else {
+            // Remove sensitive data
+            delete obj[key];
           }
+        } else if (typeof obj[key] === 'object' && obj[key] !== null) {
+          // Recursively sanitize nested objects
+          sanitizeObject(obj[key]);
         }
       });
+    };
+    
+    sanitizeObject(sanitized);
+    return sanitized;
+  }
+  
+  /**
+   * Save cache to localStorage
+   */
+  private saveToStorage(): void {
+    if (!this.config.persistToStorage || typeof localStorage === 'undefined') return;
+    
+    try {
+      // Only save sessions to localStorage, not messages (to reduce size)
+      const sessionEntries = Array.from(this.sessionCache.entries());
+      const sessionListEntries = Array.from(this.sessionListCache.entries());
+      
+      // Sanitize data before storing
+      const sanitizedSessions = sessionEntries.map(([key, entry]) => {
+        return [key, { ...entry, data: this.sanitizeData(entry.data) }];
+      });
+      
+      const sanitizedSessionLists = sessionListEntries.map(([key, entry]) => {
+        return [key, { ...entry, data: this.sanitizeData(entry.data) }];
+      });
+      
+      localStorage.setItem('research_session_cache', JSON.stringify(sanitizedSessions));
+      localStorage.setItem('research_session_list_cache', JSON.stringify(sanitizedSessionLists));
     } catch (error) {
-      console.error('Failed to load research cache from localStorage:', error);
+      console.error('Error saving cache to localStorage:', error);
     }
   }
   
   /**
-   * Check if a cache entry is about to expire and refresh it if needed
-   * @param key The cache key to check
-   * @param refreshThreshold The threshold in milliseconds before expiration to refresh
-   * @param refreshFn The function to call to refresh the cache entry
+   * Load cache from localStorage
+   */
+  private loadFromStorage(): void {
+    if (!this.config.persistToStorage || typeof localStorage === 'undefined') return;
+    
+    try {
+      const sessionCacheJson = localStorage.getItem('research_session_cache');
+      const sessionListCacheJson = localStorage.getItem('research_session_list_cache');
+      
+      if (sessionCacheJson) {
+        const sessionEntries = JSON.parse(sessionCacheJson);
+        sessionEntries.forEach(([key, entry]: [string, CacheEntry<ResearchSession>]) => {
+          this.sessionCache.set(key, entry);
+        });
+      }
+      
+      if (sessionListCacheJson) {
+        const sessionListEntries = JSON.parse(sessionListCacheJson);
+        sessionListEntries.forEach(([key, entry]: [string, CacheEntry<SearchListResponse>]) => {
+          this.sessionListCache.set(key, entry);
+        });
+      }
+    } catch (error) {
+      console.error('Error loading cache from localStorage:', error);
+      // If there's an error loading from localStorage, clear it to prevent future errors
+      localStorage.removeItem('research_session_cache');
+      localStorage.removeItem('research_session_list_cache');
+    }
+  }
+  
+  /**
+   * Proactively refresh a cache entry if it's close to expiring
+   * @param cacheMap The cache map to check
+   * @param key The key of the entry to check
+   * @param refreshThreshold The threshold in milliseconds before expiry to refresh
+   * @param refreshFn Function to call to refresh the data
    */
   async refreshCacheIfNeeded<T>(
     cacheMap: Map<string, CacheEntry<T>>,
@@ -399,9 +486,8 @@ class ResearchCache {
     const entry = cacheMap.get(key);
     if (!entry) return;
     
-    const timeUntilExpiration = this.config.ttl - (Date.now() - entry.timestamp);
+    const timeUntilExpiration = (entry.timestamp + this.config.ttl) - Date.now();
     
-    // If the entry is about to expire, refresh it
     if (timeUntilExpiration < refreshThreshold) {
       try {
         const freshData = await refreshFn();
@@ -430,12 +516,44 @@ export interface ApiError {
   retryAfter?: number  // For rate limiting errors
 }
 
-export async function getAuthHeader() {
-  const { data } = await supabase.auth.getSession()
-  const token = data.session?.access_token
-  return {
-    'Authorization': `Bearer ${token}`,
+export async function getAuthHeader(): Promise<Record<string, string>> {
+  // Create base headers that will be returned regardless of auth status
+  const headers: Record<string, string> = {
     'Content-Type': 'application/json'
+  };
+  
+  // Guard clause for non-browser environments
+  if (typeof window === 'undefined') {
+    console.warn('getAuthHeader: Not in browser environment');
+    return headers;
+  }
+  
+  try {
+    // Use the auth manager to get the current session
+    console.log('getAuthHeader: Attempting to get current session');
+    const session = await authManager.getCurrentSession();
+    console.log('getAuthHeader: Session object:', session ? 'Session exists' : 'No session', 
+                session ? { 
+                  hasAccessToken: !!session.access_token,
+                  expiresAt: session.expires_at,
+                  expiresIn: session.expires_at ? (session.expires_at * 1000 - Date.now()) / 1000 : 'unknown',
+                  user: session.user ? { id: session.user.id } : 'No user'
+                } : null);
+    
+    // Only add Authorization if we have a token
+    if (session?.access_token) {
+      console.log('getAuthHeader: Auth token obtained successfully');
+      headers['Authorization'] = `Bearer ${session.access_token}`;
+    } else {
+      console.warn('getAuthHeader: Proceeding with request without Authorization header');
+    }
+    
+    return headers;
+  } catch (error) {
+    console.error('getAuthHeader: Error getting session:', error);
+    
+    // Return headers without Authorization as a fallback
+    return headers;
   }
 }
 
@@ -444,6 +562,105 @@ interface SearchListResponse {
   total: number
   offset: number
   limit: number
+}
+
+/**
+ * Custom fetch function that handles self-signed certificates in development
+ * @param url URL to fetch
+ * @param options Fetch options
+ * @returns Response from fetch
+ */
+async function fetchWithSelfSignedCert(url: string, options?: RequestInit): Promise<Response> {
+  // In development, we've set NODE_TLS_REJECT_UNAUTHORIZED=0 in package.json
+  // This should allow self-signed certificates, but we need to handle any remaining issues
+  
+  // Add timeout to fetch requests
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+  
+  try {
+    const fetchOptions = {
+      ...options,
+      signal: controller.signal,
+    };
+    
+    // For absolute URLs, use them directly
+    // For relative URLs, use the base URL from the environment or default to localhost
+    let fetchUrl: string;
+    try {
+      fetchUrl = url.startsWith('http') 
+        ? url 
+        : `${process.env.NEXT_PUBLIC_API_URL || 'https://localhost:8000'}${url.startsWith('/') ? url : `/${url}`}`;
+    } catch (urlError) {
+      console.error('Error constructing URL:', urlError);
+      fetchUrl = url; // Fallback to original URL
+    }
+    
+    console.log(`Fetching: ${fetchUrl}`);
+    
+    // Check if fetch is available
+    if (typeof fetch !== 'function') {
+      throw new Error('Fetch API is not available in this environment');
+    }
+    
+    const response = await fetch(fetchUrl, fetchOptions);
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    
+    // Log detailed error information
+    console.error('Fetch error details:', {
+      url,
+      error: error instanceof Error ? error.message : String(error),
+      code: (error as any)?.code,
+      type: error instanceof Error ? error.constructor.name : typeof error,
+      stack: error instanceof Error ? error.stack : undefined
+    });
+    
+    // Handle specific error types
+    if (error instanceof Error) {
+      // Handle abort error (timeout)
+      if (error.name === 'AbortError') {
+        throw new Error(`Request timeout after 30 seconds: ${url}`);
+      }
+      
+      // Handle certificate errors
+      if (error.message.includes('certificate') || 
+          error.message.includes('SSL') || 
+          error.message.includes('UNABLE_TO_VERIFY_LEAF_SIGNATURE') || 
+          (error as any).code === 'UNABLE_TO_VERIFY_LEAF_SIGNATURE' ||
+          (error as any).code === 'ECONNRESET') {
+        
+        console.warn('Certificate or connection error detected. Make sure the backend is running with SSL enabled.');
+        console.warn('Backend should be started with: uvicorn main:app --reload --ssl-keyfile localhost+2-key.pem --ssl-certfile localhost+2.pem');
+        
+        // If we're in development, provide a more helpful error
+        if (process.env.NODE_ENV === 'development') {
+          throw new Error(
+            `SSL Certificate or Connection Error: ${error.message}. ` +
+            `Make sure the backend is running with SSL enabled and that the certificates are trusted. ` +
+            `Check that NODE_TLS_REJECT_UNAUTHORIZED=0 is set in your environment.`
+          );
+        }
+      }
+      
+      // Handle network errors
+      if (error.message.includes('network') || 
+          error.message.includes('fetch') ||
+          error.message.includes('Failed to fetch') ||
+          (error as any).code === 'ENOTFOUND' ||
+          (error as any).code === 'ECONNREFUSED') {
+        throw new Error(
+          `Network Error: Could not connect to the server at ${url}. ` +
+          `Make sure the backend server is running and accessible.`
+        );
+      }
+    }
+    
+    // Rethrow the original error
+    throw error;
+  }
 }
 
 /**
@@ -460,13 +677,34 @@ async function withRetry<T>(
   retryDelay: number = 1000,
   shouldRetry: (error: any) => boolean = (error) => {
     // By default, retry on network errors and 5xx server errors
-    if (error instanceof Error && error.message.includes('network')) {
+    if (!error) return false;
+    
+    // Don't retry on authentication errors (401)
+    if (error && typeof error === 'object' && 'status' in error && error.status === 401) {
+      console.log('Not retrying due to authentication error (401)');
+      return false;
+    }
+    
+    // Don't retry on redirect loops
+    if (error && typeof error === 'object' && 'status' in error && error.status === 307) {
+      console.log('Not retrying due to redirect (307)');
+      return false;
+    }
+    
+    if (error instanceof Error && (
+      error.message.includes('network') ||
+      error.message.includes('connection') ||
+      error.message.includes('timeout') ||
+      error.message.includes('abort')
+    )) {
       return true
     }
-    if (error && 'status' in error) {
+    
+    if (error && typeof error === 'object' && 'status' in error) {
       // Retry on server errors (5xx)
       return error.status >= 500 && error.status < 600
     }
+    
     return false
   }
 ): Promise<T> {
@@ -474,12 +712,16 @@ async function withRetry<T>(
   
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      return await fn()
+      // Wrap the function call in a try-catch to handle any synchronous errors
+      const result = await fn()
+      return result
     } catch (error) {
+      console.log(`API call failed (attempt ${attempt + 1}/${maxRetries + 1}):`, error)
       lastError = error
       
       // Don't retry if we've reached max retries or if the error isn't retryable
       if (attempt >= maxRetries || !shouldRetry(error)) {
+        console.log(`Not retrying: ${attempt >= maxRetries ? 'max retries reached' : 'error not retryable'}`)
         throw error
       }
       
@@ -487,19 +729,21 @@ async function withRetry<T>(
       if (error && typeof error === 'object' && 'retryAfter' in error && typeof error.retryAfter === 'number') {
         // Use type assertion to tell TypeScript that retryAfter is a number
         const typedError = error as { retryAfter: number }
-        await new Promise(resolve => setTimeout(resolve, typedError.retryAfter * 1000))
+        const retryAfterMs = typedError.retryAfter * 1000
+        console.log(`Rate limited. Retrying after ${retryAfterMs}ms...`)
+        await new Promise(resolve => setTimeout(resolve, retryAfterMs))
       } else {
         // Otherwise use exponential backoff
         const delay = retryDelay * Math.pow(2, attempt)
+        console.log(`Retrying API call after ${delay}ms (attempt ${attempt + 1}/${maxRetries})...`)
         await new Promise(resolve => setTimeout(resolve, delay))
       }
-      
-      console.log(`Retrying API call (attempt ${attempt + 1}/${maxRetries})...`)
     }
   }
   
   // This should never be reached due to the throw in the loop, but TypeScript needs it
-  throw lastError
+  console.error('Exhausted all retry attempts')
+  throw lastError || new Error('Failed after multiple retry attempts')
 }
 
 /**
@@ -508,6 +752,26 @@ async function withRetry<T>(
  * @returns A formatted ApiError object with user-friendly messages
  */
 export async function handleApiError(response: Response): Promise<never> {
+  // Guard against undefined or null response
+  if (!response) {
+    const error = new Error('No response received from server');
+    (error as any).status = 0;
+    (error as any).statusText = 'No Response';
+    throw formatApiError(error, 'Server communication error');
+  }
+  
+  // Special handling for authentication errors to prevent infinite loops
+  if (response.status === 401) {
+    const authError: ApiError = {
+      status: 401,
+      statusText: 'Unauthorized',
+      message: 'Your session has expired. Please log in again.',
+      details: { message: 'Authentication required' },
+      code: 'AUTH_REQUIRED'
+    };
+    throw authError;
+  }
+  
   let errorMessage = `HTTP ${response.status}: ${response.statusText}`
   let errorDetails: any = undefined
   
@@ -551,7 +815,40 @@ export async function handleApiError(response: Response): Promise<never> {
  * @param defaultMessage Optional default message to use if no specific message is available
  * @returns A formatted ApiError object with user-friendly messages
  */
-export function formatApiError(error: ApiError, defaultMessage?: string): ApiError {
+export function formatApiError(error: ApiError | any, defaultMessage?: string): ApiError {
+  // Handle case where error is undefined or null
+  if (!error) {
+    return {
+      message: defaultMessage || 'An unknown error occurred',
+      details: { message: 'No error details available' },
+      status: 0,
+      statusText: 'Unknown',
+      code: 'UNKNOWN_ERROR'
+    };
+  }
+  
+  // Handle case where error is a string
+  if (typeof error === 'string') {
+    return {
+      message: error,
+      details: { message: error },
+      status: 0,
+      statusText: 'Unknown',
+      code: 'STRING_ERROR'
+    };
+  }
+  
+  // Handle case where error is a plain Error object
+  if (error instanceof Error && !('status' in error)) {
+    return {
+      message: error.message || defaultMessage || 'An error occurred',
+      details: { message: error.message, stack: error.stack },
+      status: 0,
+      statusText: 'Error',
+      code: 'JS_ERROR'
+    };
+  }
+  
   // Create a copy of the error to avoid mutating the original
   const formattedError: ApiError = { ...error };
   
@@ -559,6 +856,9 @@ export function formatApiError(error: ApiError, defaultMessage?: string): ApiErr
   if (defaultMessage && !formattedError.message) {
     formattedError.message = defaultMessage;
   }
+  
+  // Ensure we have a status code, defaulting to 0 if not present
+  formattedError.status = formattedError.status || 0;
   
   // Add specific handling for common error codes
   switch (formattedError.status) {
@@ -586,7 +886,6 @@ export function formatApiError(error: ApiError, defaultMessage?: string): ApiErr
       if (formattedError.retryAfter) {
         formattedError.message = `Rate limit exceeded. Please try again in ${formattedError.retryAfter} seconds.`
       }
-      
       // Special handling for Perplexity Sonar API rate limiting
       if (formattedError.details?.error?.includes?.('rate limit') || 
           formattedError.details?.message?.toLowerCase?.().includes('rate limit') ||
@@ -643,30 +942,152 @@ export async function fetchSessions(options?: {
   status?: QueryStatus
   limit?: number
   offset?: number
-}): Promise<SearchListResponse> {
-  // Check cache first
-  const cachedResponse = researchCache.getSessionList(options);
-  if (cachedResponse) {
-    return cachedResponse;
+  append?: boolean
+  skipAuthCheck?: boolean
+} | null | undefined): Promise<SearchListResponse> {
+  console.log('fetchSessions called with options:', options);
+  
+  // Prepare query parameters
+  const params = new URLSearchParams();
+  
+  if (options?.featuredOnly) {
+    params.append('featured', 'true');
   }
-
-  const headers = await getAuthHeader()
   
-  // Build query parameters
-  const params = new URLSearchParams()
-  if (options?.featuredOnly) params.append('featured_only', 'true')
-  if (options?.status) params.append('status', options.status)
-  if (options?.limit) params.append('limit', options.limit.toString())
-  if (options?.offset) params.append('offset', options.offset.toString())
+  if (options?.status) {
+    params.append('status', options.status);
+  }
   
-  const queryString = params.toString() ? `?${params.toString()}` : ''
-  const response = await withRetry(() => fetch(`/api/research/searches${queryString}`, { headers }))
+  if (options?.limit) {
+    params.append('limit', options.limit.toString());
+  }
   
-  if (!response.ok) return handleApiError(response)
-  const data = await response.json()
+  if (options?.offset) {
+    params.append('offset', options.offset.toString());
+  }
+  
+  // Check cache first
+  const cacheKey = researchCache.generateOptionsKey(options);
+  const cachedData = researchCache.getSessionList(options);
+  
+  if (cachedData) {
+    console.log('Using cached session list data');
+    return cachedData;
+  }
+  
+  // Get auth header for request
+  console.log('Getting auth header for fetchSessions');
+  const headers = await getAuthHeader();
+  console.log('Headers being sent:', headers);
+  
+  // If no auth token and not explicitly skipping auth check, return empty results
+  if (!headers.Authorization && !options?.skipAuthCheck) {
+    console.log('No authorization token available, returning empty results');
+    return {
+      items: [],
+      total: 0,
+      offset: options?.offset || 0,
+      limit: options?.limit || 10
+    };
+  }
+  
+  // Build query string
+  const queryString = params.toString() ? `?${params.toString()}` : '';
+  // Ensure URL doesn't have a trailing slash
+  const baseUrl = '/api/research/searches';
+  const url = `${baseUrl}${queryString}`;
+  console.log(`Making API request to: ${url} (baseUrl: ${baseUrl}, queryString: ${queryString})`);
+  
+  // Use a lower retry count for authentication-related requests to prevent excessive retries
+  const response = await withRetry(
+    () => fetchWithSelfSignedCert(url, { headers }),
+    1,  // Only retry once for this endpoint
+    1000,
+    (error) => {
+      // Don't retry on authentication errors (401)
+      if (error && typeof error === 'object' && 'status' in error && error.status === 401) {
+        console.log('Not retrying due to authentication error (401)');
+        return false;
+      }
+      
+      // Don't retry on redirect loops
+      if (error && typeof error === 'object' && 'status' in error && error.status === 307) {
+        console.log('Not retrying due to redirect (307)');
+        return false;
+      }
+      
+      // Only retry on server errors (5xx)
+      return error && typeof error === 'object' && 'status' in error && 
+             error.status >= 500 && error.status < 600;
+    }
+  );
+  console.log(`API response status: ${response.status} ${response.statusText}`);
+  
+  // Handle 401 Unauthorized errors specifically
+  if (response.status === 401) {
+    console.error('Authentication error (401 Unauthorized)');
+    
+    // Try to refresh the token
+    try {
+      console.log('Attempting to refresh the token after 401 error');
+      const { data, error } = await supabase.auth.refreshSession();
+      if (error) {
+        console.error('Failed to refresh token:', error);
+      } else if (data.session) {
+        console.log('Token refreshed successfully, user should retry the operation');
+      }
+    } catch (refreshError) {
+      console.error('Error refreshing token:', refreshError);
+    }
+    
+    const emptyResponse: SearchListResponse = {
+      items: [],
+      total: 0,
+      offset: options?.offset || 0,
+      limit: options?.limit || 10
+    };
+    return emptyResponse;
+  }
+  
+  if (!response.ok) {
+    console.error('Error response from API:', response.status, response.statusText);
+    return handleApiError(response)
+  }
+  
+  // Parse the response with error handling
+  let data: any;
+  try {
+    data = await response.json()
+    console.log('Successfully parsed API response:', {
+      itemsCount: data?.items?.length || 0,
+      total: data?.total,
+      hasItems: Array.isArray(data?.items)
+    });
+  } catch (parseError) {
+    console.error('Error parsing JSON response:', parseError)
+    throw new Error(`Failed to parse server response: ${parseError instanceof Error ? parseError.message : String(parseError)}`)
+  }
+  
+  // Validate the response structure
+  if (!data || typeof data !== 'object') {
+    console.error('Invalid response format:', data)
+    throw new Error('Server returned an invalid response format')
+  }
+  
+  if (!Array.isArray(data.items)) {
+    console.error('Response missing items array:', data)
+    // Try to recover by creating a default structure
+    data = {
+      items: [],
+      total: 0,
+      offset: options?.offset || 0,
+      limit: options?.limit || 10,
+      ...data // Keep any other fields that might be present
+    }
+  }
   
   // Cache the response
-  researchCache.setSessionList(options, data);
+  researchCache.setSessionList(data, options);
   
   return data
 }
@@ -677,22 +1098,53 @@ export async function fetchSessions(options?: {
  * @returns The research session
  */
 export async function fetchSession(sessionId: string): Promise<ResearchSession> {
-  // Check cache first
-  const cachedSession = researchCache.getSession(sessionId);
-  if (cachedSession) {
-    return cachedSession;
-  }
+  try {
+    // Check cache first
+    const cachedSession = researchCache.getSession(sessionId);
+    if (cachedSession) {
+      return cachedSession;
+    }
 
-  const headers = await getAuthHeader()
-  const response = await withRetry(() => fetch(`/api/research/searches/${sessionId}`, { headers }))
-  
-  if (!response.ok) return handleApiError(response)
-  const data = await response.json()
-  
-  // Cache the response
-  researchCache.setSession(data);
-  
-  return data
+    const headers = await getAuthHeader()
+    const response = await withRetry(() => fetchWithSelfSignedCert(`/api/research/searches/${sessionId}`, { headers }))
+    
+    if (!response.ok) return handleApiError(response)
+    
+    // Parse the response with error handling
+    let data: any;
+    try {
+      data = await response.json()
+    } catch (parseError) {
+      console.error(`Error parsing JSON response for session ${sessionId}:`, parseError)
+      throw new Error(`Failed to parse server response: ${parseError instanceof Error ? parseError.message : String(parseError)}`)
+    }
+    
+    // Validate the response structure
+    if (!data || typeof data !== 'object') {
+      console.error('Invalid response format:', data)
+      throw new Error('Server returned an invalid response format')
+    }
+    
+    if (!data.id) {
+      console.error('Response missing session ID:', data)
+      throw new Error('Server returned an invalid session format')
+    }
+    
+    // Cache the response
+    researchCache.setSession(data);
+    
+    return data
+  } catch (error) {
+    console.error(`Error in fetchSession for session ${sessionId}:`, error);
+    
+    // If the error is already an ApiError, rethrow it
+    if (error && (error as any).code) {
+      throw error;
+    }
+    
+    // Otherwise, format it and throw
+    throw formatApiError(error, `Failed to fetch research session ${sessionId}`);
+  }
 }
 
 /**
@@ -703,7 +1155,7 @@ export async function fetchSession(sessionId: string): Promise<ResearchSession> 
  */
 export async function createNewSession(query: string, searchParams?: SearchParams): Promise<ResearchSession> {
   const headers = await getAuthHeader()
-  const response = await withRetry(() => fetch('/api/research/searches', {
+  const response = await withRetry(() => fetchWithSelfSignedCert('/api/research/searches', {
     method: 'POST',
     headers,
     body: JSON.stringify({ 
@@ -735,7 +1187,7 @@ export async function sendSessionMessage(sessionId: string, content: string): Pr
   
   // Use a more aggressive retry strategy for sendSessionMessage due to Perplexity API issues
   const response = await withRetry(
-    () => fetch(`/api/research/searches/${sessionId}/continue`, {
+    () => fetchWithSelfSignedCert(`/api/research/searches/${sessionId}/continue`, {
       method: 'POST',
       headers,
       body: JSON.stringify({ follow_up_query: content })
@@ -795,7 +1247,7 @@ export async function updateSessionMetadata(sessionId: string, updates: {
   status?: QueryStatus
 }): Promise<ResearchSession> {
   const headers = await getAuthHeader()
-  const response = await withRetry(() => fetch(`/api/research/searches/${sessionId}`, {
+  const response = await withRetry(() => fetchWithSelfSignedCert(`/api/research/searches/${sessionId}`, {
     method: 'PATCH',
     headers,
     body: JSON.stringify(updates)
@@ -819,7 +1271,7 @@ export async function updateSessionMetadata(sessionId: string, updates: {
  */
 export async function deleteSession(sessionId: string): Promise<void> {
   const headers = await getAuthHeader()
-  const response = await withRetry(() => fetch(`/api/research/searches/${sessionId}`, {
+  const response = await withRetry(() => fetchWithSelfSignedCert(`/api/research/searches/${sessionId}`, {
     method: 'DELETE',
     headers
   }))
@@ -855,7 +1307,7 @@ export async function fetchMessage(messageId: string): Promise<Message> {
   }
 
   const headers = await getAuthHeader()
-  const response = await withRetry(() => fetch(`/api/research/messages/${messageId}`, { headers }))
+  const response = await withRetry(() => fetchWithSelfSignedCert(`/api/research/messages/${messageId}`, { headers }))
   
   if (!response.ok) return handleApiError(response)
   const data = await response.json()
@@ -867,17 +1319,17 @@ export async function fetchMessage(messageId: string): Promise<Message> {
 }
 
 /**
- * Fetch messages for a research session
+ * Fetch messages for a search
  * @param searchId The ID of the search to fetch messages for
- * @param options Options for pagination
+ * @param options Options for filtering and pagination
  * @returns A list of messages
  */
 export async function fetchMessagesForSearch(
   searchId: string,
   options?: {
     limit?: number
-    offset?: number
-  }
+    offset?: number;
+  } | null
 ): Promise<MessageListResponse> {
   // Check cache first
   const cachedMessages = researchCache.getMessageList(searchId, options);
@@ -894,7 +1346,7 @@ export async function fetchMessagesForSearch(
   
   const queryString = params.toString() ? `?${params.toString()}` : ''
   const response = await withRetry(() => 
-    fetch(`/api/research/searches/${searchId}/messages${queryString}`, { headers })
+    fetchWithSelfSignedCert(`/api/research/searches/${searchId}/messages${queryString}`, { headers })
   )
   
   if (!response.ok) return handleApiError(response)
@@ -920,7 +1372,7 @@ export async function updateMessage(
   }
 ): Promise<Message> {
   const headers = await getAuthHeader()
-  const response = await withRetry(() => fetch(`/api/research/messages/${messageId}`, {
+  const response = await withRetry(() => fetchWithSelfSignedCert(`/api/research/messages/${messageId}`, {
     method: 'PATCH',
     headers,
     body: JSON.stringify(updates)
@@ -959,7 +1411,7 @@ export async function deleteMessage(messageId: string, searchId?: string): Promi
     }
   }
   
-  const response = await withRetry(() => fetch(`/api/research/messages/${messageId}`, {
+  const response = await withRetry(() => fetchWithSelfSignedCert(`/api/research/messages/${messageId}`, {
     method: 'DELETE',
     headers
   }))
@@ -987,7 +1439,7 @@ export async function forwardMessage(
   destinationType: 'email' | 'user' | 'workspace'
 ): Promise<any> {
   const headers = await getAuthHeader()
-  const response = await withRetry(() => fetch(`/api/research/messages/${messageId}/forward`, {
+  const response = await withRetry(() => fetchWithSelfSignedCert(`/api/research/messages/${messageId}/forward`, {
     method: 'POST',
     headers,
     body: JSON.stringify({
@@ -1019,26 +1471,86 @@ export interface WebSocketConnection {
 
 /**
  * Establishes a WebSocket connection for real-time message updates
- * @param searchId The ID of the search/conversation to connect to
+ * @param searchId The ID of the search to connect to
  * @param onMessage Callback function for handling incoming messages
  * @param onError Callback function for handling errors
- * @param onClose Optional callback function for handling connection close
+ * @param onConnectionChange Callback function for handling connection state changes
  * @returns A WebSocketConnection object with methods to interact with the connection
  */
 export async function connectToMessageUpdates(
   searchId: string,
   onMessage: (message: WebSocketMessage) => void,
   onError: (error: any) => void,
-  onClose?: () => void
+  onConnectionChange: (connected: boolean) => void
 ): Promise<WebSocketConnection> {
-  // Get the auth token
-  const headers = await getAuthHeader();
-  const token = headers.Authorization.replace('Bearer ', '');
+  // Get the auth token with retry logic
+  let token: string | null = null;
+  let tokenRetryCount = 0;
+  const maxTokenRetries = 3;
+  
+  while (!token && tokenRetryCount < maxTokenRetries) {
+    try {
+      console.log(`Attempting to get auth token (attempt ${tokenRetryCount + 1}/${maxTokenRetries})`);
+      const { data, error } = await supabase.auth.getSession();
+      
+      if (error) {
+        console.error('Error getting auth session:', error);
+        throw error;
+      }
+      
+      token = data?.session?.access_token || null;
+      
+      if (!token) {
+        // If token is still null after getSession, try refreshing the session
+        console.log('No token found, attempting to refresh session...');
+        const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+        
+        if (refreshError) {
+          console.error('Error refreshing session:', refreshError);
+          throw refreshError;
+        }
+        
+        token = refreshData?.session?.access_token || null;
+      }
+      
+      if (!token) {
+        console.warn('Failed to get token, will retry...');
+        tokenRetryCount++;
+        // Wait before retrying with exponential backoff
+        await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, tokenRetryCount)));
+      }
+    } catch (error) {
+      console.error('Error retrieving auth token:', error);
+      tokenRetryCount++;
+      // Wait before retrying
+      await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, tokenRetryCount)));
+    }
+  }
+  
+  if (!token) {
+    const error = new Error('Failed to retrieve authentication token after multiple attempts');
+    console.error(error);
+    onError(error);
+    onConnectionChange(false); 
+    throw error;
+  }
+  
+  console.log('Successfully retrieved auth token');
   
   // Create WebSocket connection
   const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const wsHost = window.location.host;
-  const wsUrl = `${wsProtocol}//${wsHost}/api/research/messages/ws/${searchId}?token=${token}`;
+  let wsHost: string;
+  
+  try {
+    wsHost = process.env.NEXT_PUBLIC_API_URL ? 
+      new URL(process.env.NEXT_PUBLIC_API_URL).host : 
+      window.location.host;
+  } catch (error) {
+    console.error('Error parsing API URL:', error);
+    wsHost = window.location.host; // Fallback to current host
+  }
+  
+  const wsUrl = `${wsProtocol}//${wsHost}/api/research/messages/ws/${searchId}?token=${encodeURIComponent(token)}`;
   
   // Reconnection settings
   const maxReconnectAttempts = 5;
@@ -1121,6 +1633,9 @@ export async function connectToMessageUpdates(
       isReconnecting = false;
       reconnectAttempts = 0; // Reset reconnect attempts on successful connection
       
+      // Notify about connection state change
+      onConnectionChange(true);
+      
       // Subscribe to all message types
       socket.send(JSON.stringify({
         command: 'subscribe',
@@ -1185,7 +1700,7 @@ export async function connectToMessageUpdates(
       // Clear intervals
       clearTimers();
       
-      if (onClose) onClose();
+      onConnectionChange(false);
       
       // Attempt to reconnect unless manually disconnected
       if (!manualDisconnect) {

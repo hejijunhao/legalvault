@@ -27,7 +27,7 @@ export default function ResearchPage() {
 
   // Fetch sessions when component mounts
   useEffect(() => {
-    getSessions({ limit: 12 }) // Show up to 12 recent searches
+    getSessions({ limit: 12, skipAuthCheck: true }) // Show up to 12 recent searches
   }, [getSessions])
 
   const handleSearch = async (queryType: QueryType | null) => {

@@ -6,7 +6,9 @@ const nextConfig: NextConfig = {
     return [
       {
         source: '/api/:path*',
-        destination: process.env.NEXT_PUBLIC_API_URL || 'https://localhost:8000/api/:path*',
+        destination: process.env.NODE_ENV === 'development'
+          ? 'https://localhost:8000/api/:path*'  // Use HTTPS in development
+          : (process.env.NEXT_PUBLIC_API_URL || 'https://localhost:8000/api/:path*'),
       },
     ];
   },
@@ -21,6 +23,17 @@ const nextConfig: NextConfig = {
       };
     }
     return config;
+  },
+  // Disable SSL certificate verification in development
+  serverRuntimeConfig: {
+    // Will only be available on the server side
+    https: process.env.NODE_ENV === 'development' ? {
+      rejectUnauthorized: false
+    } : undefined
+  },
+  publicRuntimeConfig: {
+    // Will be available on both server and client
+    apiUrl: process.env.NODE_ENV === 'development' ? 'https://localhost:8000/api' : process.env.NEXT_PUBLIC_API_URL
   },
 };
 

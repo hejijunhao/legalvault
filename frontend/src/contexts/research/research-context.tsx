@@ -2,26 +2,25 @@
 
 "use client"
 
-import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useRef } from 'react'
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react'
 import { 
   fetchSessions, 
   fetchSession, 
   createNewSession, 
-  sendSessionMessage,
-  updateSessionMetadata,
-  deleteSession,
-  fetchMessagesForSearch,
-  updateMessage,
-  deleteMessage,
-  connectToMessageUpdates,
+  updateSessionMetadata as updateSessionApi, 
+  deleteSession as deleteSessionApi, 
+  sendSessionMessage as sendMessageApi, 
+  connectToMessageUpdates, 
   WebSocketConnection,
   WebSocketMessage,
   requestLatestMessages,
   sendTypingNotification,
-  cache as researchCache,
   formatApiError,
+  cache,
   ApiError
 } from "@/services/research/research-api"
+import { supabase } from "@/lib/supabase";
+import authManager from '@/lib/auth-manager';
 
 // Define enum types that mirror the backend
 export enum QueryCategory {
@@ -122,6 +121,7 @@ interface ResearchContextType {
     limit?: number
     offset?: number
     append?: boolean
+    skipAuthCheck?: boolean
   }) => Promise<void>
   updateSession: (sessionId: string, updates: {
     title?: string
@@ -166,7 +166,73 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
   const clearError = useCallback(() => setError(null), [setError])
 
   const handleApiError = (err: any, defaultMessage: string): ErrorType => {
+    // Guard against undefined or null errors
+    if (!err) {
+      console.error(`API Error: ${defaultMessage}`, 'Error object is undefined or null')
+      return {
+        message: defaultMessage,
+        details: 'An unknown error occurred',
+        code: 'UNKNOWN_ERROR'
+      }
+    }
+
     console.error(`API Error: ${defaultMessage}`, err)
+    
+    // Handle connection errors
+    if (err instanceof Error && 
+        ((err as any).code === 'ECONNRESET' || 
+         err.message.includes('socket hang up') ||
+         err.message.includes('network') ||
+         err.message.includes('connection') ||
+         err.message.includes('timeout'))) {
+      return {
+        message: 'Connection Error',
+        details: 'Could not connect to the server. Please check that the backend server is running and try again.',
+        code: 'CONNECTION_ERROR'
+      }
+    }
+    
+    // Handle authentication errors
+    if (err instanceof Error && 
+        (err.message.toLowerCase().includes('authentication') || 
+         err.message.toLowerCase().includes('auth') || 
+         err.message.toLowerCase().includes('token') || 
+         err.message.toLowerCase().includes('login') || 
+         err.message.toLowerCase().includes('unauthorized') || 
+         err.message.toLowerCase().includes('sign in') || 
+         (err as any).code === 'UNAUTHORIZED' || 
+         (err as any).status === 401)) {
+      // Attempt to refresh the session when we detect auth errors
+      try {
+        // Don't await this - we don't want to block the error handler
+        supabase.auth.refreshSession().then(() => {
+          console.log('Auth session refreshed after error');
+        }).catch(refreshError => {
+          console.error('Failed to refresh session:', refreshError);
+        });
+      } catch (refreshError) {
+        console.error('Error attempting to refresh session:', refreshError);
+      }
+      
+      return {
+        message: 'Authentication Error',
+        details: 'Your session may have expired. Please try refreshing the page or logging in again.',
+        code: 'AUTH_ERROR'
+      }
+    }
+    
+    // Handle certificate-related errors specifically
+    if (err instanceof Error && 
+        (err.message.includes('certificate') || 
+         err.message.includes('SSL') || 
+         err.message.includes('UNABLE_TO_VERIFY_LEAF_SIGNATURE') || 
+         (err as any).code === 'UNABLE_TO_VERIFY_LEAF_SIGNATURE')) {
+      return {
+        message: 'SSL Certificate Error',
+        details: 'There was an issue with the SSL certificate. This is likely a development environment issue. Please check your server configuration.',
+        code: 'CERTIFICATE_ERROR'
+      }
+    }
     
     if (err && 'status' in err) {
       // Use the formatApiError function from research-api.ts
@@ -230,20 +296,100 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
     limit?: number
     offset?: number
     append?: boolean
+    skipAuthCheck?: boolean
   }) => {
     setLoadingStates(prev => ({ ...prev, fetchingSessions: true }))
     setIsLoading(true)
     setError(null)
     
     try {
+      console.log('getSessions called with options:', options);
+      
       // Use the API service to fetch sessions
       const data = await fetchSessions(options)
       
+      // Check if we received empty results due to authentication issues
+      if (data.items.length === 0 && data.total === 0 && !options?.skipAuthCheck) {
+        console.log('Received empty results, checking if this is due to authentication issues');
+        // Check if user is logged in
+        const { data: sessionData } = await supabase.auth.getSession();
+        if (!sessionData.session) {
+          console.warn('User is not logged in, setting auth error');
+          setError({
+            message: "Please log in to view your research sessions",
+            details: "Your session may have expired",
+            code: "AUTH_REQUIRED"
+          });
+          setSessions([])
+          setTotalSessions(0)
+          setLoadingStates(prev => ({ ...prev, fetchingSessions: false }))
+          setIsLoading(false)
+          return;
+        } else {
+          // User is logged in but we still got empty results
+          // Try refreshing the token
+          console.log('User is logged in but received empty results, attempting to refresh token');
+          try {
+            const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+            if (refreshError) {
+              console.error('Failed to refresh token:', refreshError);
+            } else if (refreshData.session) {
+              console.log('Token refreshed successfully, retrying operation');
+              // Don't retry here to avoid potential infinite loops
+              // Just inform the user to try again
+              setError({
+                message: "Authentication refreshed",
+                details: "Please try again",
+                code: "AUTH_REFRESHED"
+              });
+            }
+          } catch (refreshError) {
+            console.error('Error refreshing token:', refreshError);
+          }
+        }
+      }
+      
+      // Validate the response structure and provide fallbacks
+      const validatedData = {
+        items: Array.isArray(data.items) ? data.items : [],
+        total: typeof data.total === 'number' ? data.total : 0,
+        offset: typeof data.offset === 'number' ? data.offset : (options?.offset || 0),
+        limit: typeof data.limit === 'number' ? data.limit : (options?.limit || 10)
+      }
+      
       // Either append or replace sessions based on the append flag
-      setSessions(prev => options?.append ? [...prev, ...data.items] : data.items)
-      setTotalSessions(data.total)
+      setSessions(prev => options?.append ? [...prev, ...validatedData.items] : validatedData.items)
+      setTotalSessions(validatedData.total)
+      
+      console.log('Successfully loaded sessions:', {
+        count: validatedData.items.length,
+        total: validatedData.total
+      });
     } catch (err) {
-      setError(handleApiError(err, "Failed to fetch research searches"))
+      console.error('Error in getSessions:', err)
+      
+      // Handle the case where err might be undefined or null
+      if (!err) {
+        setError({
+          message: "Failed to fetch research searches",
+          details: "An unknown error occurred",
+          code: "UNKNOWN_ERROR"
+        })
+      } else if (err instanceof Error && err.message.includes('307')) {
+        setError({
+          message: "Temporary Redirect",
+          details: "The server is redirecting your request. Please try again later.",
+          code: "TEMPORARY_REDIRECT"
+        })
+      } else {
+        setError(handleApiError(err, "Failed to fetch research searches"))
+      }
+      
+      // Only clear sessions if not appending and there was an error
+      if (!options?.append) {
+        setSessions([])
+        setTotalSessions(0)
+      }
     } finally {
       setLoadingStates(prev => ({ ...prev, fetchingSessions: false }))
       setIsLoading(false)
@@ -259,7 +405,7 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
     }
     
     // Check cache before making API call
-    const cachedSession = researchCache.getSession(sessionId);
+    const cachedSession = cache.getSession(sessionId);
     if (cachedSession) {
       setCurrentSession(cachedSession);
       return;
@@ -304,7 +450,7 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
       // Use the API service to create a session
       const newSession = await createNewSession(trimmedQuery, searchParams)
       updateSessionInList(newSession)
-      researchCache.clear()
+      cache.clear()
       return newSession.id
     } catch (err) {
       const errorData = handleApiError(err, "Failed to create research search")
@@ -368,14 +514,13 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
     
     try {
       // Use the API service to send a message
-      const updatedSession = await sendSessionMessage(sessionId, trimmedContent)
+      const updatedSession = await sendMessageApi(sessionId, trimmedContent)
       setCurrentSession(updatedSession)
       updateSessionInList(updatedSession)
-      researchCache.invalidateSearch(sessionId)
+      cache.invalidateSearch(sessionId)
     } catch (err) {
       // Revert to previous state on error
       setCurrentSession(currentSession)
-      updateSessionInList(currentSession)
       setError(handleApiError(err, "Failed to send message"))
     } finally {
       setLoadingStates(prev => ({ ...prev, sendingMessage: false }))
@@ -431,13 +576,13 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
     setError(null)
     
     try {
-      const updatedSession = await updateSessionMetadata(sessionId, updates)
+      const updatedSession = await updateSessionApi(sessionId, updates)
       // Update with actual server response
       if (currentSession?.id === updatedSession.id) {
         setCurrentSession(updatedSession)
       }
       updateSessionInList(updatedSession)
-      researchCache.invalidateSearch(sessionId)
+      cache.invalidateSearch(sessionId)
     } catch (err) {
       // Revert to previous state on error
       if (currentSession?.id === sessionId) {
@@ -467,38 +612,40 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
     // Store current state for potential rollback
     const previousSessions = [...sessions]
     const previousCurrentSession = currentSession
+    const previousTotal = totalSessions
     
     // Optimistic update - remove from state immediately
     setSessions(prev => prev.filter(s => s.id !== sessionId))
     if (currentSession?.id === sessionId) {
       setCurrentSession(null)
     }
+    setTotalSessions(totalSessions - 1)
     
     try {
-      await deleteSession(sessionId)
+      await deleteSessionApi(sessionId)
       // Already updated the UI optimistically, no need to do it again
-      researchCache.invalidateSearch(sessionId)
-      researchCache.clear()
+      cache.invalidateSearch(sessionId)
+      cache.clear()
     } catch (err) {
       // Rollback on error
       setSessions(previousSessions)
-      setCurrentSession(previousCurrentSession)
-      setError(handleApiError(err, "Failed to delete search"))
+      setTotalSessions(previousTotal)
+      if (currentSession?.id === sessionId) {
+        setCurrentSession(previousCurrentSession)
+      }
+      setError(handleApiError(err, 'Failed to delete session'))
     } finally {
       setLoadingStates(prev => ({ ...prev, deletingSession: false }))
-      setIsLoading(false)
     }
   }
 
   const connectToWebSocket = async (sessionId: string) => {
-    // Disconnect any existing connection first
-    if (wsConnection) {
-      wsConnection.disconnect();
-      setWsConnection(null);
-      setIsConnected(false);
-    }
+    if (!sessionId) return;
     
-    // Reset reconnection attempts when intentionally connecting
+    // Disconnect any existing connection
+    disconnectWebSocket();
+    
+    // Reset reconnection attempts counter
     setReconnectionAttempts(0);
     
     try {
@@ -544,7 +691,6 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
             message: 'Error in real-time connection',
             details: error.message || 'Unknown error'
           });
-          setIsConnected(false);
           
           // Track reconnection attempts for monitoring connection stability
           setReconnectionAttempts(prev => prev + 1);
@@ -557,22 +703,25 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
             });
           }
         },
-        () => {
-          // Handle connection close
-          console.log('WebSocket connection closed');
-          setIsConnected(false);
-          setWsConnection(null);
+        (connected) => {
+          // Handle connection state changes
+          console.log(`WebSocket connection state changed: ${connected ? 'connected' : 'disconnected'}`);
+          setIsConnected(connected);
+          
+          if (!connected) {
+            setWsConnection(null);
+          }
         }
       );
       
       setWsConnection(connection);
-      setIsConnected(true);
       setLastHeartbeat(Date.now()); // Initialize heartbeat timestamp
       
     } catch (error) {
       console.error('Failed to connect to WebSocket:', error);
       setError(handleApiError(error, 'Failed to establish real-time connection'));
       setReconnectionAttempts(prev => prev + 1);
+      setIsConnected(false);
     }
   };
 
@@ -596,8 +745,37 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
     };
   }, [currentSession?.id, wsConnection]);
 
+  // Set up auth event listener
+  useEffect(() => {
+    // Listen for auth events
+    const removeListener = authManager.addListener((event) => {
+      console.log('Auth event in research context:', event.type);
+      
+      // Clear cache on sign out or token refresh failure
+      if (event.type === 'SIGNED_OUT' || event.type === 'TOKEN_REFRESH_FAILED') {
+        console.log('Clearing research cache due to auth event:', event.type);
+        cache.clear();
+        setSessions([]);
+        setCurrentSession(null);
+        setTotalSessions(0);
+        
+        // Close WebSocket connection if open
+        if (wsConnection) {
+          wsConnection.disconnect();
+          setWsConnection(null);
+          setIsConnected(false);
+        }
+      }
+    });
+    
+    // Clean up listener on unmount
+    return () => {
+      removeListener();
+    };
+  }, [wsConnection]);
+
   const clearCache = () => {
-    researchCache.clear();
+    cache.clear();
   }
 
   return (

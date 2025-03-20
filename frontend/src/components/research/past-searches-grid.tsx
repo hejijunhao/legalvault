@@ -19,7 +19,7 @@ export function PastSearchesGrid() {
 
   useEffect(() => {
     // Initial fetch
-    getSessions({ limit: ITEMS_PER_PAGE, offset: 0 })
+    getSessions({ limit: ITEMS_PER_PAGE, offset: 0, skipAuthCheck: true })
   }, [getSessions])
 
   useEffect(() => {
@@ -37,7 +37,8 @@ export function PastSearchesGrid() {
           getSessions({ 
             limit: ITEMS_PER_PAGE, 
             offset: newOffset,
-            append: true // Signal to context to append rather than replace sessions
+            append: true, // Signal to context to append rather than replace sessions
+            skipAuthCheck: true
           })
         }
       },
