@@ -993,8 +993,8 @@ export async function fetchSessions(options?: {
   
   // Build query string
   const queryString = params.toString() ? `?${params.toString()}` : '';
-  // Ensure URL doesn't have a trailing slash
-  const baseUrl = '/api/research/searches';
+  // Ensure URL has a trailing slash
+  const baseUrl = '/api/research/searches/';
   const url = `${baseUrl}${queryString}`;
   console.log(`Making API request to: ${url} (baseUrl: ${baseUrl}, queryString: ${queryString})`);
   
@@ -1106,7 +1106,7 @@ export async function fetchSession(sessionId: string): Promise<ResearchSession> 
     }
 
     const headers = await getAuthHeader()
-    const response = await withRetry(() => fetchWithSelfSignedCert(`/api/research/searches/${sessionId}`, { headers }))
+    const response = await withRetry(() => fetchWithSelfSignedCert(`/api/research/searches/${sessionId}/`, { headers }))
     
     if (!response.ok) return handleApiError(response)
     
@@ -1155,7 +1155,7 @@ export async function fetchSession(sessionId: string): Promise<ResearchSession> 
  */
 export async function createNewSession(query: string, searchParams?: SearchParams): Promise<ResearchSession> {
   const headers = await getAuthHeader()
-  const response = await withRetry(() => fetchWithSelfSignedCert('/api/research/searches', {
+  const response = await withRetry(() => fetchWithSelfSignedCert('/api/research/searches/', {
     method: 'POST',
     headers,
     body: JSON.stringify({ 
@@ -1187,7 +1187,7 @@ export async function sendSessionMessage(sessionId: string, content: string): Pr
   
   // Use a more aggressive retry strategy for sendSessionMessage due to Perplexity API issues
   const response = await withRetry(
-    () => fetchWithSelfSignedCert(`/api/research/searches/${sessionId}/continue`, {
+    () => fetchWithSelfSignedCert(`/api/research/searches/${sessionId}/continue/`, {
       method: 'POST',
       headers,
       body: JSON.stringify({ follow_up_query: content })
@@ -1247,7 +1247,7 @@ export async function updateSessionMetadata(sessionId: string, updates: {
   status?: QueryStatus
 }): Promise<ResearchSession> {
   const headers = await getAuthHeader()
-  const response = await withRetry(() => fetchWithSelfSignedCert(`/api/research/searches/${sessionId}`, {
+  const response = await withRetry(() => fetchWithSelfSignedCert(`/api/research/searches/${sessionId}/`, {
     method: 'PATCH',
     headers,
     body: JSON.stringify(updates)
@@ -1271,7 +1271,7 @@ export async function updateSessionMetadata(sessionId: string, updates: {
  */
 export async function deleteSession(sessionId: string): Promise<void> {
   const headers = await getAuthHeader()
-  const response = await withRetry(() => fetchWithSelfSignedCert(`/api/research/searches/${sessionId}`, {
+  const response = await withRetry(() => fetchWithSelfSignedCert(`/api/research/searches/${sessionId}/`, {
     method: 'DELETE',
     headers
   }))
@@ -1346,7 +1346,7 @@ export async function fetchMessagesForSearch(
   
   const queryString = params.toString() ? `?${params.toString()}` : ''
   const response = await withRetry(() => 
-    fetchWithSelfSignedCert(`/api/research/searches/${searchId}/messages${queryString}`, { headers })
+    fetchWithSelfSignedCert(`/api/research/searches/${searchId}/messages/${queryString}`, { headers })
   )
   
   if (!response.ok) return handleApiError(response)
