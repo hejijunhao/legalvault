@@ -11,7 +11,7 @@ from core.database import get_db, init_db, async_session_factory
 import asyncio
 from sqlalchemy.sql import text
 
-from api.routes import router as api_router
+from api.routes import api_router
 from api.routes.auth.webhooks import router as webhook_router
 
 

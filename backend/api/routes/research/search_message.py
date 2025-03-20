@@ -7,9 +7,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSock
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_db
-from core.auth import get_current_user, get_user_permissions, decode_access_token
+from core.auth import get_current_user, get_user_permissions
 from models.domain.research.search_operations import ResearchOperations
 from models.domain.research.search_message_operations import SearchMessageOperations
+from models.domain.user_operations import UserOperations
 from models.schemas.research.search_message import (
     SearchMessageResponse,
     SearchMessageUpdate,
@@ -231,12 +232,14 @@ async def websocket_endpoint(
     """
     # Authenticate user from token
     try:
-        user_data = decode_access_token(token)
-        if not user_data:
+        user_ops = UserOperations(db)
+        token_data = await user_ops.decode_token(token)
+        if not token_data:
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
             return
-        user_id = user_data.get("sub")
-    except Exception:
+        user_id = token_data.user_id
+    except Exception as e:
+        print(f"WebSocket authentication error: {str(e)}")
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
     

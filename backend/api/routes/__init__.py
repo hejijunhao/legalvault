@@ -1,10 +1,12 @@
 # api/routes/__init__.py
 
 from fastapi import APIRouter
-from .research import router as research_router
+from .research.search import router as search_router
+from .research.search_message import router as search_message_router
 from .auth.auth import router as auth_router
 
-router = APIRouter()
+api_router = APIRouter()  # Renamed to api_router for consistency
 
-router.include_router(research_router)
-router.include_router(auth_router)
+api_router.include_router(search_router)
+api_router.include_router(search_message_router)
+api_router.include_router(auth_router)
