@@ -101,9 +101,9 @@ export default function ResearchPage() {
                 </Alert>
               )}
               <UserMessages 
-                messages={currentSession.messages} 
+                messages={currentSession.messages || []} 
                 isStreaming={currentSession.status === QueryStatus.PENDING}
-                streamingMessageId={currentSession.messages.find(m => m.status === QueryStatus.PENDING)?.id}
+                streamingMessageId={currentSession.messages?.find(m => m.status === QueryStatus.PENDING)?.id}
               />
             </>
           )}

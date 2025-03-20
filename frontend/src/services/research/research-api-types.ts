@@ -105,6 +105,7 @@ export interface WebSocketConnection {
 // Error types
 export interface ApiError extends Error {
   status?: number;
+  statusText?: string;
   code?: string;
   details?: string;
   originalError?: any;

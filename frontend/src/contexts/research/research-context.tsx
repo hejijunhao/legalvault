@@ -76,7 +76,7 @@ export interface ResearchSession {
   is_featured: boolean
   tags?: string[]
   search_params?: SearchParams
-  messages: Message[]
+  messages?: Message[]
   created_at: string
   updated_at: string
   status: QueryStatus
@@ -498,13 +498,13 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
       id: Math.random().toString(36).substr(2, 9), // Generate a random id for the optimistic update
       role: "user",
       content: { text: trimmedContent },
-      sequence: currentSession.messages.length
+      sequence: currentSession.messages?.length ?? 0
     }
     
     // Create optimistic session update
     const optimisticSession: ResearchSession = {
       ...currentSession,
-      messages: [...currentSession.messages, optimisticMessage],
+      messages: [...(currentSession.messages ?? []), optimisticMessage],
       updated_at: new Date().toISOString()
     }
     
@@ -667,14 +667,14 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
               if (!prev || prev.id !== sessionId) return prev;
               
               // Merge new messages with existing ones, avoiding duplicates
-              const existingMessageIds = new Set(prev.messages.map(m => m.id));
+              const existingMessageIds = new Set(prev.messages?.map(m => m.id) ?? [])
               const newMessages = message.data.filter((m: Message) => !existingMessageIds.has(m.id));
               
               if (newMessages.length === 0) return prev;
               
               return {
                 ...prev,
-                messages: [...prev.messages, ...newMessages].sort((a, b) => a.sequence - b.sequence)
+                messages: [...(prev.messages ?? []), ...newMessages].sort((a, b) => a.sequence - b.sequence)
               };
             });
           } else if (message.type === 'connection_established') {

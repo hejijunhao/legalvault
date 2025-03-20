@@ -83,15 +83,17 @@ export async function withRetry<T>(
 /**
  * Format an API error
  * @param error The error to format
+ * @param defaultMessage Optional default message to use if no specific message is available
  * @returns A formatted API error
  */
-export function formatApiError(error: any): ApiError {
+export function formatApiError(error: any, defaultMessage?: string): ApiError {
   const formattedError: ApiError = new Error(
-    error.message || 'An unexpected error occurred'
+    error.message || defaultMessage || 'An unexpected error occurred'
   ) as ApiError;
   
   // Copy properties from the original error
   if (error.status) formattedError.status = error.status;
+  if (error.statusText) formattedError.statusText = error.statusText;
   if (error.code) formattedError.code = error.code;
   if (error.details) formattedError.details = error.details;
   
