@@ -235,9 +235,11 @@ async def websocket_endpoint(
         user_ops = UserOperations(db)
         token_data = await user_ops.decode_token(token)
         if not token_data:
+            print("WebSocket authentication failed: Invalid token")
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
             return
         user_id = token_data.user_id
+        print(f"WebSocket authenticated for user {user_id}")
     except Exception as e:
         print(f"WebSocket authentication error: {str(e)}")
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)

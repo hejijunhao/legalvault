@@ -1,7 +1,8 @@
 # core/config.py
 
 from typing import Any, Dict, List, Optional
-from pydantic import BaseSettings, PostgresDsn, validator, AnyHttpUrl
+from pydantic import field_validator, model_validator, AnyHttpUrl, PostgresDsn
+from pydantic_settings import BaseSettings
 from functools import lru_cache
 
 
@@ -21,23 +22,20 @@ class Settings(BaseSettings):
     ENCRYPTION_KEY: str  # For encrypting sensitive data
     
     # Database Settings
-    POSTGRES_SERVER: str
-    POSTGRES_USER: str
-    POSTGRES_PASSWORD: str
-    POSTGRES_DB: str
+    DATABASE_URL: PostgresDsn
     SQLALCHEMY_DATABASE_URI: Optional[PostgresDsn] = None
 
-    @validator("SQLALCHEMY_DATABASE_URI", pre=True)
-    def assemble_db_connection(cls, v: Optional[str], values: Dict[str, Any]) -> Any:
+    @field_validator("SQLALCHEMY_DATABASE_URI", mode="before")
+    @classmethod
+    def assemble_db_connection(cls, v: Optional[str], info) -> Any:
         if isinstance(v, str):
             return v
-        return PostgresDsn.build(
-            scheme="postgresql+asyncpg",
-            user=values.get("POSTGRES_USER"),
-            password=values.get("POSTGRES_PASSWORD"),
-            host=values.get("POSTGRES_SERVER"),
-            path=f"/{values.get('POSTGRES_DB') or ''}",
-        )
+        
+        values = info.data
+        if values.get("DATABASE_URL"):
+            return values.get("DATABASE_URL")
+        
+        return None
     
     # Redis Settings
     REDIS_HOST: str = "localhost"
@@ -51,6 +49,11 @@ class Settings(BaseSettings):
     # Integration Settings
     OAUTH_STATE_TOKEN_EXPIRE_MINUTES: int = 10
     DEFAULT_INTEGRATION_TIMEOUT: float = 30.0  # seconds
+    
+    # Supabase Settings
+    SUPABASE_URL: Optional[str] = None
+    SUPABASE_ANON_KEY: Optional[str] = None
+    SUPABASE_JWT_SECRET: Optional[str] = None
     
     # Email Settings
     SMTP_TLS: bool = True
@@ -67,9 +70,12 @@ class Settings(BaseSettings):
     AWS_REGION: Optional[str] = None
     S3_BUCKET: Optional[str] = None
 
-    class Config:
-        case_sensitive = True
-        env_file = ".env"
+    # Config for Pydantic v2
+    model_config = {
+        "case_sensitive": True,
+        "env_file": ".env",
+        "extra": "allow"  # Allow extra fields from env file
+    }
 
 
 @lru_cache()

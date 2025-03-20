@@ -44,7 +44,7 @@ async def get_current_user(
     
     # First try to get user by ID
     query = text("""
-        SELECT id, auth_user_id, first_name, last_name, name, role, virtual_paralegal_id, enterprise_id, created_at, updated_at
+        SELECT id, auth_user_id, first_name, last_name, name, role, email, virtual_paralegal_id, enterprise_id, created_at, updated_at
         FROM vault.users WHERE id = :user_id
     """)
     
@@ -59,7 +59,7 @@ async def get_current_user(
     if user_data is None:
         print("User not found by ID, trying by auth_user_id")
         query = text("""
-            SELECT id, auth_user_id, first_name, last_name, name, role, virtual_paralegal_id, enterprise_id, created_at, updated_at
+            SELECT id, auth_user_id, first_name, last_name, name, role, email, virtual_paralegal_id, enterprise_id, created_at, updated_at
             FROM vault.users WHERE auth_user_id = :auth_user_id
         """)
         result = await session.execute(query, {"auth_user_id": token_data.user_id})
@@ -81,10 +81,11 @@ async def get_current_user(
         "last_name": user_data[3],
         "name": user_data[4],
         "role": user_data[5],
-        "virtual_paralegal_id": user_data[6],
-        "enterprise_id": user_data[7],
-        "created_at": user_data[8],
-        "updated_at": user_data[9]
+        "email": user_data[6],
+        "virtual_paralegal_id": user_data[7],
+        "enterprise_id": user_data[8],
+        "created_at": user_data[9],
+        "updated_at": user_data[10]
     }
 
 async def get_user_permissions(

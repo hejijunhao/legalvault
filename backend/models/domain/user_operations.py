@@ -15,9 +15,10 @@ import os
 from core.database import get_async_session
 import logging
 import re
+from core.config import settings
 
 # Get JWT settings from environment
-JWT_SECRET = os.getenv("JWT_SECRET_KEY", "your-secret-key")  # Use a secure key in production
+JWT_SECRET = settings.SUPABASE_JWT_SECRET or os.getenv("JWT_SECRET_KEY") or os.getenv("SUPABASE_JWT_SECRET", "your-secret-key")  # Use a secure key in production
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION = 30  # minutes
 
@@ -49,7 +50,13 @@ class UserOperations:
         else:
             expire = datetime.utcnow() + timedelta(minutes=JWT_EXPIRATION)
             
-        to_encode.update({"exp": expire})
+        # Ensure the token has the required claims for Supabase compatibility
+        to_encode.update({
+            "exp": expire,
+            "iat": datetime.utcnow(),
+            "iss": os.getenv("SUPABASE_URL", "https://aeeqdxfcjthzzkuirbrd.supabase.co/auth/v1")
+        })
+        
         encoded_jwt = jwt.encode(to_encode, JWT_SECRET, algorithm=JWT_ALGORITHM)
         return encoded_jwt
 
@@ -261,16 +268,16 @@ class UserOperations:
             if not user_data:
                 return None
             
-            # Create access token
-            access_token = await self._create_access_token(
-                data={"sub": str(user_data[0]), "email": user_data[6]}
-            )
+            # Get the access token directly from Supabase response
+            access_token = auth_response.session.access_token
+            refresh_token = auth_response.session.refresh_token
+            expires_in = auth_response.session.expires_in
             
             return TokenResponse(
                 access_token=access_token,
                 token_type="bearer",
                 user_id=user_data[0],
-                expires_in=JWT_EXPIRATION * 60  # convert minutes to seconds
+                expires_in=expires_in
             )
         except Exception as e:
             print(f"Error during authentication: {str(e)}")
@@ -411,7 +418,21 @@ class UserOperations:
     async def decode_token(self, token: str) -> Optional[TokenData]:
         """Decode and validate a JWT token"""
         try:
-            payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+            # Get JWT secret from settings or environment
+            supabase_jwt_secret = settings.SUPABASE_JWT_SECRET or os.getenv("SUPABASE_JWT_SECRET")
+            if not supabase_jwt_secret:
+                logger.error("SUPABASE_JWT_SECRET environment variable is not set")
+                return None
+                
+            # Decode token with options to disable audience validation
+            # This is necessary because Supabase tokens have an audience claim that may not match our expectations
+            payload = jwt.decode(
+                token, 
+                supabase_jwt_secret, 
+                algorithms=[JWT_ALGORITHM],
+                options={"verify_aud": False}  # Disable audience validation
+            )
+            
             user_id = payload.get("sub")
             if user_id is None:
                 logger.warning("Token missing 'sub' claim")
