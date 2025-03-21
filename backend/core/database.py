@@ -53,16 +53,20 @@ async_engine = create_async_engine(
     poolclass=NullPool,  # Required for pgBouncer
     connect_args={
         "ssl": ssl_context,
+        "statement_cache_size": 0,  # Disable statement cache for pgBouncer
+        "prepared_statement_cache_size": 0,  # Disable prepared statement cache
         "server_settings": {
             "application_name": "legalvault_backend",
             "statement_timeout": "60000",
             "standard_conforming_strings": "on",
             "client_min_messages": "warning",
             "client_encoding": "utf8"
-        },
-        "prepared_statement_cache_size": 0,
-        "statement_cache_size": 0
+        }
     }
+).execution_options(
+    isolation_level="AUTOCOMMIT",  # Required for pgBouncer
+    compiled_cache=None,
+    no_parameters=True
 )
 
 # Create session factory - execution_options will be set on the engine instead
@@ -70,13 +74,6 @@ async_session_factory = sessionmaker(
     bind=async_engine,
     class_=AsyncSession,
     expire_on_commit=False
-)
-
-# Set default execution options on the engine
-async_engine = async_engine.execution_options(
-    isolation_level="AUTOCOMMIT",
-    compiled_cache=None,
-    no_parameters=True
 )
 
 # Dependency for FastAPI
@@ -107,12 +104,11 @@ async def init_db() -> bool:
     try:
         print("Attempting to initialize database...")
         async with async_engine.connect() as conn:
-            # First get the real connection
-            real_conn = await conn.get_raw_connection()
-            
-            # Now we can execute queries
+            # Execute a simple query with no_parameters=True
             test_query = text("SELECT 1").execution_options(no_parameters=True)
             await conn.execute(test_query)
+            
+            # Create tables with explicit execution options
             await conn.run_sync(SQLModel.metadata.create_all)
             
         print("Database initialized successfully!")
@@ -124,8 +120,11 @@ async def init_db() -> bool:
         
         if "DuplicatePreparedStatementError" in str(e) or "prepared statement" in str(e):
             print("Detected pgBouncer prepared statement issue - this is expected during reloads")
+            return True  # Continue despite pgBouncer errors
+        
+        # For other errors, we still want to continue in development
+        if settings.ENV == "development":
+            print("Continuing despite database error in development mode")
             return True
             
-        import traceback
-        print(traceback.format_exc())
         return False

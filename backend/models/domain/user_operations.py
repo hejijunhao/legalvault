@@ -256,45 +256,34 @@ class UserOperations:
             # Get the user ID from the response
             auth_user_id = auth_response.user.id
             
-            # Use direct SQL to get the user to avoid relationship loading issues
+            # Create query with minimal execution options for pgBouncer compatibility
             query = text("""
                 SELECT id, auth_user_id, first_name, last_name, name, role, email, virtual_paralegal_id, enterprise_id, created_at, updated_at
                 FROM vault.users WHERE auth_user_id = :auth_user_id
             """).execution_options(
-                no_parameters=True  # Disable parameter binding
+                no_parameters=True  # This option is supported on statements
             )
             
             try:
-                # Apply execution options to the session
-                session_with_options = self.db.execution_options(
-                    compiled_cache=None  # Disable compiled query caching
-                )
-                result = await session_with_options.execute(query, {"auth_user_id": auth_user_id})
+                # Execute query directly on the session
+                result = await self.db.execute(query, {"auth_user_id": auth_user_id})
                 user_data = result.fetchone()
+                
             except Exception as e:
+                print(f"Error during authentication: {str(e)}")
+                print(f"Traceback:", traceback.format_exc())
+                
                 # Handle pgBouncer errors
                 if "DuplicatePreparedStatementError" in str(e) or "prepared statement" in str(e):
-                    logger.warning(f"pgBouncer prepared statement issue during authentication: {str(e)[:100]}...")
-                    # Try again with a different query approach - use a unique query name
-                    import uuid
-                    unique_query_id = uuid.uuid4().hex
-                    query = text(f"""
-                        /* Query ID: {unique_query_id} */
-                        SELECT id, auth_user_id, first_name, last_name, name, role, email, virtual_paralegal_id, enterprise_id, created_at, updated_at
-                        FROM vault.users WHERE auth_user_id = :auth_user_id
-                    """).execution_options(no_parameters=True)
-                    
-                    # Apply execution options to the session
-                    session_with_options = self.db.execution_options(
-                        compiled_cache=None  # Disable compiled query caching
-                    )
-                    result = await session_with_options.execute(query, {"auth_user_id": auth_user_id})
+                    print("Detected pgBouncer prepared statement issue - retrying with no_parameters")
+                    # Retry with no_parameters
+                    result = await self.db.execute(query)
                     user_data = result.fetchone()
                 else:
-                    logger.error(f"Error during authentication: {str(e)}")
-                    import traceback
-                    logger.error(traceback.format_exc())
-                    raise
+                    raise HTTPException(
+                        status_code=503,
+                        detail="Database connection failed. Please try again later."
+                    )
             
             if not user_data:
                 return None
