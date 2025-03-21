@@ -52,33 +52,38 @@ async_engine = create_async_engine(
     echo=False,
     poolclass=NullPool,  # Required for pgBouncer
     connect_args={
-        "ssl": ssl_context,  # asyncpg uses ssl context object
+        "ssl": ssl_context,
         "server_settings": {
             "application_name": "legalvault_backend",
-            "statement_timeout": "60000",  # Must be string for asyncpg
+            "statement_timeout": "60000",
             "standard_conforming_strings": "on",
             "client_min_messages": "warning",
             "client_encoding": "utf8"
         },
         "prepared_statement_cache_size": 0,
         "statement_cache_size": 0
-    },
-    execution_options={
-        "isolation_level": "AUTOCOMMIT",  # Required for pgBouncer
-        "compiled_cache": None,
-        "no_parameters": True  # Disable parameter binding for pgBouncer compatibility
     }
 )
 
-# Create session factory
+# Create session factory - execution_options will be set on the engine instead
 async_session_factory = sessionmaker(
-    async_engine, class_=AsyncSession, expire_on_commit=False
+    bind=async_engine,
+    class_=AsyncSession,
+    expire_on_commit=False
+)
+
+# Set default execution options on the engine
+async_engine = async_engine.execution_options(
+    isolation_level="AUTOCOMMIT",
+    compiled_cache=None,
+    no_parameters=True
 )
 
 # Dependency for FastAPI
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     session = async_session_factory()
     try:
+        # Simple connection test with no prepared statements
         test_query = text("SELECT 1").execution_options(no_parameters=True)
         await session.execute(test_query)
         yield session
@@ -86,7 +91,7 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
         await session.rollback()
         if "DuplicatePreparedStatementError" in str(e) or "prepared statement" in str(e):
             print(f"pgBouncer prepared statement warning (non-fatal): {str(e)[:100]}...")
-            yield session
+            yield session  # Still yield session for pgBouncer errors
         else:
             print(f"Database connection error: {str(e)}")
             print(f"Error type: {type(e).__name__}")
@@ -102,10 +107,11 @@ async def init_db() -> bool:
     try:
         print("Attempting to initialize database...")
         async with async_engine.connect() as conn:
-            # Need to await execution_options
-            conn = await conn.execution_options(compiled_cache=None)
-            # Use current_timestamp instead of SELECT 1 to avoid version checks
-            test_query = text("SELECT current_timestamp").execution_options(no_parameters=True)
+            # First get the real connection
+            real_conn = await conn.get_raw_connection()
+            
+            # Now we can execute queries
+            test_query = text("SELECT 1").execution_options(no_parameters=True)
             await conn.execute(test_query)
             await conn.run_sync(SQLModel.metadata.create_all)
             
@@ -116,7 +122,6 @@ async def init_db() -> bool:
         print(f"Error initializing database: {str(e)}")
         print(f"Error type: {type(e).__name__}")
         
-        # Handle pgBouncer-specific errors gracefully
         if "DuplicatePreparedStatementError" in str(e) or "prepared statement" in str(e):
             print("Detected pgBouncer prepared statement issue - this is expected during reloads")
             return True

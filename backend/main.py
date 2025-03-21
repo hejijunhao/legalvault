@@ -1,9 +1,12 @@
 # backend/main.py
 
+from dotenv import load_dotenv
+# Load environment variables from .env before any imports that need them
+load_dotenv()
+
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from dotenv import load_dotenv
 import os
 from logging import getLogger
 from typing import List
@@ -63,9 +66,6 @@ app.include_router(webhook_router, prefix="/api/auth", tags=["auth"])
 async def health_check():
     return {"status": "healthy"}
 
-# Load environment variables from .env
-load_dotenv()
-
 # Startup event to initialize database
 @app.on_event("startup")
 async def startup_event():
@@ -78,37 +78,27 @@ async def startup_event():
         # Test database connection
         print("Testing database connection...")
         try:
-            # Create a session directly for testing instead of using the dependency
             async with async_session_factory() as session:
                 print("Successfully got database session")
-                # Use execute with a text object that explicitly disables prepared statements
-                # by setting a unique name for each execution
-                import uuid
-                unique_stmt_name = f"stmt_{uuid.uuid4().hex}"
-                stmt = text("SELECT NOW();").execution_options(
-                    no_parameters=True,  # Helps with pgBouncer compatibility
-                )
-                result = await session.execute(stmt)
-                current_time = result.scalar()
-                print(f"Database connection successful! Current time: {current_time}")
+                test_query = text("SELECT 1").execution_options(no_parameters=True)
+                await session.execute(test_query)
+                print("Database connection test successful!")
         except Exception as db_error:
             print(f"Database connection error: {db_error}")
             print(f"Error type: {type(db_error).__name__}")
-            # Check if this is a pgBouncer prepared statement issue
             if "DuplicatePreparedStatementError" in str(db_error) or "prepared statement" in str(db_error):
                 print("Detected pgBouncer prepared statement issue in startup check - this is expected")
                 print("Application will continue starting up despite this error")
             else:
                 import traceback
                 print(traceback.format_exc())
-        
+                raise
     except Exception as e:
         print(f"Error during startup: {e}")
         print(f"Error type: {type(e).__name__}")
         import traceback
         print(traceback.format_exc())
-        # Don't raise here - allow the application to start even if DB init fails
-        # This helps with debugging
+        raise
 
 # Error handling
 @app.exception_handler(HTTPException)
