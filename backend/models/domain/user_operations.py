@@ -12,7 +12,7 @@ from models.database.user import User
 from models.schemas.auth.user import UserCreate, UserLogin, UserProfile
 from models.schemas.auth.token import TokenResponse, TokenData
 import os
-from core.database import get_async_session
+from core.database import get_db
 import logging
 import re
 from core.config import settings
@@ -30,8 +30,8 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 class UserOperations:
-    def __init__(self, session: AsyncSession):
-        self.session = session
+    def __init__(self, db):
+        self.db = db
 
     async def _verify_password(self, plain_password: str, encrypted_password: str) -> bool:
         """Verify a password against a hash."""
@@ -109,7 +109,7 @@ class UserOperations:
             import uuid
             user_id = uuid.uuid4()
             
-            result = await self.session.execute(
+            result = await self.db.execute(
                 query,
                 {
                     "id": user_id,
@@ -121,14 +121,14 @@ class UserOperations:
                     "email": data.email
                 }
             )
-            await self.session.commit()
+            await self.db.commit()
             
             # Now fetch the user directly to avoid relationship loading
             query = text("""
                 SELECT id, auth_user_id, first_name, last_name, name, role, email, virtual_paralegal_id, enterprise_id, created_at, updated_at
                 FROM vault.users WHERE id = :id
             """)
-            result = await self.session.execute(query, {"id": user_id})
+            result = await self.db.execute(query, {"id": user_id})
             user_data = result.fetchone()
 
             # Create a UserProfile object instead of a User instance to avoid circular imports
@@ -152,7 +152,7 @@ class UserOperations:
             # Print more detailed error information
             import traceback
             traceback.print_exc()
-            await self.session.rollback()
+            await self.db.rollback()
             return None
 
     async def update_user_email(self, user_id: UUID, email: str) -> Optional[UserProfile]:
@@ -188,7 +188,7 @@ class UserOperations:
             query = text("""
                 SELECT id FROM vault.users WHERE email = :email AND id != :user_id
             """)
-            result = await self.session.execute(query, {"email": email, "user_id": user_id})
+            result = await self.db.execute(query, {"email": email, "user_id": user_id})
             if result.fetchone():
                 logger.error(f"Email {email} already in use in vault.users")
                 return None
@@ -212,10 +212,10 @@ class UserOperations:
                 RETURNING id
             """)
             
-            result = await self.session.execute(query, {"email": email, "user_id": user_id})
+            result = await self.db.execute(query, {"email": email, "user_id": user_id})
             if not result.fetchone():
                 logger.error(f"Failed to update email in vault.users for user {user_id}")
-                await self.session.rollback()
+                await self.db.rollback()
                 return None
             
             # Then update Supabase Auth
@@ -224,18 +224,18 @@ class UserOperations:
                 logger.info(f"Successfully updated email in Supabase Auth for user {auth_user_id}")
             except Exception as auth_error:
                 logger.error(f"Error updating email in Supabase Auth: {str(auth_error)}")
-                await self.session.rollback()
+                await self.db.rollback()
                 return None
             
             # Commit the transaction
-            await self.session.commit()
+            await self.db.commit()
             logger.info(f"Successfully updated email for user {user_id} to {email}")
             
             # Return updated user profile
             return await self.get_user_profile(user_id)
         except Exception as e:
             logger.error(f"Error updating user email: {str(e)}")
-            await self.session.rollback()
+            await self.db.rollback()
             return None
 
     async def authenticate(self, data: UserLogin) -> Optional[TokenResponse]:
@@ -260,10 +260,41 @@ class UserOperations:
             query = text("""
                 SELECT id, auth_user_id, first_name, last_name, name, role, email, virtual_paralegal_id, enterprise_id, created_at, updated_at
                 FROM vault.users WHERE auth_user_id = :auth_user_id
-            """)
+            """).execution_options(
+                no_parameters=True  # Disable parameter binding
+            )
             
-            result = await self.session.execute(query, {"auth_user_id": auth_user_id})
-            user_data = result.fetchone()
+            try:
+                # Apply execution options to the session
+                session_with_options = self.db.execution_options(
+                    compiled_cache=None  # Disable compiled query caching
+                )
+                result = await session_with_options.execute(query, {"auth_user_id": auth_user_id})
+                user_data = result.fetchone()
+            except Exception as e:
+                # Handle pgBouncer errors
+                if "DuplicatePreparedStatementError" in str(e) or "prepared statement" in str(e):
+                    logger.warning(f"pgBouncer prepared statement issue during authentication: {str(e)[:100]}...")
+                    # Try again with a different query approach - use a unique query name
+                    import uuid
+                    unique_query_id = uuid.uuid4().hex
+                    query = text(f"""
+                        /* Query ID: {unique_query_id} */
+                        SELECT id, auth_user_id, first_name, last_name, name, role, email, virtual_paralegal_id, enterprise_id, created_at, updated_at
+                        FROM vault.users WHERE auth_user_id = :auth_user_id
+                    """).execution_options(no_parameters=True)
+                    
+                    # Apply execution options to the session
+                    session_with_options = self.db.execution_options(
+                        compiled_cache=None  # Disable compiled query caching
+                    )
+                    result = await session_with_options.execute(query, {"auth_user_id": auth_user_id})
+                    user_data = result.fetchone()
+                else:
+                    logger.error(f"Error during authentication: {str(e)}")
+                    import traceback
+                    logger.error(traceback.format_exc())
+                    raise
             
             if not user_data:
                 return None
@@ -292,7 +323,7 @@ class UserOperations:
             SELECT id, auth_user_id, first_name, last_name, name, role, email, virtual_paralegal_id, enterprise_id, created_at, updated_at
             FROM vault.users WHERE id = :user_id
         """)
-        result = await self.session.execute(query, {"user_id": user_id})
+        result = await self.db.execute(query, {"user_id": user_id})
         user_data = result.fetchone()
 
         if not user_data:
@@ -329,7 +360,7 @@ class UserOperations:
                 SELECT id, auth_user_id, first_name, last_name, name, role, email, virtual_paralegal_id, enterprise_id, created_at, updated_at
                 FROM vault.users WHERE auth_user_id = :auth_user_id
             """)
-            result = await self.session.execute(query, {"auth_user_id": auth_user_id})
+            result = await self.db.execute(query, {"auth_user_id": auth_user_id})
             user_data = result.fetchone()
             
             if not user_data:
@@ -370,7 +401,7 @@ class UserOperations:
         
         try:
             logger.debug(f"Retrieving user profile for user_id: {user_id}")
-            result = await self.session.execute(query, {"user_id": user_id})
+            result = await self.db.execute(query, {"user_id": user_id})
             user_data = result.fetchone()
             
             if not user_data:
@@ -433,16 +464,43 @@ class UserOperations:
                 token, 
                 supabase_jwt_secret, 
                 algorithms=[JWT_ALGORITHM],
-                options={"verify_aud": False}  # Disable audience validation
+                options={
+                    "verify_aud": False,  # Disable audience validation
+                    "verify_signature": True,  # Still verify the signature
+                    "verify_exp": True,  # Verify expiration
+                    "verify_iat": False,  # Don't verify issued at time
+                    "verify_nbf": False,  # Don't verify not before time
+                    "verify_iss": False,  # Don't verify issuer
+                    "verify_sub": False,  # Don't verify subject
+                    "verify_jti": False,  # Don't verify JWT ID
+                    "verify_at_hash": False,  # Don't verify access token hash
+                }
             )
             
             # Log the payload for debugging (excluding sensitive parts)
             safe_payload = {k: v for k, v in payload.items() if k not in ["sub"]}
             logger.info(f"Token payload: {safe_payload}")
             
-            user_id = payload.get("sub")
+            # Check for user ID in different possible locations
+            user_id = None
+            
+            # First check 'sub' claim (standard JWT subject)
+            if "sub" in payload:
+                user_id = payload.get("sub")
+                logger.info(f"Found user_id in 'sub' claim: {user_id}")
+            
+            # If not found, check Supabase-specific locations
+            elif "user_id" in payload:
+                user_id = payload.get("user_id")
+                logger.info(f"Found user_id in 'user_id' claim: {user_id}")
+            
+            # If still not found, check for custom claims
+            elif "user" in payload and isinstance(payload["user"], dict) and "id" in payload["user"]:
+                user_id = payload["user"]["id"]
+                logger.info(f"Found user_id in 'user.id' claim: {user_id}")
+            
             if user_id is None:
-                logger.warning("Token missing 'sub' claim")
+                logger.warning("Token missing user identifier claims")
                 return None
             
             # Extract email from payload if available
@@ -450,17 +508,22 @@ class UserOperations:
             if "email" in payload:
                 email = payload.get("email")
                 logger.info(f"Email from token: {email}")
+            elif "user" in payload and isinstance(payload["user"], dict) and "email" in payload["user"]:
+                email = payload["user"]["email"]
+                logger.info(f"Email from token user object: {email}")
             
             # Return TokenData with both user_id and email
             return TokenData(user_id=UUID(user_id), email=email)
         except jwt.ExpiredSignatureError:
             logger.error("Token has expired")
             return None
-        except jwt.InvalidTokenError:
-            logger.error("Invalid token")
+        except jwt.InvalidTokenError as e:
+            logger.error(f"Invalid token: {str(e)}")
             return None
         except Exception as e:
-            logger.error(f"Token validation error: {str(e)}")
+            logger.error(f"Unexpected error decoding token: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
             return None
 
     async def delete_user(self, user_id: UUID) -> bool:
@@ -480,8 +543,8 @@ class UserOperations:
             query = text("""
                 DELETE FROM vault.users WHERE id = :user_id
             """)
-            await self.session.execute(query, {"user_id": user_id})
-            await self.session.commit()
+            await self.db.execute(query, {"user_id": user_id})
+            await self.db.commit()
             
             # Then delete from Supabase Auth
             from core.supabase_client import get_supabase_client
@@ -491,5 +554,5 @@ class UserOperations:
             return True
         except Exception as e:
             print(f"Error deleting user: {str(e)}")
-            await self.session.rollback()
+            await self.db.rollback()
             return False

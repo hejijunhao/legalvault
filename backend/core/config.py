@@ -11,7 +11,7 @@ logger = getLogger(__name__)
 
 class Settings(BaseSettings):
     # Environment
-    ENV: str = "development"  # Options: development, staging, production
+    ENV: str = "production"  # Options: development, staging, production
     
     # API Settings
     PROJECT_NAME: str = "LegalVault"
@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     SECRET_KEY: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 8  # 8 days
     ENCRYPTION_KEY: str  # For encrypting sensitive data
+    SUPABASE_JWT_SECRET: Optional[str] = None  # JWT secret for Supabase integration
     
     # Database Settings
     DATABASE_URL: PostgresDsn

@@ -51,24 +51,44 @@ async def get_current_user(
     print(f"Executing query with user_id: {token_data.user_id}")
     
     try:
+        # Use execute with a text object that explicitly disables prepared statements
+        # by setting unique execution options
+        import uuid
+        unique_stmt_name = f"stmt_{uuid.uuid4().hex}"
+        query = query.execution_options(
+            no_parameters=True,  # Helps with pgBouncer compatibility
+        )
+        
         result = await session.execute(query, {"user_id": token_data.user_id})
         user_row = result.fetchone()
         
         if not user_row:
-            print(f"No user found with ID {token_data.user_id}, trying with email: {token_data.email}")
+            print(f"No user found with ID {token_data.user_id}, trying with auth_user_id: {token_data.user_id}")
             
-            # If no user found by ID, try by email
+            # If no user found by ID, try by auth_user_id
             query = text("""
                 SELECT id, auth_user_id, first_name, last_name, name, role, email, virtual_paralegal_id, enterprise_id, created_at, updated_at
-                FROM vault.users WHERE email = :email
-            """)
+                FROM vault.users WHERE auth_user_id = :auth_user_id
+            """).execution_options(no_parameters=True)
             
-            result = await session.execute(query, {"email": token_data.email})
+            result = await session.execute(query, {"auth_user_id": token_data.user_id})
             user_row = result.fetchone()
             
-            if not user_row:
-                print(f"No user found with email {token_data.email} either, raising credentials exception")
-                raise credentials_exception
+            if not user_row and token_data.email:
+                print(f"No user found with auth_user_id {token_data.user_id}, trying with email: {token_data.email}")
+                
+                # If still no user found, try by email
+                query = text("""
+                    SELECT id, auth_user_id, first_name, last_name, name, role, email, virtual_paralegal_id, enterprise_id, created_at, updated_at
+                    FROM vault.users WHERE email = :email
+                """).execution_options(no_parameters=True)
+                
+                result = await session.execute(query, {"email": token_data.email})
+                user_row = result.fetchone()
+                
+                if not user_row:
+                    print(f"No user found with email {token_data.email} either, raising credentials exception")
+                    raise credentials_exception
         
         # Convert row to dict
         user_dict = {}
@@ -80,6 +100,8 @@ async def get_current_user(
         
     except Exception as e:
         print(f"Error querying user: {str(e)}")
+        import traceback
+        print(traceback.format_exc())
         raise credentials_exception
 
 async def get_user_permissions(

@@ -17,19 +17,31 @@ from core.config import settings
 
 
 logger = getLogger(__name__)
-app = FastAPI()
+app = FastAPI(
+    title=settings.PROJECT_NAME,
+    version=settings.VERSION
+)
 
-# Hardcode CORS origins for now to get things working
-origins = [
-    "http://localhost:3000",      # Local development HTTP
-    "https://localhost:3000",     # Local development HTTPS
-]
+# Configure CORS
+origins = settings.BACKEND_CORS_ORIGINS
+if not origins:
+    origins = [
+        "http://localhost:3000",      # Local development HTTP
+        "https://localhost:3000",     # Local development HTTPS
+        "http://127.0.0.1:3000",     # Alternative local development HTTP
+        "https://127.0.0.1:3000",    # Alternative local development HTTPS
+        "http://localhost:8000",     # Backend local development
+        "https://localhost:8000",    # Backend local development HTTPS
+    ]
 
 # In production, add production domains
 if settings.ENV == "production":
     # Add your production domains when ready
     # origins.append("https://legalvault.ai")
     # origins.append("https://platform.legalvault.ai")
+    # origins.append("https://app.legalvault.ai")
+    # Add Vercel preview domains
+    origins.append("https://*.vercel.app")
     logger.info("Running in production mode")
 
 logger.info(f"Configured CORS origins: {origins}")
@@ -40,6 +52,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["Content-Disposition"],  # Allow frontend to access Content-Disposition header for file downloads
 )
 
 app.include_router(api_router, prefix="/api")

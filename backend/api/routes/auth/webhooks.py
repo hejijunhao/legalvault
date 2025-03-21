@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Request, HTTPException, Header
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Dict, Any, Optional
 
-from core.database import get_session
+from core.database import get_db
 from services.executors.auth.auth_webhooks import process_auth_webhook
 
 logger = logging.getLogger(__name__)
@@ -22,7 +22,7 @@ router = APIRouter()
 async def auth_webhook(
     request: Request,
     x_webhook_secret: Optional[str] = Header(None, alias="X-Webhook-Secret"),
-    session: AsyncSession = Depends(get_session)
+    session: AsyncSession = Depends(get_db)
 ):
     """
     Webhook endpoint for Supabase Auth notifications.
