@@ -33,7 +33,7 @@ const nextConfig: NextConfig = {
   },
   publicRuntimeConfig: {
     // Will be available on both server and client
-    apiUrl: process.env.NODE_ENV === 'development' ? 'https://localhost:8000/api' : process.env.NEXT_PUBLIC_API_URL
+    apiUrl: process.env.NODE_ENV === 'development' ? 'http://localhost:8000/api' : process.env.NEXT_PUBLIC_API_URL
   },
 };
 
