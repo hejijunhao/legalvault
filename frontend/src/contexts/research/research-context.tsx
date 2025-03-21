@@ -162,6 +162,10 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
   const [reconnectionAttempts, setReconnectionAttempts] = useState(0)
   const [lastHeartbeat, setLastHeartbeat] = useState<number | null>(null)
 
+  // Add auth state tracking
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authChecked, setAuthChecked] = useState(false);
+
   // Use useCallback to memoize the clearError function to prevent infinite loops
   const clearError = useCallback(() => setError(null), [setError])
 
@@ -290,7 +294,33 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
     })
   }
 
-  const getSessions = async (options?: {
+  // Check authentication status on mount
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        setIsAuthenticated(!!session);
+      } catch (error) {
+        console.error('Error checking auth status:', error);
+        setIsAuthenticated(false);
+      } finally {
+        setAuthChecked(true);
+      }
+    };
+
+    checkAuth();
+
+    // Subscribe to auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setIsAuthenticated(!!session);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  const getSessions = useCallback(async (options?: {
     featuredOnly?: boolean
     status?: QueryStatus
     limit?: number
@@ -298,6 +328,16 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
     append?: boolean
     skipAuthCheck?: boolean
   }) => {
+    if (!options?.skipAuthCheck && !isAuthenticated) {
+      console.error('Authentication required for getSessions');
+      setError({
+        message: 'Authentication required',
+        details: 'Please log in to view research sessions',
+        code: 'AUTH_REQUIRED'
+      });
+      return;
+    }
+
     setLoadingStates(prev => ({ ...prev, fetchingSessions: true }))
     setIsLoading(true)
     setError(null)
@@ -394,7 +434,14 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
       setLoadingStates(prev => ({ ...prev, fetchingSessions: false }))
       setIsLoading(false)
     }
-  }
+  }, [isAuthenticated]);
+
+  // Don't try to fetch sessions until auth state is checked
+  useEffect(() => {
+    if (authChecked && isAuthenticated) {
+      getSessions();
+    }
+  }, [authChecked, isAuthenticated, getSessions]);
 
   const getSession = async (sessionId: string) => {
     if (!sessionId) return

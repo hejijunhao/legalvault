@@ -15,17 +15,45 @@ export function getApiBaseUrl(): string {
  * Get authentication headers for API requests
  */
 export async function getAuthHeader(): Promise<Record<string, string>> {
-  const { data, error } = await supabase.auth.getSession();
-  
-  if (error || !data.session) {
-    console.error('Error getting auth session:', error);
+  try {
+    // First try to get the current session
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    
+    if (sessionError) {
+      console.error('Error getting auth session:', sessionError);
+      throw new Error('Authentication failed');
+    }
+    
+    if (!session) {
+      // If no session, try to get the token from localStorage as fallback
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        throw new Error('Authentication required');
+      }
+      
+      // Try to refresh the session using the token
+      const { data: { session: refreshedSession }, error: refreshError } = 
+        await supabase.auth.refreshSession();
+        
+      if (refreshError || !refreshedSession) {
+        console.error('Failed to refresh session:', refreshError);
+        throw new Error('Authentication required');
+      }
+      
+      return {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${refreshedSession.access_token}`
+      };
+    }
+    
+    return {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${session.access_token}`
+    };
+  } catch (error) {
+    console.error('Authentication error:', error);
     throw new Error('Authentication required');
   }
-  
-  return {
-    'Content-Type': 'application/json',
-    'Authorization': `Bearer ${data.session.access_token}`
-  };
 }
 
 /**

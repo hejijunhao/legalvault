@@ -3,6 +3,7 @@
 
 import { createContext, useContext, useEffect, useState, ReactNode } from "react"
 import { useRouter } from "next/navigation"
+import { supabase } from '../lib/supabase'
 
 // Define the User type based on your UserProfile from the backend
 type User = {
@@ -51,18 +52,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        // Check if token exists in localStorage
-        const token = localStorage.getItem("auth_token")
-        if (!token) {
+        // Get Supabase session
+        const { data: { session }, error } = await supabase.auth.getSession()
+        if (error) throw error
+
+        if (!session) {
           setIsLoading(false)
           return
         }
 
+        // Store Supabase token
+        localStorage.setItem("auth_token", session.access_token)
+        
         // Fetch user profile
         await refreshUser()
       } catch (error) {
         console.error("Authentication error:", error)
-        // Clear invalid token
         localStorage.removeItem("auth_token")
       } finally {
         setIsLoading(false)
@@ -70,6 +75,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     checkAuth()
+
+    // Subscribe to auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session) {
+        localStorage.setItem("auth_token", session.access_token)
+        await refreshUser()
+      } else if (event === 'SIGNED_OUT') {
+        localStorage.removeItem("auth_token")
+        setUser(null)
+      }
+    })
+
+    return () => {
+      subscription.unsubscribe()
+    }
   }, [])
 
   // Login function
@@ -77,28 +97,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       setIsLoading(true)
       
-      // Log the API URL for debugging
-      const apiUrl = `${process.env.NEXT_PUBLIC_API_URL}/api/auth/login`
-      console.log('Attempting to connect to:', apiUrl)
-      
-      // Call the login API
-      const response = await fetch(apiUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ email, password }),
+      // Sign in with Supabase
+      const { data: { session }, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
       })
 
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.detail || "Login failed")
+      if (error) throw error
+
+      if (!session) {
+        throw new Error("No session after login")
       }
 
-      const data = await response.json()
-      
       // Store token in localStorage
-      localStorage.setItem("auth_token", data.access_token)
+      localStorage.setItem("auth_token", session.access_token)
       
       // Fetch user profile
       await refreshUser()
@@ -113,10 +125,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   // Logout function
-  const logout = () => {
-    localStorage.removeItem("auth_token")
-    setUser(null)
-    router.push("/login")
+  const logout = async () => {
+    try {
+      await supabase.auth.signOut()
+      localStorage.removeItem("auth_token")
+      setUser(null)
+      router.push("/login")
+    } catch (error) {
+      console.error("Logout error:", error)
+    }
   }
 
   // Refresh user profile
