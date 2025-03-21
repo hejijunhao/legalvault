@@ -1,7 +1,7 @@
 # backend/core/database.py
 
 # Core database configuration for LegalVault that handles database connection setup.
-# Configures both async (asyncpg) and sync (psycopg2) database engines with pgBouncer compatibility,
+# Configures async (asyncpg) database engine with pgBouncer compatibility,
 # manages SSL and connection pooling settings, and provides database initialization functions.
 
 
@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import AsyncGenerator
 
 from fastapi import HTTPException
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 from sqlalchemy.engine.url import make_url
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
@@ -23,16 +23,17 @@ from .config import settings
 # Get the path to the CA certificate
 CERT_PATH = Path(__file__).parent.parent / "certs" / "supabase-prod.crt"
 
-# Parse database URL
+# Parse database URL and remove SSL-related query parameters (handled in connect_args)
 url_obj = settings.DATABASE_URL
 parsed_url = make_url(str(url_obj))
+query_params = dict(parsed_url.query)
 
 print("\n===== DATABASE CONNECTION INFO =====\n")
 print(f"Database driver: {parsed_url.drivername}")
 print(f"Database host: {parsed_url.host}")
 print(f"Database port: {parsed_url.port}")
 print(f"Database name: {parsed_url.database}")
-print(f"Query parameters in URL: {dict(parsed_url.query)}")
+print(f"Original query parameters: {query_params}")
 
 # Create SSL context with Supabase CA certificate
 ssl_context = ssl.create_default_context(cafile=str(CERT_PATH))
@@ -40,9 +41,10 @@ ssl_context.verify_mode = ssl.CERT_REQUIRED  # Enforce certificate verification
 ssl_context.check_hostname = True  # Enable hostname verification
 
 # Configure async engine with proper SSL and pgBouncer settings
+# Remove SSL-related parameters from URL as they're handled in connect_args
 async_url_obj = parsed_url.set(
     drivername="postgresql+asyncpg",
-    query={}  # Remove query parameters, we'll handle these in connect_args
+    query={k: v for k, v in query_params.items() if k not in ('sslmode', 'gssencmode')}
 )
 
 async_engine = create_async_engine(
@@ -50,7 +52,7 @@ async_engine = create_async_engine(
     echo=False,
     poolclass=NullPool,  # Required for pgBouncer
     connect_args={
-        "ssl": ssl_context,
+        "ssl": ssl_context,  # asyncpg uses ssl context object
         "server_settings": {
             "application_name": "legalvault_backend",
             "statement_timeout": "60000",  # Must be string for asyncpg
@@ -68,23 +70,7 @@ async_engine = create_async_engine(
     }
 )
 
-# Configure sync engine with same SSL settings
-sync_url_obj = parsed_url.set(drivername="postgresql+psycopg2")
-print(f"Sync URL (credentials hidden): {sync_url_obj.render_as_string(hide_password=True)}")
-
-sync_engine = create_engine(
-    sync_url_obj,
-    echo=False,
-    poolclass=NullPool,
-    connect_args={
-        "sslmode": "require",
-        "sslrootcert": str(CERT_PATH),
-        "connect_timeout": 10,
-        "application_name": "legalvault_backend_sync"
-    }
-)
-
-# Create session factories
+# Create session factory
 async_session_factory = sessionmaker(
     async_engine, class_=AsyncSession, expire_on_commit=False
 )
@@ -93,16 +79,11 @@ async_session_factory = sessionmaker(
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     session = async_session_factory()
     try:
-        # Test connection with disabled prepared statements
-        session = session.execution_options(compiled_cache=None)
         test_query = text("SELECT 1").execution_options(no_parameters=True)
         await session.execute(test_query)
-        
         yield session
     except Exception as e:
         await session.rollback()
-        
-        # Handle pgBouncer-specific errors gracefully
         if "DuplicatePreparedStatementError" in str(e) or "prepared statement" in str(e):
             print(f"pgBouncer prepared statement warning (non-fatal): {str(e)[:100]}...")
             yield session
@@ -121,14 +102,11 @@ async def init_db() -> bool:
     try:
         print("Attempting to initialize database...")
         async with async_engine.connect() as conn:
-            # Set execution options to disable prepared statements
+            # Need to await execution_options
             conn = await conn.execution_options(compiled_cache=None)
-            
-            # Test query with disabled prepared statements
-            test_query = text("SELECT 1").execution_options(no_parameters=True)
+            # Use current_timestamp instead of SELECT 1 to avoid version checks
+            test_query = text("SELECT current_timestamp").execution_options(no_parameters=True)
             await conn.execute(test_query)
-            
-            # Create all SQLModel tables
             await conn.run_sync(SQLModel.metadata.create_all)
             
         print("Database initialized successfully!")
