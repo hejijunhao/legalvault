@@ -25,6 +25,11 @@ class Settings(BaseSettings):
     ENCRYPTION_KEY: str  # For encrypting sensitive data
     SUPABASE_JWT_SECRET: Optional[str] = None  # JWT secret for Supabase integration
     
+    # Supabase Settings
+    SUPABASE_URL: Optional[str] = None
+    SUPABASE_ANON_KEY: Optional[str] = None
+    SUPABASE_SERVICE_ROLE_KEY: Optional[str] = None  # Service role key for admin operations
+    
     # Database Settings
     DATABASE_URL: PostgresDsn
     SQLALCHEMY_DATABASE_URI: Optional[PostgresDsn] = None

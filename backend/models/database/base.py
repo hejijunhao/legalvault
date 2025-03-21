@@ -38,6 +38,7 @@ class VaultBase(Base):
 
 class PublicBase(Base):
     """Base for public schema models"""
+    __abstract__ = True
     __table_args__ = {'schema': 'public'}
 
 # class EnterpriseBase(Base):
