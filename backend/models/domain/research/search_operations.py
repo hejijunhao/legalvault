@@ -3,6 +3,7 @@
 from typing import Dict, List, Optional, Any, Union
 from uuid import UUID
 from datetime import datetime
+import logging
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete, func, update, desc, asc
@@ -19,6 +20,9 @@ from models.dtos.research.search_dto import (
     to_search_dto, to_search_list_dto, to_search_status_dto, to_search_dto_without_messages
 )
 from models.dtos.research.search_message_dto import SearchMessageDTO
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 class ResearchOperations:
     """
@@ -64,6 +68,7 @@ class ResearchOperations:
             
             # Validate the query using domain logic
             if not search.validate_query(query):
+                logger.error("Invalid query. Query must be at least 3 characters.")
                 return {"error": "Invalid query. Query must be at least 3 characters."}
             
             # Create database record
@@ -108,7 +113,7 @@ class ResearchOperations:
             return await self.get_search_by_id(search_id)
         except Exception as e:
             await self.db_session.rollback()
-            print(f"Error creating search record: {str(e)}")
+            logger.error(f"Error creating search record: {str(e)}")
             return {"error": str(e)}
 
     async def add_search_messages(self, search_id: UUID, user_query: str, response: Dict[str, Any]) -> Union[bool, Dict[str, Any]]:
@@ -127,11 +132,13 @@ class ResearchOperations:
             # First validate the search exists
             search_dto = await self.get_search_by_id(search_id)
             if not search_dto:
+                logger.error(f"Search with ID {search_id} not found")
                 return {"error": f"Search with ID {search_id} not found"}
                 
             # Validate the query using domain logic
             temp_search = ResearchSearch(title=user_query)
             if not temp_search.validate_query(user_query):
+                logger.error("Invalid query. Query must be at least 3 characters.")
                 return {"error": "Invalid query. Query must be at least 3 characters."}
             
             # Create message operations
@@ -162,7 +169,7 @@ class ResearchOperations:
             return True
         except Exception as e:
             await self.db_session.rollback()
-            print(f"Error adding search messages: {str(e)}")
+            logger.error(f"Error adding search messages: {str(e)}")
             return {"error": str(e)}
     
     async def get_search_by_id(self, search_id: UUID) -> Union[SearchDTO, Dict[str, Any]]:
@@ -183,12 +190,13 @@ class ResearchOperations:
             db_search = result.scalars().first()
             
             if not db_search:
+                logger.error(f"Search with ID {search_id} not found")
                 return {"error": f"Search with ID {search_id} not found"}
             
             # Convert to DTO using the conversion function
             return to_search_dto(db_search)
         except Exception as e:
-            print(f"Error retrieving search: {str(e)}")
+            logger.error(f"Error retrieving search: {str(e)}")
             return {"error": str(e)}
 
     async def list_searches(
@@ -267,7 +275,7 @@ class ResearchOperations:
                 limit=limit
             )
         except Exception as e:
-            print(f"Error listing searches: {str(e)}")
+            logger.error(f"Error listing searches: {str(e)}")
             return {"error": str(e)}
 
     async def update_search_metadata(self, search_id: UUID, updates: SearchUpdateDTO) -> Union[SearchDTO, Dict[str, Any]]:
@@ -287,6 +295,7 @@ class ResearchOperations:
             db_search = result.scalars().first()
             
             if not db_search:
+                logger.error(f"Search with ID {search_id} not found")
                 return {"error": f"Search with ID {search_id} not found"}
             
             # Convert DTO to dict and check if there are any updates
@@ -315,7 +324,7 @@ class ResearchOperations:
             return to_search_dto(db_search)
         except Exception as e:
             await self.db_session.rollback()
-            print(f"Error updating search metadata: {str(e)}")
+            logger.error(f"Error updating search metadata: {str(e)}")
             return {"error": str(e)}
 
     async def delete_search(self, search_id: UUID) -> Union[bool, Dict[str, Any]]:
@@ -333,6 +342,7 @@ class ResearchOperations:
             check_query = select(PublicSearch).where(PublicSearch.id == search_id)
             check_result = await self.db_session.execute(check_query)
             if not check_result.scalars().first():
+                logger.error(f"Search with ID {search_id} not found")
                 return {"error": f"Search with ID {search_id} not found"}
             
             # Delete messages first (cascade would handle this, but being explicit)
@@ -347,7 +357,7 @@ class ResearchOperations:
             return True
         except Exception as e:
             await self.db_session.rollback()
-            print(f"Error deleting search: {str(e)}")
+            logger.error(f"Error deleting search: {str(e)}")
             return {"error": str(e)}
     
     async def get_search_status(self, search_id: UUID) -> Union[SearchStatusDTO, Dict[str, Any]]:
@@ -366,12 +376,13 @@ class ResearchOperations:
             db_search = result.scalars().first()
             
             if not db_search:
+                logger.error(f"Search with ID {search_id} not found")
                 return {"error": f"Search with ID {search_id} not found"}
             
             # Convert to DTO using the conversion function
             return to_search_status_dto(db_search)
         except Exception as e:
-            print(f"Error retrieving search status: {str(e)}")
+            logger.error(f"Error retrieving search status: {str(e)}")
             return {"error": str(e)}
 
     async def update_search_status(self, search_id: UUID, status: QueryStatus) -> Union[SearchStatusDTO, Dict[str, Any]]:
@@ -392,6 +403,7 @@ class ResearchOperations:
             db_search = result.scalars().first()
             
             if not db_search:
+                logger.error(f"Search with ID {search_id} not found")
                 return {"error": f"Search with ID {search_id} not found"}
             
             # Create domain model and update status
@@ -414,5 +426,5 @@ class ResearchOperations:
             return to_search_status_dto(db_search)
         except Exception as e:
             await self.db_session.rollback()
-            print(f"Error updating search status: {str(e)}")
+            logger.error(f"Error updating search status: {str(e)}")
             return {"error": str(e)}

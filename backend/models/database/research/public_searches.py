@@ -58,11 +58,10 @@ class PublicSearch(PublicBase, TimestampMixin):
         lazy="selectin"
     )
     
-    # Comment out enterprise relationship until needed
-    # enterprise = relationship(
-    #     "Enterprise",
-    #     lazy="selectin"
-    # )
+    enterprise = relationship(
+        "Enterprise",
+        lazy="selectin"
+    )
     
     messages = relationship(
         "PublicSearchMessage",

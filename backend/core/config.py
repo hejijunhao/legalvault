@@ -30,6 +30,11 @@ class Settings(BaseSettings):
     SUPABASE_ANON_KEY: Optional[str] = None
     SUPABASE_SERVICE_ROLE_KEY: Optional[str] = None  # Service role key for admin operations
     
+    # LLM Settings
+    OPENAI_API_KEY: str
+    PERPLEXITY_API_KEY: Optional[str] = None
+    HUGGINGFACE_API_TOKEN: Optional[str] = None
+
     # Database Settings
     DATABASE_URL: PostgresDsn
     SQLALCHEMY_DATABASE_URI: Optional[PostgresDsn] = None

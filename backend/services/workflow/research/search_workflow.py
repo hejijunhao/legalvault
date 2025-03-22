@@ -11,6 +11,12 @@ import json
 from abc import ABC, abstractmethod
 from openai import AsyncOpenAI
 
+# Import settings
+from core.config import settings
+
+# Get logger for this module
+logger = logging.getLogger(__name__)
+
 # Import domain models and operations
 from models.domain.research.search import ResearchSearch
 from models.domain.research.search_operations import ResearchOperations
@@ -68,10 +74,10 @@ class LLMService(ABC):
 class GPT4oMiniService(LLMService):
     """Concrete implementation of LLMService using GPT-4o-mini."""
     def __init__(self):
-        api_key = os.getenv("OPENAI_API_KEY")
-        if not api_key:
-            raise ValueError("OPENAI_API_KEY environment variable is not set")
-        self.client = AsyncOpenAI(api_key=api_key)
+        """Initialize the OpenAI client with API key from settings."""
+        if not settings.OPENAI_API_KEY:
+            raise ValueError("OPENAI_API_KEY not found in settings")
+        self.client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
     
     async def analyze_query(self, prompt: str) -> str:
         response = await self.client.chat.completions.create(
@@ -514,7 +520,11 @@ class ResearchSearchWorkflow:
         start_time = datetime.utcnow()
         
         if not search_domain:
-            search_domain = ResearchSearch(user_id=user_id, enterprise_id=enterprise_id if enterprise_id else None)
+            search_domain = ResearchSearch(
+                title=query,  # Use the query as initial title
+                user_id=user_id,
+                enterprise_id=enterprise_id if enterprise_id else None
+            )
         
         if not search_domain.validate_query(query):
             logger.warning("Invalid query rejected", extra=context)

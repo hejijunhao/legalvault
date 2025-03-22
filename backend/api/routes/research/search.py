@@ -3,6 +3,11 @@
 from typing import List, Optional, Union
 from uuid import UUID, uuid4
 from fastapi import APIRouter, Depends, HTTPException, Query
+import logging
+
+# Get logger for this module
+logger = logging.getLogger(__name__)
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 

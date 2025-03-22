@@ -9,6 +9,7 @@ import os
 import ssl
 from pathlib import Path
 from typing import AsyncGenerator
+import logging
 
 from fastapi import HTTPException
 from sqlalchemy import text
@@ -20,6 +21,9 @@ from sqlmodel import SQLModel
 
 from .config import settings
 
+# Get logger for this module
+logger = logging.getLogger(__name__)
+
 # Get the path to the CA certificate
 CERT_PATH = Path(__file__).parent.parent / "certs" / "supabase-prod.crt"
 
@@ -28,12 +32,12 @@ url_obj = settings.DATABASE_URL
 parsed_url = make_url(str(url_obj))
 query_params = dict(parsed_url.query)
 
-print("\n===== DATABASE CONNECTION INFO =====\n")
-print(f"Database driver: {parsed_url.drivername}")
-print(f"Database host: {parsed_url.host}")
-print(f"Database port: {parsed_url.port}")
-print(f"Database name: {parsed_url.database}")
-print(f"Original query parameters: {query_params}")
+logger.info("\n===== DATABASE CONNECTION INFO =====\n")
+logger.info(f"Database driver: {parsed_url.drivername}")
+logger.info(f"Database host: {parsed_url.host}")
+logger.info(f"Database port: {parsed_url.port}")
+logger.info(f"Database name: {parsed_url.database}")
+logger.info(f"Original query parameters: {query_params}")
 
 # Create SSL context with Supabase CA certificate
 ssl_context = ssl.create_default_context(cafile=str(CERT_PATH))
@@ -78,31 +82,44 @@ async_session_factory = sessionmaker(
 
 # Dependency for FastAPI
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    session = async_session_factory()
+    logger.info("Entering get_db")
     try:
-        # Simple connection test with no prepared statements
+        logger.info("Creating session")
+        session = async_session_factory()
+        logger.info("Session created successfully")
+        
+        logger.info("Executing test query: SELECT 1")
         test_query = text("SELECT 1").execution_options(no_parameters=True)
         await session.execute(test_query)
+        logger.info("Test query succeeded")
+        
         yield session
     except Exception as e:
-        await session.rollback()
+        logger.info(f"Exception caught in get_db: {type(e).__name__}: {str(e)}")
+        if session:
+            await session.rollback()
         if "DuplicatePreparedStatementError" in str(e) or "prepared statement" in str(e):
-            print(f"pgBouncer prepared statement warning (non-fatal): {str(e)[:100]}...")
-            yield session  # Still yield session for pgBouncer errors
+            logger.warning(f"pgBouncer prepared statement warning (non-fatal): {str(e)[:100]}...")
+            if session:
+                yield session  # Still yield session for pgBouncer errors
         else:
-            print(f"Database connection error: {str(e)}")
-            print(f"Error type: {type(e).__name__}")
+            logger.error(f"Database connection error: {str(e)}")
+            logger.error(f"Error type: {type(e).__name__}")
+            logger.error(f"Error traceback:", exc_info=True)  # Add full traceback
             raise HTTPException(
                 status_code=503,
                 detail="Database connection failed. Please try again later."
             )
     finally:
-        await session.close()
+        if session:
+            logger.info("Closing session")
+            await session.close()
+            logger.info("Session closed")
 
 # Database initialization function
 async def init_db() -> bool:
     try:
-        print("Attempting to initialize database...")
+        logger.info("Attempting to initialize database...")
         async with async_engine.connect() as conn:
             # Execute a simple query with no_parameters=True
             test_query = text("SELECT 1").execution_options(no_parameters=True)
@@ -111,20 +128,20 @@ async def init_db() -> bool:
             # Create tables with explicit execution options
             await conn.run_sync(SQLModel.metadata.create_all)
             
-        print("Database initialized successfully!")
+        logger.info("Database initialized successfully!")
         return True
         
     except Exception as e:
-        print(f"Error initializing database: {str(e)}")
-        print(f"Error type: {type(e).__name__}")
+        logger.error(f"Error initializing database: {str(e)}")
+        logger.error(f"Error type: {type(e).__name__}")
         
         if "DuplicatePreparedStatementError" in str(e) or "prepared statement" in str(e):
-            print("Detected pgBouncer prepared statement issue - this is expected during reloads")
+            logger.warning("Detected pgBouncer prepared statement issue - this is expected during reloads")
             return True  # Continue despite pgBouncer errors
         
         # For other errors, we still want to continue in development
         if settings.ENV == "development":
-            print("Continuing despite database error in development mode")
+            logger.warning("Continuing despite database error in development mode")
             return True
             
         return False
