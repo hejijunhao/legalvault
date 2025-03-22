@@ -1,16 +1,16 @@
 # models/database/research/public_searches.py
 
-from sqlalchemy import Column, String, ForeignKey, Text, Boolean, Index
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy import Column, String, Text, Boolean, ForeignKey, Index
 from sqlalchemy.orm import relationship
-from typing import Optional, List, TYPE_CHECKING
+from sqlalchemy.dialects.postgresql import UUID, JSONB
+from typing import List, Optional, TYPE_CHECKING
+
 from models.database.base import PublicBase
 from models.database.mixins.timestamp_mixin import TimestampMixin
-from uuid import uuid4
 
 if TYPE_CHECKING:
-    from models.database.user import User
     from models.database.enterprise import Enterprise
+    from models.database.user import User
     from models.database.research.public_search_messages import PublicSearchMessage
 
 class PublicSearch(PublicBase, TimestampMixin):
@@ -43,7 +43,7 @@ class PublicSearch(PublicBase, TimestampMixin):
     user_id = Column(UUID(as_uuid=True), ForeignKey('public.users.id'), 
                     nullable=False, index=True,
                     comment="User who created this search")
-    enterprise_id = Column(UUID(as_uuid=True), ForeignKey('public.enterprises.id'), 
+    enterprise_id = Column(UUID(as_uuid=True), ForeignKey('public.enterprises.id', name='fk_public_searches_enterprise_id_enterprises'), 
                           nullable=True, index=True,
                           comment="Enterprise the user belongs to (optional)")
     
@@ -58,9 +58,11 @@ class PublicSearch(PublicBase, TimestampMixin):
         lazy="selectin"
     )
     
+    # Use string-based reference to avoid circular imports
     enterprise = relationship(
         "Enterprise",
-        lazy="selectin"
+        lazy="selectin",
+        foreign_keys=[enterprise_id]
     )
     
     messages = relationship(

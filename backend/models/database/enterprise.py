@@ -28,3 +28,4 @@ class Enterprise(PublicBase, TimestampMixin):
 
     def __repr__(self):
         return f"Enterprise(id={self.id}, name={self.name}, domain={self.domain})"
+
