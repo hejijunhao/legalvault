@@ -35,14 +35,13 @@ export default function ResearchPage() {
     if (!trimmedQuery || trimmedQuery.length < 5) return
     
     try {
-      // Create session with search parameters including query type
+      // Create session with search parameters
       const sessionId = await createSession(trimmedQuery, {
         // Search parameters
         temperature: 0.7, // Default temperature for balanced responses
         max_tokens: 2048, // Reasonable length limit
         top_p: 0.95, // High value for more focused responses
-        top_k: 50, // Standard value for diverse but relevant results
-        query_type: queryType || QueryType.GENERAL // Set query type in search params
+        top_k: 50 // Standard value for diverse but relevant results
       })
       router.push(`/research/${sessionId}`)
     } catch (err) {
