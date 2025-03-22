@@ -1,8 +1,8 @@
 # models/database/user.py
 
+from models.database.enterprise import Enterprise
 from sqlalchemy import Column, String, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import relationship
 from uuid import uuid4
 from typing import TYPE_CHECKING, List
 from models.database.base import PublicBase
@@ -11,7 +11,6 @@ from models.database.mixins import TimestampMixin
 if TYPE_CHECKING:
     from models.database.research.public_searches import PublicSearch
     # Keep type hints for future use
-    from models.database.enterprise import Enterprise
     from models.database.paralegal import VirtualParalegal
 
 class User(PublicBase, TimestampMixin):
@@ -23,27 +22,11 @@ class User(PublicBase, TimestampMixin):
     name = Column(String, nullable=False)
     email = Column(String, unique=True, nullable=True, index=True)
     role = Column(String, default="lawyer", nullable=False)
-    virtual_paralegal_id = Column(UUID(as_uuid=True), ForeignKey('public.virtual_paralegals.id'), index=True, nullable=True)
-    enterprise_id = Column(UUID(as_uuid=True), ForeignKey('public.enterprises.id'), index=True, nullable=True)
+    virtual_paralegal_id = Column(UUID(as_uuid=True), ForeignKey('virtual_paralegals.id'), index=True, nullable=True)
+    enterprise_id = Column(UUID(as_uuid=True), ForeignKey('enterprises.id'), index=True, nullable=True)
 
-    # Keep ForeignKey constraints but comment out relationships until needed
-    # enterprise = relationship(
-    #     "Enterprise",
-    #     lazy="selectin",
-    #     foreign_keys=[enterprise_id]
-    # )
-    # virtual_paralegal = relationship(
-    #     "VirtualParalegal",
-    #     back_populates="user",
-    #     lazy="selectin",
-    #     uselist=False
-    # )
-    
-    public_searches = relationship(
-        "PublicSearch",  # Use string to avoid import issues
-        back_populates="user",
-        lazy="selectin"
-    )
+    # Relationships are now defined in models.database.relationships
+    # to avoid circular import issues
 
     def __repr__(self):
         return f"User(id={self.id}, name={self.name}, role={self.role})"

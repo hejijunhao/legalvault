@@ -23,23 +23,8 @@ class VirtualParalegal(PublicBase, TimestampMixin):
     whatsapp = Column(String, nullable=True)
     # profile_picture_id = Column(UUID(as_uuid=True), ForeignKey('vault.vp_profile_pictures.id'), nullable=True, index=True)
 
-    # Add relationship
-    # profile_picture = relationship(
-    #     "VPProfilePicture",
-    #     back_populates="virtual_paralegals",
-    #     lazy="selectin",
-    #     primaryjoin="and_(VirtualParalegal.profile_picture_id==VPProfilePicture.id, "
-    #                 "VirtualParalegal.__table__.schema==VPProfilePicture.__table__.schema)"
-    # )
-    
-    user = relationship(
-        "User",
-        back_populates="virtual_paralegal",
-        lazy="selectin",
-        uselist=False,
-        primaryjoin="and_(VirtualParalegal.id==User.virtual_paralegal_id, "
-                   "VirtualParalegal.__table__.schema==User.__table__.schema)"
-    )
+    # Relationships are now defined in models.database.relationships
+    # to avoid circular import issues
     
     @property
     def name(self):

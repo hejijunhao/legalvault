@@ -1,15 +1,15 @@
 # models/database/research/public_search_messages.py
 
+from models.database.research.public_searches import PublicSearch
 from sqlalchemy import Column, String, ForeignKey, Text, Integer, Index, Enum as SQLAlchemyEnum
 from sqlalchemy.dialects.postgresql import UUID, JSONB
-from sqlalchemy.orm import relationship
 from typing import Optional, Dict, TYPE_CHECKING
 from models.database.base import PublicBase
 from models.database.mixins.timestamp_mixin import TimestampMixin
 from models.enums.research_enums import QueryStatus
 
 if TYPE_CHECKING:
-    from models.database.research.public_searches import PublicSearch
+    pass  
 
 class PublicSearchMessage(PublicBase, TimestampMixin):
     """
@@ -26,7 +26,7 @@ class PublicSearchMessage(PublicBase, TimestampMixin):
     )
     
     # Link to parent search
-    search_id = Column(UUID(as_uuid=True), ForeignKey('public.public_searches.id'), 
+    search_id = Column(UUID(as_uuid=True), ForeignKey('public_searches.id'), 
                       nullable=False, index=True,
                       comment="The search conversation this message belongs to")
     
@@ -44,15 +44,8 @@ class PublicSearchMessage(PublicBase, TimestampMixin):
     status = Column(SQLAlchemyEnum(QueryStatus), nullable=False, default=QueryStatus.PENDING, index=True,
                    comment="Status of the message (pending, completed, failed, etc.)")
     
-    # Relationship to parent search
-    search = relationship(
-        "PublicSearch",
-        back_populates="messages",
-        lazy="selectin"
-    )
-
+    # Relationships are now defined in models.database.relationships
+    # to avoid circular import issues
     
     def __repr__(self):
         return f"PublicSearchMessage(id={self.id}, search_id={self.search_id}, role={self.role}, status={self.status})"
-
-

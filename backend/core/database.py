@@ -12,7 +12,7 @@ from typing import AsyncGenerator
 import logging
 
 from fastapi import HTTPException
-from sqlalchemy import text
+from sqlalchemy import text, Table, MetaData
 from sqlalchemy.engine.url import make_url
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
@@ -120,13 +120,36 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 async def init_db() -> bool:
     try:
         logger.info("Attempting to initialize database...")
+        
+        # Import all models to ensure they're registered with SQLAlchemy metadata
+        from models.database.enterprise import Enterprise
+        from models.database.user import User
+        from models.database.paralegal import VirtualParalegal
+        from models.database.research.public_searches import PublicSearch
+        from models.database.research.public_search_messages import PublicSearchMessage
+        
         async with async_engine.connect() as conn:
             # Execute a simple query with no_parameters=True
             test_query = text("SELECT 1").execution_options(no_parameters=True)
             await conn.execute(test_query)
             
-            # Create tables with explicit execution options
-            await conn.run_sync(SQLModel.metadata.create_all)
+            # Create schemas if they don't exist
+            await conn.execute(text("CREATE SCHEMA IF NOT EXISTS public").execution_options(no_parameters=True))
+            await conn.execute(text("CREATE SCHEMA IF NOT EXISTS vault").execution_options(no_parameters=True))
+            
+            # Create tables in a specific order to avoid foreign key issues
+            # First create tables without foreign keys
+            await conn.run_sync(lambda sync_conn: Enterprise.__table__.create(sync_conn, checkfirst=True))
+            await conn.run_sync(lambda sync_conn: VirtualParalegal.__table__.create(sync_conn, checkfirst=True))
+            
+            # Then create tables with foreign keys
+            await conn.run_sync(lambda sync_conn: User.__table__.create(sync_conn, checkfirst=True))
+            await conn.run_sync(lambda sync_conn: PublicSearch.__table__.create(sync_conn, checkfirst=True))
+            await conn.run_sync(lambda sync_conn: PublicSearchMessage.__table__.create(sync_conn, checkfirst=True))
+            
+            # Import relationships module to set up late-binding relationships
+            # This must be done after all tables are created
+            import models.database.relationships
             
         logger.info("Database initialized successfully!")
         return True

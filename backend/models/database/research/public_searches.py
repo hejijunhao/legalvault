@@ -1,7 +1,9 @@
 # models/database/research/public_searches.py
 
+from models.database.enterprise import Enterprise
+from models.database.user import User
+
 from sqlalchemy import Column, String, Text, Boolean, ForeignKey, Index
-from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from typing import List, Optional, TYPE_CHECKING
 
@@ -9,8 +11,6 @@ from models.database.base import PublicBase
 from models.database.mixins.timestamp_mixin import TimestampMixin
 
 if TYPE_CHECKING:
-    from models.database.enterprise import Enterprise
-    from models.database.user import User
     from models.database.research.public_search_messages import PublicSearchMessage
 
 class PublicSearch(PublicBase, TimestampMixin):
@@ -40,10 +40,10 @@ class PublicSearch(PublicBase, TimestampMixin):
                  comment="Array of tags associated with this search")
     
     # User attribution
-    user_id = Column(UUID(as_uuid=True), ForeignKey('public.users.id'), 
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), 
                     nullable=False, index=True,
                     comment="User who created this search")
-    enterprise_id = Column(UUID(as_uuid=True), ForeignKey('public.enterprises.id', name='fk_public_searches_enterprise_id_enterprises'), 
+    enterprise_id = Column(UUID(as_uuid=True), ForeignKey('enterprises.id', name='fk_public_searches_enterprise_id_enterprises'), 
                           nullable=True, index=True,
                           comment="Enterprise the user belongs to (optional)")
     
@@ -51,27 +51,8 @@ class PublicSearch(PublicBase, TimestampMixin):
     search_params = Column(JSONB, nullable=True,
                           comment="Parameters used for this search (jurisdiction, practice area, etc.)")
     
-    # Relationships - Simplified to avoid schema-related initialization issues
-    user = relationship(
-        "User",
-        back_populates="public_searches",
-        lazy="selectin"
-    )
-    
-    # Use string-based reference to avoid circular imports
-    enterprise = relationship(
-        "Enterprise",
-        lazy="selectin",
-        foreign_keys=[enterprise_id]
-    )
-    
-    messages = relationship(
-        "PublicSearchMessage",
-        back_populates="search",
-        lazy="selectin",
-        cascade="all, delete-orphan"
-    )
-    
+    # Relationships are now defined in models.database.relationships
+    # to avoid circular import issues
     
     def __repr__(self):
         return f"PublicSearch(id={self.id}, title={self.title}, user_id={self.user_id})"
