@@ -4,13 +4,13 @@ from sqlalchemy import Column, String
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID
 from typing import List, TYPE_CHECKING
-from models.database.base import VaultBase
+from models.database.base import PublicBase
 from models.database.mixins.timestamp_mixin import TimestampMixin
 
 if TYPE_CHECKING:
     from .user import User
 
-class Enterprise(VaultBase, TimestampMixin):
+class Enterprise(PublicBase, TimestampMixin):
     # Auto-generated table name would be 'enterprise', but we're using plural form
     __tablename__ = "enterprises"
     

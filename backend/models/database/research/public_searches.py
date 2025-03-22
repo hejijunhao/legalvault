@@ -4,7 +4,7 @@ from sqlalchemy import Column, String, ForeignKey, Text, Boolean, Index
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 from typing import Optional, List, TYPE_CHECKING
-from models.database.base import VaultBase
+from models.database.base import PublicBase
 from models.database.mixins.timestamp_mixin import TimestampMixin
 from uuid import uuid4
 
@@ -13,11 +13,11 @@ if TYPE_CHECKING:
     from models.database.enterprise import Enterprise
     from models.database.research.public_search_messages import PublicSearchMessage
 
-class PublicSearch(VaultBase, TimestampMixin):
+class PublicSearch(PublicBase, TimestampMixin):
     """
     Stores metadata about public search sessions across all enterprises.
     
-    This table exists in the vault schema as it contains cross-enterprise data.
+    This table exists in the public schema as it contains cross-enterprise data.
     Each row represents a search conversation session initiated by a user.
     The actual messages/interactions are stored in a separate PublicSearchMessage table.
     """
@@ -26,7 +26,7 @@ class PublicSearch(VaultBase, TimestampMixin):
     # Create a composite index for efficient querying
     __table_args__ = (
         Index('ix_public_searches_enterprise_user', 'enterprise_id', 'user_id'),
-        {'schema': 'vault'}  # Explicitly set schema (despite inheritance from VaultBase) as we are adding an Index above. This table_args completely overrides the one from VaultBase.
+        {'schema': 'public'}  # Explicitly set schema (despite inheritance from PublicBase) as we are adding an Index above. This table_args completely overrides the one from PublicBase.
     )
     
     # Search metadata
@@ -40,10 +40,10 @@ class PublicSearch(VaultBase, TimestampMixin):
                  comment="Array of tags associated with this search")
     
     # User attribution
-    user_id = Column(UUID(as_uuid=True), ForeignKey('vault.users.id'), 
+    user_id = Column(UUID(as_uuid=True), ForeignKey('public.users.id'), 
                     nullable=False, index=True,
                     comment="User who created this search")
-    enterprise_id = Column(UUID(as_uuid=True), ForeignKey('vault.enterprises.id'), 
+    enterprise_id = Column(UUID(as_uuid=True), ForeignKey('public.enterprises.id'), 
                           nullable=True, index=True,
                           comment="Enterprise the user belongs to (optional)")
     

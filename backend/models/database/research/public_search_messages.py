@@ -4,14 +4,14 @@ from sqlalchemy import Column, String, ForeignKey, Text, Integer, Index, Enum as
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 from typing import Optional, Dict, TYPE_CHECKING
-from models.database.base import VaultBase
+from models.database.base import PublicBase
 from models.database.mixins.timestamp_mixin import TimestampMixin
 from models.enums.research_enums import QueryStatus
 
 if TYPE_CHECKING:
     from models.database.research.public_searches import PublicSearch
 
-class PublicSearchMessage(VaultBase, TimestampMixin):
+class PublicSearchMessage(PublicBase, TimestampMixin):
     """
     Stores individual messages within a public search conversation.
     
@@ -22,11 +22,11 @@ class PublicSearchMessage(VaultBase, TimestampMixin):
     __tablename__ = "public_search_messages"
     __table_args__ = (
         Index('ix_public_search_messages_search_sequence', 'search_id', 'sequence'),
-        {'schema': 'vault'}  # Must include this even though it's in VaultBase, as this table_args overrides the VaultBase one completely.
+        {'schema': 'public'}  # Must include this even though it's in PublicBase, as this table_args overrides the PublicBase one completely.
     )
     
     # Link to parent search
-    search_id = Column(UUID(as_uuid=True), ForeignKey('vault.public_searches.id'), 
+    search_id = Column(UUID(as_uuid=True), ForeignKey('public.public_searches.id'), 
                       nullable=False, index=True,
                       comment="The search conversation this message belongs to")
     

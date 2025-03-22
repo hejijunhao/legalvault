@@ -5,7 +5,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from uuid import uuid4
 from typing import TYPE_CHECKING, List
-from models.database.base import VaultBase
+from models.database.base import PublicBase
 from models.database.mixins import TimestampMixin
 
 if TYPE_CHECKING:
@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from models.database.enterprise import Enterprise
     from models.database.paralegal import VirtualParalegal
 
-class User(VaultBase, TimestampMixin):
+class User(PublicBase, TimestampMixin):
     __tablename__ = "users"  # Explicitly set to plural form to match Supabase naming convention
     
     auth_user_id = Column(UUID(as_uuid=True), ForeignKey('auth.users.id'), unique=True, nullable=False, index=True)
@@ -22,8 +22,8 @@ class User(VaultBase, TimestampMixin):
     name = Column(String, nullable=False)
     email = Column(String, unique=True, nullable=True, index=True)
     role = Column(String, default="lawyer", nullable=False)
-    virtual_paralegal_id = Column(UUID(as_uuid=True), ForeignKey('vault.virtual_paralegals.id'), index=True, nullable=True)
-    enterprise_id = Column(UUID(as_uuid=True), ForeignKey('vault.enterprises.id'), index=True, nullable=True)
+    virtual_paralegal_id = Column(UUID(as_uuid=True), ForeignKey('public.virtual_paralegals.id'), index=True, nullable=True)
+    enterprise_id = Column(UUID(as_uuid=True), ForeignKey('public.enterprises.id'), index=True, nullable=True)
 
     # Temporarily comment out all relationships to fix circular import issues
     # enterprise = relationship(

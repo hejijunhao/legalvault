@@ -4,7 +4,7 @@ from sqlalchemy import Column, String, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID
 from typing import Optional, Dict, TYPE_CHECKING
-from models.database.base import VaultBase
+from models.database.base import PublicBase
 from models.database.mixins.timestamp_mixin import TimestampMixin
 from uuid import uuid4
 
@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from .user import User
     # from .profile_picture import VPProfilePicture
 
-class VirtualParalegal(VaultBase, TimestampMixin):
+class VirtualParalegal(PublicBase, TimestampMixin):
     # Explicitly setting table name to plural form instead of using auto-generated singular form
     __tablename__ = "virtual_paralegals"
     
