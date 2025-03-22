@@ -45,7 +45,7 @@ async def get_current_user(
     # First try to get user by ID
     query = text("""
         SELECT id, auth_user_id, first_name, last_name, name, role, email, virtual_paralegal_id, enterprise_id, created_at, updated_at
-        FROM vault.users WHERE id = :user_id
+        FROM public.users WHERE id = :user_id
     """)
     
     print(f"Executing query with user_id: {token_data.user_id}")
@@ -68,7 +68,7 @@ async def get_current_user(
             # If no user found by ID, try by auth_user_id
             query = text("""
                 SELECT id, auth_user_id, first_name, last_name, name, role, email, virtual_paralegal_id, enterprise_id, created_at, updated_at
-                FROM vault.users WHERE auth_user_id = :auth_user_id
+                FROM public.users WHERE auth_user_id = :auth_user_id
             """).execution_options(no_parameters=True)
             
             result = await session.execute(query, {"auth_user_id": token_data.user_id})
@@ -80,7 +80,7 @@ async def get_current_user(
                 # If still no user found, try by email
                 query = text("""
                     SELECT id, auth_user_id, first_name, last_name, name, role, email, virtual_paralegal_id, enterprise_id, created_at, updated_at
-                    FROM vault.users WHERE email = :email
+                    FROM public.users WHERE email = :email
                 """).execution_options(no_parameters=True)
                 
                 result = await session.execute(query, {"email": token_data.email})

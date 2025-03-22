@@ -101,7 +101,7 @@ class UserOperations:
             
             # Create application user record using direct SQL to avoid relationship issues
             query = text("""
-                INSERT INTO vault.users (id, auth_user_id, first_name, last_name, name, role, email, created_at, updated_at)
+                INSERT INTO public.users (id, auth_user_id, first_name, last_name, name, role, email, created_at, updated_at)
                 VALUES (:id, :auth_user_id, :first_name, :last_name, :name, :role, :email, NOW(), NOW())
                 RETURNING id
             """)
@@ -126,7 +126,7 @@ class UserOperations:
             # Now fetch the user directly to avoid relationship loading
             query = text("""
                 SELECT id, auth_user_id, first_name, last_name, name, role, email, virtual_paralegal_id, enterprise_id, created_at, updated_at
-                FROM vault.users WHERE id = :id
+                FROM public.users WHERE id = :id
             """)
             result = await self.db.execute(query, {"id": user_id})
             user_data = result.fetchone()
@@ -157,7 +157,7 @@ class UserOperations:
 
     async def update_user_email(self, user_id: UUID, email: str) -> Optional[UserProfile]:
         """
-        Update a user's email in both Supabase Auth and vault.users table.
+        Update a user's email in both Supabase Auth and public.users table.
         
         Args:
             user_id: UUID of the user in the application database
@@ -184,13 +184,13 @@ class UserOperations:
                 
             auth_user_id = user["auth_user_id"]
             
-            # Check email uniqueness in vault.users
+            # Check email uniqueness in public.users
             query = text("""
-                SELECT id FROM vault.users WHERE email = :email AND id != :user_id
+                SELECT id FROM public.users WHERE email = :email AND id != :user_id
             """)
             result = await self.db.execute(query, {"email": email, "user_id": user_id})
             if result.fetchone():
-                logger.error(f"Email {email} already in use in vault.users")
+                logger.error(f"Email {email} already in use in public.users")
                 return None
             
             # Check email uniqueness in Supabase Auth
@@ -204,9 +204,9 @@ class UserOperations:
                 logger.error(f"Error checking email uniqueness in Supabase Auth: {str(auth_error)}")
                 return None
             
-            # Update vault.users first (safer transaction approach)
+            # Update public.users first (safer transaction approach)
             query = text("""
-                UPDATE vault.users
+                UPDATE public.users
                 SET email = :email, updated_at = NOW()
                 WHERE id = :user_id
                 RETURNING id
@@ -214,7 +214,7 @@ class UserOperations:
             
             result = await self.db.execute(query, {"email": email, "user_id": user_id})
             if not result.fetchone():
-                logger.error(f"Failed to update email in vault.users for user {user_id}")
+                logger.error(f"Failed to update email in public.users for user {user_id}")
                 await self.db.rollback()
                 return None
             
@@ -259,7 +259,7 @@ class UserOperations:
             # Create query with minimal execution options for pgBouncer compatibility
             query = text("""
                 SELECT id, auth_user_id, first_name, last_name, name, role, email, virtual_paralegal_id, enterprise_id, created_at, updated_at
-                FROM vault.users WHERE auth_user_id = :auth_user_id
+                FROM public.users WHERE auth_user_id = :auth_user_id
             """).execution_options(
                 no_parameters=True  # This option is supported on statements
             )
@@ -310,7 +310,7 @@ class UserOperations:
         """Get a user by ID"""
         query = text("""
             SELECT id, auth_user_id, first_name, last_name, name, role, email, virtual_paralegal_id, enterprise_id, created_at, updated_at
-            FROM vault.users WHERE id = :user_id
+            FROM public.users WHERE id = :user_id
         """)
         result = await self.db.execute(query, {"user_id": user_id})
         user_data = result.fetchone()
@@ -347,7 +347,7 @@ class UserOperations:
             # Get the application user using direct SQL
             query = text("""
                 SELECT id, auth_user_id, first_name, last_name, name, role, email, virtual_paralegal_id, enterprise_id, created_at, updated_at
-                FROM vault.users WHERE auth_user_id = :auth_user_id
+                FROM public.users WHERE auth_user_id = :auth_user_id
             """)
             result = await self.db.execute(query, {"auth_user_id": auth_user_id})
             user_data = result.fetchone()
@@ -374,7 +374,7 @@ class UserOperations:
             return None
 
     async def get_user_profile(self, user_id: UUID) -> Optional[UserProfile]:
-        """Get user profile information including email from vault.users table.
+        """Get user profile information including email from public.users table.
         
         Args:
             user_id: UUID of the user in the application database
@@ -385,7 +385,7 @@ class UserOperations:
         # Use direct SQL to get the user to avoid relationship loading issues
         query = text("""
             SELECT id, auth_user_id, first_name, last_name, name, role, email, virtual_paralegal_id, enterprise_id, created_at, updated_at
-            FROM vault.users WHERE id = :user_id
+            FROM public.users WHERE id = :user_id
         """)
         
         try:
@@ -411,7 +411,7 @@ class UserOperations:
                 logger.error(f"Error retrieving last login from Supabase Auth: {str(auth_error)}")
                 last_login = None
             
-            # Use email from vault.users table
+            # Use email from public.users table
             email = user_data[6]  # email is now at index 6
             
             # If email is not set in the database, use a fallback
@@ -530,7 +530,7 @@ class UserOperations:
             
             # Delete from application database using direct SQL
             query = text("""
-                DELETE FROM vault.users WHERE id = :user_id
+                DELETE FROM public.users WHERE id = :user_id
             """)
             await self.db.execute(query, {"user_id": user_id})
             await self.db.commit()

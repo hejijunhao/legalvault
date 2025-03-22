@@ -18,7 +18,7 @@ class MaxRetriesExceededError(Exception):
 async def process_auth_webhook(payload: Dict[Any, Any], session: AsyncSession) -> bool:
     """
     Process webhook notifications from Supabase Auth.
-    Updates vault.users email when a user's email is changed in Supabase Auth.
+    Updates public.users email when a user's email is changed in Supabase Auth.
     
     Args:
         payload: The webhook payload from Supabase Auth
@@ -61,7 +61,7 @@ async def process_auth_webhook(payload: Dict[Any, Any], session: AsyncSession) -
 async def update_user_email_with_retry(auth_user_id: UUID, email: str, session: AsyncSession, 
                                       max_retries: int = 3, retry_delay: int = 2) -> bool:
     """
-    Update user email in vault.users table with retry logic.
+    Update user email in public.users table with retry logic.
     
     Args:
         auth_user_id: Supabase Auth user ID (UUID)
@@ -81,14 +81,14 @@ async def update_user_email_with_retry(auth_user_id: UUID, email: str, session: 
     while retries < max_retries:
         try:
             query = text("""
-                SELECT id, email FROM vault.users 
+                SELECT id, email FROM public.users 
                 WHERE auth_user_id = :auth_user_id
             """)
             result = await session.execute(query, {"auth_user_id": auth_user_id})
             user_data = result.fetchone()
             
             if not user_data:
-                logger.warning(f"No vault.users record found for auth_user_id {auth_user_id} with email {email}")
+                logger.warning(f"No public.users record found for auth_user_id {auth_user_id} with email {email}")
                 return False
                 
             user_id, current_email = user_data
@@ -98,7 +98,7 @@ async def update_user_email_with_retry(auth_user_id: UUID, email: str, session: 
                 return True
                 
             update_query = text("""
-                UPDATE vault.users
+                UPDATE public.users
                 SET email = :email, updated_at = NOW()
                 WHERE id = :user_id
                 RETURNING id

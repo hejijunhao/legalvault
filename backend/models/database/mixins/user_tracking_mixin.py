@@ -11,7 +11,7 @@ class UserAuditMixin:
     def created_by(cls):
         return Column(
             UUID(as_uuid=True),
-            ForeignKey("vault.users.id", ondelete="RESTRICT"),
+            ForeignKey("public.users.id", ondelete="RESTRICT"),
             nullable=False,
             comment="User ID of record creator"
         )
@@ -20,7 +20,7 @@ class UserAuditMixin:
     def modified_by(cls):
         return Column(
             UUID(as_uuid=True),
-            ForeignKey("vault.users.id", ondelete="RESTRICT"),
+            ForeignKey("public.users.id", ondelete="RESTRICT"),
             nullable=False,
             comment="User ID of last modifier"
         )
