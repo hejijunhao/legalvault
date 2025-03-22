@@ -26,7 +26,7 @@ class PublicSearch(PublicBase, TimestampMixin):
     # Create a composite index for efficient querying
     __table_args__ = (
         Index('ix_public_searches_enterprise_user', 'enterprise_id', 'user_id'),
-        {'schema': 'public'}  # Explicitly set schema (despite inheritance from PublicBase) as we are adding an Index above. This table_args completely overrides the one from PublicBase.
+        {'schema': 'public', 'extend_existing': True}  # Add extend_existing and preserve schema
     )
     
     # Search metadata
@@ -51,27 +51,24 @@ class PublicSearch(PublicBase, TimestampMixin):
     search_params = Column(JSONB, nullable=True,
                           comment="Parameters used for this search (jurisdiction, practice area, etc.)")
     
-    # Relationships
+    # Relationships - Simplified to avoid schema-related initialization issues
     user = relationship(
         "User",
         back_populates="public_searches",
-        lazy="selectin",
-        primaryjoin="and_(PublicSearch.user_id==User.id, PublicSearch.__table__.schema==User.__table__.schema)"
+        lazy="selectin"
     )
     
-    enterprise = relationship(
-        "Enterprise",
-        lazy="selectin",
-        primaryjoin="and_(PublicSearch.enterprise_id==Enterprise.id, PublicSearch.__table__.schema==Enterprise.__table__.schema)"
-    )
+    # Comment out enterprise relationship until needed
+    # enterprise = relationship(
+    #     "Enterprise",
+    #     lazy="selectin"
+    # )
     
     messages = relationship(
         "PublicSearchMessage",
         back_populates="search",
         lazy="selectin",
-        primaryjoin="and_(PublicSearch.id==PublicSearchMessage.search_id, "
-                   "PublicSearch.__table__.schema==PublicSearchMessage.__table__.schema)",
-         cascade="all, delete-orphan"
+        cascade="all, delete-orphan"
     )
     
     

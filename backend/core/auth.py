@@ -42,60 +42,30 @@ async def get_current_user(
     # Get user from database using direct SQL to avoid relationship loading issues
     from sqlalchemy import text
     
-    # First try to get user by ID
     query = text("""
         SELECT id, auth_user_id, first_name, last_name, name, role, email, virtual_paralegal_id, enterprise_id, created_at, updated_at
-        FROM public.users WHERE id = :user_id
-    """)
+        FROM public.users WHERE auth_user_id = :auth_user_id
+    """).execution_options(
+        no_parameters=True,  # Helps with pgBouncer compatibility
+    )
     
-    print(f"Executing query with user_id: {token_data.user_id}")
+    print(f"Looking up user with auth_user_id: {token_data.user_id}")
     
     try:
-        # Use execute with a text object that explicitly disables prepared statements
-        # by setting unique execution options
-        import uuid
-        unique_stmt_name = f"stmt_{uuid.uuid4().hex}"
-        query = query.execution_options(
-            no_parameters=True,  # Helps with pgBouncer compatibility
-        )
-        
-        result = await session.execute(query, {"user_id": token_data.user_id})
+        result = await session.execute(query, {"auth_user_id": token_data.user_id})
         user_row = result.fetchone()
         
         if not user_row:
-            print(f"No user found with ID {token_data.user_id}, trying with auth_user_id: {token_data.user_id}")
+            print(f"No user found with auth_user_id: {token_data.user_id}")
+            raise credentials_exception
             
-            # If no user found by ID, try by auth_user_id
-            query = text("""
-                SELECT id, auth_user_id, first_name, last_name, name, role, email, virtual_paralegal_id, enterprise_id, created_at, updated_at
-                FROM public.users WHERE auth_user_id = :auth_user_id
-            """).execution_options(no_parameters=True)
-            
-            result = await session.execute(query, {"auth_user_id": token_data.user_id})
-            user_row = result.fetchone()
-            
-            if not user_row and token_data.email:
-                print(f"No user found with auth_user_id {token_data.user_id}, trying with email: {token_data.email}")
-                
-                # If still no user found, try by email
-                query = text("""
-                    SELECT id, auth_user_id, first_name, last_name, name, role, email, virtual_paralegal_id, enterprise_id, created_at, updated_at
-                    FROM public.users WHERE email = :email
-                """).execution_options(no_parameters=True)
-                
-                result = await session.execute(query, {"email": token_data.email})
-                user_row = result.fetchone()
-                
-                if not user_row:
-                    print(f"No user found with email {token_data.email} either, raising credentials exception")
-                    raise credentials_exception
+        print(f"Found user: {user_row[6]} (ID: {user_row[0]})")  # email and ID
         
         # Convert row to dict
         user_dict = {}
         for idx, column_name in enumerate(result.keys()):
             user_dict[column_name] = user_row[idx]
             
-        print(f"Found user: {user_dict['email']} (ID: {user_dict['id']})")
         return user_dict
         
     except Exception as e:

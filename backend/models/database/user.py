@@ -10,6 +10,7 @@ from models.database.mixins import TimestampMixin
 
 if TYPE_CHECKING:
     from models.database.research.public_searches import PublicSearch
+    # Keep type hints for future use
     from models.database.enterprise import Enterprise
     from models.database.paralegal import VirtualParalegal
 
@@ -25,7 +26,7 @@ class User(PublicBase, TimestampMixin):
     virtual_paralegal_id = Column(UUID(as_uuid=True), ForeignKey('public.virtual_paralegals.id'), index=True, nullable=True)
     enterprise_id = Column(UUID(as_uuid=True), ForeignKey('public.enterprises.id'), index=True, nullable=True)
 
-    # Temporarily comment out all relationships to fix circular import issues
+    # Keep ForeignKey constraints but comment out relationships until needed
     # enterprise = relationship(
     #     "Enterprise",
     #     lazy="selectin",
@@ -35,14 +36,14 @@ class User(PublicBase, TimestampMixin):
     #     "VirtualParalegal",
     #     back_populates="user",
     #     lazy="selectin",
-    #     uselist=False,
-    #     primaryjoin="and_(models.database.user.User.virtual_paralegal_id==models.database.paralegal.VirtualParalegal.id, models.database.user.User.__table__.schema==models.database.paralegal.VirtualParalegal.__table__.schema)"
+    #     uselist=False
     # )
-    # public_searches = relationship(
-    #     "PublicSearch",
-    #     back_populates="user",
-    #     lazy="selectin",
-    #     primaryjoin="and_(models.database.user.User.id==models.database.research.public_searches.PublicSearch.user_id, models.database.user.User.__table__.schema==models.database.research.public_searches.PublicSearch.__table__.schema)"
-    # )
+    
+    public_searches = relationship(
+        "PublicSearch",  # Use string to avoid import issues
+        back_populates="user",
+        lazy="selectin"
+    )
+
     def __repr__(self):
         return f"User(id={self.id}, name={self.name}, role={self.role})"

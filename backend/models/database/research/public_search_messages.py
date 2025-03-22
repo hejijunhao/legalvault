@@ -48,11 +48,11 @@ class PublicSearchMessage(PublicBase, TimestampMixin):
     search = relationship(
         "PublicSearch",
         back_populates="messages",
-        lazy="selectin",
-        primaryjoin="and_(PublicSearchMessage.search_id==PublicSearch.id, "
-                   "PublicSearchMessage.__table__.schema==PublicSearch.__table__.schema)"
+        lazy="selectin"
     )
 
     
     def __repr__(self):
         return f"PublicSearchMessage(id={self.id}, search_id={self.search_id}, role={self.role}, status={self.status})"
+
+
