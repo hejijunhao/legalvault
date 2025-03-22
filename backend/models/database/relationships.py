@@ -2,7 +2,7 @@
 This module sets up SQLAlchemy relationships after all models are loaded
 to avoid circular import issues.
 """
-from sqlalchemy.orm import configure_mappers, relationship
+from sqlalchemy.orm import relationship
 from sqlalchemy import and_
 
 # Import all models that need relationships
@@ -84,5 +84,4 @@ PublicSearchMessage.search = relationship(
     lazy="selectin"
 )
 
-# Configure all mappers
-configure_mappers()
+# Remove the configure_mappers() call - SQLAlchemy will handle this automatically when needed

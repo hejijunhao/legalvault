@@ -4,19 +4,7 @@ from dotenv import load_dotenv
 # Load environment variables from .env before any imports that need them
 load_dotenv()
 
-from fastapi import FastAPI, Depends, HTTPException, Request
-from fastapi.responses import JSONResponse
-from fastapi.middleware.cors import CORSMiddleware
-import os
 import logging
-from typing import List, Dict, Any
-from core.database import get_db, init_db, async_session_factory
-import asyncio
-from sqlalchemy.sql import text
-
-from api.routes import api_router
-from api.routes.auth.webhooks import router as webhook_router
-from core.config import settings
 
 # Set up logging
 logging.basicConfig(
@@ -24,6 +12,26 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+# Import models first to populate SQLAlchemy metadata in the correct order
+# This ensures foreign key references are resolved properly at import time
+logger.info("Importing models to initialize SQLAlchemy metadata")
+import models  # noqa: E402
+logger.info("SQLAlchemy metadata initialized with all models")
+
+from fastapi import FastAPI, Depends, HTTPException, Request
+from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+import os
+from typing import List, Dict, Any
+from core.database import get_db, init_db, async_session_factory
+import asyncio
+from sqlalchemy.sql import text
+
+# Import routers after models to avoid premature model imports
+from api.routes import api_router
+from api.routes.auth.webhooks import router as webhook_router
+from core.config import settings
 
 app = FastAPI(
     title=settings.PROJECT_NAME,

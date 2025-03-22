@@ -66,14 +66,15 @@ async_engine = create_async_engine(
             "client_min_messages": "warning",
             "client_encoding": "utf8"
         }
+    },
+    execution_options={
+        "isolation_level": "AUTOCOMMIT",  # Required for pgBouncer
+        "compiled_cache": None,
+        "no_parameters": True  # Required for pgBouncer
     }
-).execution_options(
-    isolation_level="AUTOCOMMIT",  # Required for pgBouncer
-    compiled_cache=None,
-    no_parameters=True
 )
 
-# Create session factory - execution_options will be set on the engine instead
+# Create session factory with pgBouncer-compatible options
 async_session_factory = sessionmaker(
     bind=async_engine,
     class_=AsyncSession,
@@ -83,13 +84,18 @@ async_session_factory = sessionmaker(
 # Dependency for FastAPI
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     logger.info("Entering get_db")
+    session = None
     try:
         logger.info("Creating session")
         session = async_session_factory()
         logger.info("Session created successfully")
         
         logger.info("Executing test query: SELECT 1")
-        test_query = text("SELECT 1").execution_options(no_parameters=True)
+        # Use text() with execution_options to ensure no prepared statements
+        test_query = text("SELECT 1").execution_options(
+            no_parameters=True, 
+            use_server_side_cursors=False
+        )
         await session.execute(test_query)
         logger.info("Test query succeeded")
         
@@ -98,18 +104,34 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
         logger.info(f"Exception caught in get_db: {type(e).__name__}: {str(e)}")
         if session:
             await session.rollback()
-        if "DuplicatePreparedStatementError" in str(e) or "prepared statement" in str(e):
-            logger.warning(f"pgBouncer prepared statement warning (non-fatal): {str(e)[:100]}...")
-            if session:
-                yield session  # Still yield session for pgBouncer errors
-        else:
-            logger.error(f"Database connection error: {str(e)}")
-            logger.error(f"Error type: {type(e).__name__}")
-            logger.error(f"Error traceback:", exc_info=True)  # Add full traceback
-            raise HTTPException(
-                status_code=503,
-                detail="Database connection failed. Please try again later."
-            )
+        
+        # Handle pgBouncer prepared statement errors
+        if any(err_type in str(e) for err_type in [
+            "DuplicatePreparedStatementError", 
+            "prepared statement",
+            "InvalidSQLStatementNameError"
+        ]):
+            logger.warning(f"pgBouncer prepared statement warning: {str(e)[:100]}...")
+            # Create a fresh session instead of reusing the problematic one
+            try:
+                await session.close()
+                session = async_session_factory()
+                # Test the new session
+                await session.execute(text("SELECT 1").execution_options(no_parameters=True))
+                yield session
+                return
+            except Exception as inner_e:
+                logger.error(f"Failed to create replacement session: {str(inner_e)}")
+                # Fall through to the general error handling
+        
+        # For other database errors
+        logger.error(f"Database connection error: {str(e)}")
+        logger.error(f"Error type: {type(e).__name__}")
+        logger.error("Error traceback:", exc_info=True)  # Add full traceback
+        raise HTTPException(
+            status_code=503,
+            detail="Database connection failed. Please try again later."
+        )
     finally:
         if session:
             logger.info("Closing session")
@@ -118,38 +140,39 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 # Database initialization function
 async def init_db() -> bool:
+    """Initialize the database by creating schemas and tables.
+    
+    This function assumes that models have already been imported and registered with SQLModel.metadata
+    in the correct order via the models/__init__.py file.
+    
+    Returns:
+        bool: True if database initialization was successful, False otherwise.
+    """
     try:
         logger.info("Attempting to initialize database...")
         
-        # Import all models to ensure they're registered with SQLAlchemy metadata
-        from models.database.enterprise import Enterprise
-        from models.database.user import User
-        from models.database.paralegal import VirtualParalegal
-        from models.database.research.public_searches import PublicSearch
-        from models.database.research.public_search_messages import PublicSearchMessage
-        
         async with async_engine.connect() as conn:
-            # Execute a simple query with no_parameters=True
-            test_query = text("SELECT 1").execution_options(no_parameters=True)
+            # Execute a simple query to test connection
+            test_query = text("SELECT 1").execution_options(
+                no_parameters=True
+            )
             await conn.execute(test_query)
             
             # Create schemas if they don't exist
-            await conn.execute(text("CREATE SCHEMA IF NOT EXISTS public").execution_options(no_parameters=True))
-            await conn.execute(text("CREATE SCHEMA IF NOT EXISTS vault").execution_options(no_parameters=True))
+            await conn.execute(
+                text("CREATE SCHEMA IF NOT EXISTS public").execution_options(
+                    no_parameters=True
+                )
+            )
+            await conn.execute(
+                text("CREATE SCHEMA IF NOT EXISTS vault").execution_options(
+                    no_parameters=True
+                )
+            )
             
-            # Create tables in a specific order to avoid foreign key issues
-            # First create tables without foreign keys
-            await conn.run_sync(lambda sync_conn: Enterprise.__table__.create(sync_conn, checkfirst=True))
-            await conn.run_sync(lambda sync_conn: VirtualParalegal.__table__.create(sync_conn, checkfirst=True))
-            
-            # Then create tables with foreign keys
-            await conn.run_sync(lambda sync_conn: User.__table__.create(sync_conn, checkfirst=True))
-            await conn.run_sync(lambda sync_conn: PublicSearch.__table__.create(sync_conn, checkfirst=True))
-            await conn.run_sync(lambda sync_conn: PublicSearchMessage.__table__.create(sync_conn, checkfirst=True))
-            
-            # Import relationships module to set up late-binding relationships
-            # This must be done after all tables are created
-            import models.database.relationships
+            # Create all tables using SQLAlchemy's metadata
+            # This respects model dependencies automatically if metadata is correctly populated
+            await conn.run_sync(SQLModel.metadata.create_all)
             
         logger.info("Database initialized successfully!")
         return True
@@ -158,7 +181,12 @@ async def init_db() -> bool:
         logger.error(f"Error initializing database: {str(e)}")
         logger.error(f"Error type: {type(e).__name__}")
         
-        if "DuplicatePreparedStatementError" in str(e) or "prepared statement" in str(e):
+        # Handle pgBouncer prepared statement errors more comprehensively
+        if any(err_type in str(e) for err_type in [
+            "DuplicatePreparedStatementError", 
+            "prepared statement",
+            "InvalidSQLStatementNameError"
+        ]):
             logger.warning("Detected pgBouncer prepared statement issue - this is expected during reloads")
             return True  # Continue despite pgBouncer errors
         

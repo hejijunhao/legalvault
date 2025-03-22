@@ -95,7 +95,13 @@ def search_dto_to_response(search_dto: SearchDTO) -> SearchResponse:
 
 def search_list_dto_to_response(search_list_dto: SearchListDTO) -> SearchListResponse:
     """Convert SearchListDTO to SearchListResponse for API layer."""
-    items = [search_dto_to_response(search_dto) for search_dto in search_list_dto.items]
+    # Handle items whether it's a method or a property
+    if callable(getattr(search_list_dto, 'items', None)):
+        items_data = search_list_dto.items()
+    else:
+        items_data = search_list_dto.items
+        
+    items = [search_dto_to_response(search_dto) for search_dto in items_data]
     return SearchListResponse(
         items=items,
         total=search_list_dto.total,
@@ -106,7 +112,14 @@ def search_list_dto_to_response(search_list_dto: SearchListDTO) -> SearchListRes
 def search_message_list_dto_to_response(message_list_dto: SearchMessageListDTO) -> SearchMessageListResponse:
     """Convert SearchMessageListDTO to SearchMessageListResponse for API layer."""
     items = []
-    for msg_dto in message_list_dto.items:
+    
+    # Handle items whether it's a method or a property
+    if callable(getattr(message_list_dto, 'items', None)):
+        items_data = message_list_dto.items()
+    else:
+        items_data = message_list_dto.items
+        
+    for msg_dto in items_data:
         items.append(SearchMessageResponse(
             id=msg_dto.id,
             search_id=msg_dto.search_id,

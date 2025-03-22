@@ -40,10 +40,10 @@ class PublicSearch(PublicBase, TimestampMixin):
                  comment="Array of tags associated with this search")
     
     # User attribution
-    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), 
+    user_id = Column(UUID(as_uuid=True), ForeignKey('public.users.id'), 
                     nullable=False, index=True,
                     comment="User who created this search")
-    enterprise_id = Column(UUID(as_uuid=True), ForeignKey('enterprises.id', name='fk_public_searches_enterprise_id_enterprises'), 
+    enterprise_id = Column(UUID(as_uuid=True), ForeignKey('public.enterprises.id', name='fk_public_searches_enterprise_id_enterprises'), 
                           nullable=True, index=True,
                           comment="Enterprise the user belongs to (optional)")
     

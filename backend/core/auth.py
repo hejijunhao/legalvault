@@ -47,6 +47,7 @@ async def get_current_user(
         FROM public.users WHERE auth_user_id = :auth_user_id
     """).execution_options(
         no_parameters=True,  # Helps with pgBouncer compatibility
+        use_server_side_cursors=False  # Disable server-side cursors which use prepared statements
     )
     
     print(f"Looking up user with auth_user_id: {token_data.user_id}")

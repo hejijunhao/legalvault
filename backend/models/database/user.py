@@ -22,8 +22,8 @@ class User(PublicBase, TimestampMixin):
     name = Column(String, nullable=False)
     email = Column(String, unique=True, nullable=True, index=True)
     role = Column(String, default="lawyer", nullable=False)
-    virtual_paralegal_id = Column(UUID(as_uuid=True), ForeignKey('virtual_paralegals.id'), index=True, nullable=True)
-    enterprise_id = Column(UUID(as_uuid=True), ForeignKey('enterprises.id'), index=True, nullable=True)
+    virtual_paralegal_id = Column(UUID(as_uuid=True), ForeignKey('public.virtual_paralegals.id'), index=True, nullable=True)
+    enterprise_id = Column(UUID(as_uuid=True), ForeignKey('public.enterprises.id'), index=True, nullable=True)
 
     # Relationships are now defined in models.database.relationships
     # to avoid circular import issues

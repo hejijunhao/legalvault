@@ -25,6 +25,9 @@ class SearchMessageOperations:
         """Get the next sequence number for a message in a search."""
         query = select(func.max(PublicSearchMessage.sequence)).where(
             PublicSearchMessage.search_id == search_id
+        ).execution_options(
+            no_parameters=True,
+            use_server_side_cursors=False  # Disable server-side cursors which use prepared statements
         )
         result = await self.db.execute(query)
         max_sequence = result.scalar() or 0
@@ -45,7 +48,10 @@ class SearchMessageOperations:
 
     async def get_message_by_id(self, message_id: UUID) -> Optional[SearchMessageDTO]:
         """Retrieve a message by its ID."""
-        query = select(PublicSearchMessage).where(PublicSearchMessage.id == message_id)
+        query = select(PublicSearchMessage).where(PublicSearchMessage.id == message_id).execution_options(
+            no_parameters=True,
+            use_server_side_cursors=False  # Disable server-side cursors which use prepared statements
+        )
         result = await self.db.execute(query)
         db_message = result.scalars().first()
         if db_message:
@@ -54,7 +60,10 @@ class SearchMessageOperations:
 
     async def update_message(self, message_id: UUID, updates: SearchMessageUpdateDTO) -> Optional[SearchMessageDTO]:
         """Update a message's content or other attributes."""
-        query = select(PublicSearchMessage).where(PublicSearchMessage.id == message_id)
+        query = select(PublicSearchMessage).where(PublicSearchMessage.id == message_id).execution_options(
+            no_parameters=True,
+            use_server_side_cursors=False  # Disable server-side cursors which use prepared statements
+        )
         result = await self.db.execute(query)
         db_message = result.scalars().first()
         if not db_message:
@@ -79,7 +88,10 @@ class SearchMessageOperations:
 
     async def update_message_status(self, message_id: UUID, status: QueryStatus) -> Optional[SearchMessageDTO]:
         """Update a message's status."""
-        query = select(PublicSearchMessage).where(PublicSearchMessage.id == message_id)
+        query = select(PublicSearchMessage).where(PublicSearchMessage.id == message_id).execution_options(
+            no_parameters=True,
+            use_server_side_cursors=False  # Disable server-side cursors which use prepared statements
+        )
         result = await self.db.execute(query)
         db_message = result.scalars().first()
         if not db_message:
@@ -91,7 +103,10 @@ class SearchMessageOperations:
 
     async def delete_message(self, message_id: UUID) -> bool:
         """Delete a message from the database."""
-        query = delete(PublicSearchMessage).where(PublicSearchMessage.id == message_id)
+        query = delete(PublicSearchMessage).where(PublicSearchMessage.id == message_id).execution_options(
+            no_parameters=True,
+            use_server_side_cursors=False  # Disable server-side cursors which use prepared statements
+        )
         result = await self.db.execute(query)
         await self.db.commit()
         return result.rowcount > 0
@@ -100,13 +115,19 @@ class SearchMessageOperations:
         """List all messages for a given search with pagination."""
         # Query for messages
         query = select(PublicSearchMessage).where(PublicSearchMessage.search_id == search_id)\
-            .order_by(PublicSearchMessage.sequence).offset(offset).limit(limit)
+            .order_by(PublicSearchMessage.sequence).offset(offset).limit(limit).execution_options(
+                no_parameters=True,
+                use_server_side_cursors=False  # Disable server-side cursors which use prepared statements
+            )
         result = await self.db.execute(query)
         messages = result.scalars().all()
         
         # Count total messages
         count_query = select(func.count()).select_from(PublicSearchMessage).where(
             PublicSearchMessage.search_id == search_id
+        ).execution_options(
+            no_parameters=True,
+            use_server_side_cursors=False  # Disable server-side cursors which use prepared statements
         )
         count_result = await self.db.execute(count_query)
         total_count = count_result.scalar() or 0
@@ -117,7 +138,10 @@ class SearchMessageOperations:
     async def list_messages_by_status(self, status: QueryStatus, limit: int = 100, offset: int = 0) -> List[SearchMessageDTO]:
         """List messages by status with pagination."""
         query = select(PublicSearchMessage).where(PublicSearchMessage.status == status)\
-            .order_by(PublicSearchMessage.created_at).offset(offset).limit(limit)
+            .order_by(PublicSearchMessage.created_at).offset(offset).limit(limit).execution_options(
+                no_parameters=True,
+                use_server_side_cursors=False  # Disable server-side cursors which use prepared statements
+            )
         result = await self.db.execute(query)
         messages = result.scalars().all()
         

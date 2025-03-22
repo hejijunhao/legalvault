@@ -185,7 +185,10 @@ class ResearchOperations:
         try:
             query = select(PublicSearch).options(
                 selectinload(PublicSearch.messages)
-            ).where(PublicSearch.id == search_id)
+            ).where(PublicSearch.id == search_id).execution_options(
+                no_parameters=True,
+                use_server_side_cursors=False  # Disable server-side cursors which use prepared statements
+            )
             result = await self.db_session.execute(query)
             db_search = result.scalars().first()
             
@@ -258,6 +261,16 @@ class ResearchOperations:
             # Apply pagination
             query = query.offset(offset).limit(limit)
             
+            # Add pgBouncer compatibility options
+            query = query.execution_options(
+                no_parameters=True,
+                use_server_side_cursors=False  # Disable server-side cursors which use prepared statements
+            )
+            count_query = count_query.execution_options(
+                no_parameters=True,
+                use_server_side_cursors=False  # Disable server-side cursors which use prepared statements
+            )
+            
             # Execute queries
             result = await self.db_session.execute(query)
             count_result = await self.db_session.execute(count_query)
@@ -290,7 +303,10 @@ class ResearchOperations:
             Updated SearchDTO if successful, error dict otherwise
         """
         try:
-            query = select(PublicSearch).where(PublicSearch.id == search_id)
+            query = select(PublicSearch).where(PublicSearch.id == search_id).execution_options(
+                no_parameters=True,
+                use_server_side_cursors=False  # Disable server-side cursors which use prepared statements
+            )
             result = await self.db_session.execute(query)
             db_search = result.scalars().first()
             
@@ -339,18 +355,27 @@ class ResearchOperations:
         """
         try:
             # First check if the search exists
-            check_query = select(PublicSearch).where(PublicSearch.id == search_id)
+            check_query = select(PublicSearch).where(PublicSearch.id == search_id).execution_options(
+                no_parameters=True,
+                use_server_side_cursors=False  # Disable server-side cursors which use prepared statements
+            )
             check_result = await self.db_session.execute(check_query)
             if not check_result.scalars().first():
                 logger.error(f"Search with ID {search_id} not found")
                 return {"error": f"Search with ID {search_id} not found"}
             
             # Delete messages first (cascade would handle this, but being explicit)
-            msg_delete = delete(PublicSearchMessage).where(PublicSearchMessage.search_id == search_id)
+            msg_delete = delete(PublicSearchMessage).where(PublicSearchMessage.search_id == search_id).execution_options(
+                no_parameters=True,
+                use_server_side_cursors=False  # Disable server-side cursors which use prepared statements
+            )
             await self.db_session.execute(msg_delete)
             
             # Delete the search
-            search_delete = delete(PublicSearch).where(PublicSearch.id == search_id)
+            search_delete = delete(PublicSearch).where(PublicSearch.id == search_id).execution_options(
+                no_parameters=True,
+                use_server_side_cursors=False  # Disable server-side cursors which use prepared statements
+            )
             result = await self.db_session.execute(search_delete)
             
             await self.db_session.commit()
@@ -371,7 +396,10 @@ class ResearchOperations:
             SearchStatusDTO with status information, or error dict if not found
         """
         try:
-            query = select(PublicSearch).where(PublicSearch.id == search_id)
+            query = select(PublicSearch).where(PublicSearch.id == search_id).execution_options(
+                no_parameters=True,
+                use_server_side_cursors=False  # Disable server-side cursors which use prepared statements
+            )
             result = await self.db_session.execute(query)
             db_search = result.scalars().first()
             
@@ -398,7 +426,10 @@ class ResearchOperations:
         """
         try:
             # First get the search to check if it exists
-            query = select(PublicSearch).where(PublicSearch.id == search_id)
+            query = select(PublicSearch).where(PublicSearch.id == search_id).execution_options(
+                no_parameters=True,
+                use_server_side_cursors=False  # Disable server-side cursors which use prepared statements
+            )
             result = await self.db_session.execute(query)
             db_search = result.scalars().first()
             

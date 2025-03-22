@@ -26,7 +26,7 @@ class PublicSearchMessage(PublicBase, TimestampMixin):
     )
     
     # Link to parent search
-    search_id = Column(UUID(as_uuid=True), ForeignKey('public_searches.id'), 
+    search_id = Column(UUID(as_uuid=True), ForeignKey('public.public_searches.id'), 
                       nullable=False, index=True,
                       comment="The search conversation this message belongs to")
     
