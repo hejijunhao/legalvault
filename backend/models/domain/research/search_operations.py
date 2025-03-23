@@ -243,12 +243,13 @@ class ResearchOperations:
             logger.error(f"Error adding search messages: {str(e)}")
             return {"error": str(e)}
     
-    async def get_search_by_id(self, search_id: UUID) -> Union[SearchDTO, Dict[str, Any]]:
+    async def get_search_by_id(self, search_id: UUID, execution_options: Optional[Dict[str, Any]] = None) -> Union[SearchDTO, Dict[str, Any]]:
         """
         Retrieve a search and its messages by ID.
         
         Args:
             search_id: UUID of the search
+            execution_options: Optional execution options for pgBouncer compatibility
             
         Returns:
             SearchDTO with search data and messages, or error dict if not found
@@ -258,7 +259,15 @@ class ResearchOperations:
             query = select(PublicSearch).options(
                 selectinload(PublicSearch.messages)
             ).where(PublicSearch.id == search_id)
-            result = await self._execute_query(query)
+            
+            # Use provided execution_options if given, otherwise use default
+            if execution_options:
+                result = await self.db_session.execute(
+                    query.execution_options(**execution_options)
+                )
+            else:
+                result = await self._execute_query(query)
+                
             db_search = result.scalars().first()
             
             if not db_search:
@@ -315,7 +324,7 @@ class ResearchOperations:
                         # Create a new instance with the fresh session
                         fresh_ops = ResearchOperations(fresh_session)
                         # Retry the operation
-                        return await fresh_ops.get_search_by_id(search_id)
+                        return await fresh_ops.get_search_by_id(search_id, execution_options)
                 except Exception as retry_error:
                     logger.error(f"Error in retry attempt after pgBouncer error: {str(retry_error)}")
                     return {"error": f"Database error: {str(retry_error)}", "user_id": None}
