@@ -80,10 +80,25 @@ class GPT4oMiniService(LLMService):
         self.client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
     
     async def analyze_query(self, prompt: str) -> str:
+        """Analyze a query using GPT-4o-mini, ensuring JSON response."""
+        # Add explicit JSON formatting instructions
+        formatted_prompt = f"""Analyze the following legal query and return a JSON object with these fields:
+        - type: string (one of: "COURT_CASE", "LEGISLATIVE", "COMMERCIAL", "GENERAL")
+        - clarity: float (0-1)
+        - complexity: float (0-1)
+        - relevance: string ("yes" or "no")
+        - clarifications: list of strings (empty if query is clear)
+
+        Query: {prompt}
+
+        Respond ONLY with the JSON object, no other text.
+        """
+        
         response = await self.client.chat.completions.create(
             model="gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.0
+            messages=[{"role": "user", "content": formatted_prompt}],
+            temperature=0.0,
+            response_format={"type": "json_object"}  # Force JSON response
         )
         return response.choices[0].message.content
 

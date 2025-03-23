@@ -414,8 +414,17 @@ class UserOperations:
                 
                 # Get user details from Supabase Auth using auth_user_id
                 auth_user_id = user_data[1]  # auth_user_id is at index 1
-                auth_response = supabase.auth.admin.get_user_by_id(auth_user_id)
-                last_login = auth_response.last_sign_in_at
+                auth_user = supabase.auth.admin.get_user_by_id(auth_user_id)
+                
+                # Access metadata from the response
+                if hasattr(auth_user, 'user'):
+                    user_metadata = auth_user.user
+                    last_login = user_metadata.get('last_sign_in_at')
+                elif isinstance(auth_user, dict):
+                    last_login = auth_user.get('last_sign_in_at')
+                
+                if not last_login:
+                    logger.warning(f"No last_sign_in_at found for user {auth_user_id}")
             except Exception as auth_error:
                 logger.error(f"Error retrieving last login from Supabase Auth: {str(auth_error)}")
                 last_login = None

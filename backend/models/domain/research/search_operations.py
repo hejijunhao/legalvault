@@ -5,8 +5,9 @@ from typing import Dict, List, Optional, Any, Union
 from datetime import datetime
 import logging
 
-from sqlalchemy import select, desc, asc, func
+from sqlalchemy import select, desc, asc, func, delete
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 # Import domain models
 from models.domain.research.search import ResearchSearch
@@ -19,7 +20,9 @@ from models.dtos.research.search_dto import (
     SearchDTO, SearchListDTO, SearchCreateDTO, SearchUpdateDTO,
     to_search_dto, to_search_list_dto, to_search_dto_without_messages
 )
-from models.dtos.research.search_message_dto import SearchMessageDTO
+from models.dtos.research.search_message_dto import (
+    SearchMessageDTO, to_search_message_dto
+)
 
 logger = logging.getLogger(__name__)
 
@@ -245,77 +248,39 @@ class ResearchOperations:
             
             if not db_search:
                 logger.error(f"Search with ID {search_id} not found")
-                return {"error": f"Search with ID {search_id} not found"}
+                return {"error": f"Search with ID {search_id} not found", "user_id": None}
             
             # Check if we got a tuple instead of an ORM object
             if isinstance(db_search, tuple):
                 logger.info("Received tuple instead of ORM object in get_search_by_id")
-                # We need to handle messages separately since they won't be loaded in the tuple
                 search_dto = self._tuple_to_search_dto(db_search)
                 
-                # Try to load messages separately
-                try:
-                    msg_query = select(PublicSearchMessage).where(
-                        PublicSearchMessage.search_id == search_id
-                    ).order_by(PublicSearchMessage.sequence).execution_options(
-                        no_parameters=True,
-                        use_server_side_cursors=False
-                    )
-                    msg_result = await self.db_session.execute(msg_query)
-                    messages = msg_result.scalars().all()
-                    
-                    # Convert messages to DTOs
-                    if messages:
-                        message_dtos = []
-                        if isinstance(messages[0], tuple):
-                            # Handle tuple messages
-                            from models.domain.research.search_message_operations import SearchMessageOperations
-                            msg_ops = SearchMessageOperations(self.db_session)
-                            message_dtos = [msg_ops._tuple_to_message_dto(msg) for msg in messages]
-                        else:
-                            # Handle ORM messages
-                            message_dtos = [
-                                SearchMessageDTO(
-                                    role=msg.role,
-                                    content=msg.content,
-                                    sequence=msg.sequence
-                                ) for msg in messages
-                            ]
-                        search_dto.messages = message_dtos
-                except Exception as msg_error:
-                    logger.error(f"Error loading messages for search {search_id}: {str(msg_error)}")
-                    # Continue with empty messages list
+                # Load messages separately for tuple case
+                msg_query = select(PublicSearchMessage).where(
+                    PublicSearchMessage.search_id == search_id
+                ).order_by(PublicSearchMessage.sequence).execution_options(
+                    no_parameters=True,
+                    use_server_side_cursors=False
+                )
+                msg_result = await self.db_session.execute(msg_query)
+                messages = msg_result.scalars().all()
+                
+                # Convert messages to DTOs
+                if messages:
+                    message_dtos = [to_search_message_dto(msg) for msg in messages]
+                    search_dto.messages = message_dtos
                 
                 return search_dto
             else:
-                # Convert to DTO using the conversion function for ORM objects
-                return to_search_dto(db_search)
+                # Convert search and its messages to DTOs
+                search_dto = to_search_dto(db_search)
+                if db_search.messages:
+                    search_dto.messages = [to_search_message_dto(msg) for msg in db_search.messages]
+                return search_dto
+                
         except Exception as e:
-            error_message = str(e).lower()
-            await self.db_session.rollback()
-            
-            # Handle pgBouncer prepared statement errors
-            if ("prepared statement" in error_message or 
-                "duplicatepreparedstatementerror" in error_message or 
-                "invalidsqlstatementnameerror" in error_message):
-                logger.warning(f"pgBouncer prepared statement error encountered: {str(e)}")
-                try:
-                    # Try to create a fresh session and retry
-                    from sqlalchemy.ext.asyncio import AsyncSession
-                    from core.database import async_engine
-                    
-                    logger.info("Creating fresh session to retry operation after pgBouncer error")
-                    async with AsyncSession(async_engine) as fresh_session:
-                        # Create a new instance with the fresh session
-                        fresh_ops = ResearchOperations(fresh_session)
-                        # Retry the operation
-                        return await fresh_ops.get_search_by_id(search_id)
-                except Exception as retry_error:
-                    logger.error(f"Error in retry attempt after pgBouncer error: {str(retry_error)}")
-                    return {"error": f"Database error: {str(retry_error)}"}
-            
             logger.error(f"Error retrieving search: {str(e)}")
-            return {"error": str(e)}
+            return {"error": str(e), "user_id": None}
 
     async def list_searches(
         self,

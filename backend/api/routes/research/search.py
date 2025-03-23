@@ -344,15 +344,20 @@ async def get_search(
     
     Retrieves the full details of a search, including all messages in the conversation.
     """
-    search_dto = await operations.get_search_by_id(search_id)
-    if not search_dto:
-        raise HTTPException(status_code=404, detail="Search not found")
-    
-    # Verify ownership or permissions
-    if str(search_dto.user_id) != str(current_user.id) and "admin" not in user_permissions:
-        raise HTTPException(status_code=403, detail="Not authorized to access this search")
-    
-    return search_dto_to_response(search_dto)
+    try:
+        search_dto = await operations.get_search_by_id(search_id)
+        if not search_dto:
+            raise HTTPException(status_code=404, detail="Search not found")
+        
+        # Verify ownership or permissions
+        if str(search_dto.user_id) != str(current_user.id) and "admin" not in user_permissions:
+            raise HTTPException(status_code=403, detail="Not authorized to access this search")
+        
+        # Convert DTO to API response model
+        return search_dto_to_response(search_dto)
+    except Exception as e:
+        logger.error(f"Error in get_search: {str(e)}")
+        raise HTTPException(status_code=500, detail="An unexpected error occurred")
 
 @router.get("/{search_id}/messages", response_model=SearchMessageListResponse)
 async def get_search_messages(
