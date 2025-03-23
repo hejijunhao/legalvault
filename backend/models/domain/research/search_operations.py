@@ -339,7 +339,8 @@ class ResearchOperations:
         offset: int = 0,
         limit: int = 20,
         sort_by: str = "created_at",
-        sort_order: str = "desc"
+        sort_order: str = "desc",
+        execution_options: Optional[Dict[str, Any]] = None
     ) -> Union[SearchListDTO, Dict[str, Any]]:
         """
         List searches with pagination and filtering.
@@ -351,6 +352,7 @@ class ResearchOperations:
             limit: Maximum items to return
             sort_by: Field to sort by
             sort_order: Sort direction ('asc' or 'desc')
+            execution_options: Optional execution options for pgBouncer compatibility
             
         Returns:
             SearchListDTO with paginated results, or error dict on failure
@@ -386,8 +388,16 @@ class ResearchOperations:
             query = query.offset(offset).limit(limit)
             
             # Execute queries
-            result = await self._execute_query(query)
-            count_result = await self._execute_query(count_query)
+            if execution_options:
+                result = await self.db_session.execute(
+                    query.execution_options(**execution_options)
+                )
+                count_result = await self.db_session.execute(
+                    count_query.execution_options(**execution_options)
+                )
+            else:
+                result = await self._execute_query(query)
+                count_result = await self._execute_query(count_query)
             
             searches = result.scalars().all()
             total_count = count_result.scalar()
@@ -428,7 +438,7 @@ class ResearchOperations:
                         fresh_ops = ResearchOperations(fresh_session)
                         # Retry the operation
                         return await fresh_ops.list_searches(
-                            user_id, enterprise_id, offset, limit, sort_by, sort_order
+                            user_id, enterprise_id, offset, limit, sort_by, sort_order, execution_options
                         )
                 except Exception as retry_error:
                     logger.error(f"Error in retry attempt after pgBouncer error: {str(retry_error)}")
@@ -437,20 +447,29 @@ class ResearchOperations:
             logger.error(f"Error listing searches: {str(e)}")
             return {"error": str(e)}
 
-    async def update_search_metadata(self, search_id: UUID, updates: SearchUpdateDTO) -> Union[SearchDTO, Dict[str, Any]]:
+    async def update_search_metadata(self, search_id: UUID, updates: SearchUpdateDTO, execution_options: Optional[Dict[str, Any]] = None) -> Union[SearchDTO, Dict[str, Any]]:
         """
         Update search metadata like title, description, tags, etc.
         
         Args:
             search_id: UUID of the search to update
             updates: SearchUpdateDTO with fields to update
+            execution_options: Optional execution options for pgBouncer compatibility
             
         Returns:
             Updated SearchDTO if successful, error dict otherwise
         """
         try:
             query = select(PublicSearch).where(PublicSearch.id == search_id)
-            result = await self._execute_query(query)
+            
+            # Use provided execution_options if given, otherwise use default
+            if execution_options:
+                result = await self.db_session.execute(
+                    query.execution_options(**execution_options)
+                )
+            else:
+                result = await self._execute_query(query)
+                
             db_search = result.scalars().first()
             
             if not db_search:
@@ -500,7 +519,7 @@ class ResearchOperations:
                         # Create a new instance with the fresh session
                         fresh_ops = ResearchOperations(fresh_session)
                         # Retry the operation
-                        return await fresh_ops.update_search_metadata(search_id, updates)
+                        return await fresh_ops.update_search_metadata(search_id, updates, execution_options)
                 except Exception as retry_error:
                     logger.error(f"Error in retry attempt after pgBouncer error: {str(retry_error)}")
                     return {"error": f"Database error: {str(retry_error)}"}
@@ -508,12 +527,13 @@ class ResearchOperations:
             logger.error(f"Error updating search metadata: {str(e)}")
             return {"error": str(e)}
 
-    async def delete_search(self, search_id: UUID) -> Union[bool, Dict[str, Any]]:
+    async def delete_search(self, search_id: UUID, execution_options: Optional[Dict[str, Any]] = None) -> Union[bool, Dict[str, Any]]:
         """
         Delete a search and all its messages.
         
         Args:
             search_id: UUID of the search to delete
+            execution_options: Optional execution options for pgBouncer compatibility
             
         Returns:
             True if successful, error dict otherwise
@@ -521,18 +541,40 @@ class ResearchOperations:
         try:
             # First check if the search exists
             check_query = select(PublicSearch).where(PublicSearch.id == search_id)
-            check_result = await self._execute_query(check_query)
+            
+            # Use provided execution_options if given, otherwise use default
+            if execution_options:
+                check_result = await self.db_session.execute(
+                    check_query.execution_options(**execution_options)
+                )
+            else:
+                check_result = await self._execute_query(check_query)
+                
             if not check_result.scalars().first():
                 logger.error(f"Search with ID {search_id} not found")
                 return {"error": f"Search with ID {search_id} not found"}
             
             # Delete messages first (cascade would handle this, but being explicit)
             msg_delete = delete(PublicSearchMessage).where(PublicSearchMessage.search_id == search_id)
-            await self._execute_query(msg_delete)
+            
+            # Use provided execution_options if given, otherwise use default
+            if execution_options:
+                await self.db_session.execute(
+                    msg_delete.execution_options(**execution_options)
+                )
+            else:
+                await self._execute_query(msg_delete)
             
             # Delete the search
             search_delete = delete(PublicSearch).where(PublicSearch.id == search_id)
-            result = await self._execute_query(search_delete)
+            
+            # Use provided execution_options if given, otherwise use default
+            if execution_options:
+                result = await self.db_session.execute(
+                    search_delete.execution_options(**execution_options)
+                )
+            else:
+                result = await self._execute_query(search_delete)
             
             await self.db_session.commit()
             return True
@@ -555,7 +597,7 @@ class ResearchOperations:
                         # Create a new instance with the fresh session
                         fresh_ops = ResearchOperations(fresh_session)
                         # Retry the operation
-                        return await fresh_ops.delete_search(search_id)
+                        return await fresh_ops.delete_search(search_id, execution_options)
                 except Exception as retry_error:
                     logger.error(f"Error in retry attempt after pgBouncer error: {str(retry_error)}")
                     return {"error": f"Database error: {str(retry_error)}"}

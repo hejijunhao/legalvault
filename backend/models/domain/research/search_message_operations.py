@@ -229,12 +229,20 @@ class SearchMessageOperations:
         await self.db.commit()
         return result.rowcount > 0
 
-    async def list_messages_by_search(self, search_id: UUID, limit: int = 100, offset: int = 0) -> SearchMessageListDTO:
+    async def list_messages_by_search(self, search_id: UUID, limit: int = 100, offset: int = 0, execution_options: Optional[Dict[str, Any]] = None) -> SearchMessageListDTO:
         """List all messages for a given search with pagination."""
         # Query for messages
         query = select(PublicSearchMessage).where(PublicSearchMessage.search_id == search_id)\
             .order_by(PublicSearchMessage.sequence).offset(offset).limit(limit)
-        result = await self._execute_query(query)
+        
+        # Use provided execution_options if given, otherwise use default
+        if execution_options:
+            result = await self.db.execute(
+                query.execution_options(**execution_options)
+            )
+        else:
+            result = await self._execute_query(query)
+            
         messages = result.scalars().all()
         
         # Convert messages to DTOs, handling both tuple and ORM cases
@@ -253,7 +261,15 @@ class SearchMessageOperations:
         count_query = select(func.count()).select_from(PublicSearchMessage).where(
             PublicSearchMessage.search_id == search_id
         )
-        count_result = await self._execute_query(count_query)
+        
+        # Use provided execution_options for count query as well
+        if execution_options:
+            count_result = await self.db.execute(
+                count_query.execution_options(**execution_options)
+            )
+        else:
+            count_result = await self._execute_query(count_query)
+            
         total_count = count_result.scalar() or 0
         
         # Return custom DTO with our processed items
@@ -341,3 +357,28 @@ class SearchMessageOperations:
                     raise retry_error
             
             raise e
+
+    async def get_messages_list_response(self, search_id: UUID, limit: int = 100, offset: int = 0, execution_options: Optional[Dict[str, Any]] = None) -> SearchMessageListDTO:
+        """
+        Get a paginated list of messages for a search with proper response formatting.
+        
+        This is a wrapper around list_messages_by_search that ensures proper formatting
+        for API responses and handles pgBouncer compatibility options.
+        """
+        # Call the underlying list_messages_by_search method with execution options
+        messages_list = await self.list_messages_by_search(
+            search_id=search_id,
+            limit=limit,
+            offset=offset,
+            execution_options=execution_options or self.execution_options
+        )
+        
+        # Ensure the response has the correct format for the API
+        if not hasattr(messages_list, 'offset'):
+            messages_list.offset = offset
+        if not hasattr(messages_list, 'limit'):
+            messages_list.limit = limit
+            
+        return messages_list
+
+

@@ -45,7 +45,10 @@ async def get_message(
     
     # Verify user has access to the search this message belongs to
     search_ops = ResearchOperations(db)
-    search = await search_ops.get_search_by_id(message.search_id)
+    search = await search_ops.get_search_by_id(
+        message.search_id,
+        execution_options={"no_parameters": True, "use_server_side_cursors": False}
+    )
     
     if not search or (str(search.user_id) != str(current_user.id) and "admin" not in user_permissions):
         raise HTTPException(status_code=403, detail="Not authorized to access this message")
@@ -69,14 +72,22 @@ async def list_messages(
     """
     # Verify user has access to the search
     search_ops = ResearchOperations(db)
-    search = await search_ops.get_search_by_id(search_id)
+    search = await search_ops.get_search_by_id(
+        search_id,
+        execution_options={"no_parameters": True, "use_server_side_cursors": False}
+    )
     
     if not search or (str(search.user_id) != str(current_user.id) and "admin" not in user_permissions):
         raise HTTPException(status_code=403, detail="Not authorized to access this search")
     
     # Get messages with pagination
     message_ops = SearchMessageOperations(db)
-    return await message_ops.get_messages_list_response(search_id, limit, offset)
+    return await message_ops.get_messages_list_response(
+        search_id, 
+        limit, 
+        offset,
+        execution_options={"no_parameters": True, "use_server_side_cursors": False}
+    )
 
 
 @router.patch("/{message_id}", response_model=SearchMessageResponse)
@@ -101,7 +112,10 @@ async def update_message(
     
     # Verify user has access to the search this message belongs to
     search_ops = ResearchOperations(db)
-    search = await search_ops.get_search_by_id(message.search_id)
+    search = await search_ops.get_search_by_id(
+        message.search_id,
+        execution_options={"no_parameters": True, "use_server_side_cursors": False}
+    )
     
     if not search or str(search.user_id) != str(current_user.id):
         raise HTTPException(status_code=403, detail="Not authorized to update this message")
@@ -182,7 +196,10 @@ async def forward_message(
     
     # Verify user has access to the search this message belongs to
     search_ops = ResearchOperations(db)
-    search = await search_ops.get_search_by_id(message.search_id)
+    search = await search_ops.get_search_by_id(
+        message.search_id,
+        execution_options={"no_parameters": True, "use_server_side_cursors": False}
+    )
     
     if not search or str(search.user_id) != str(current_user.id):
         raise HTTPException(status_code=403, detail="Not authorized to forward this message")
@@ -242,12 +259,20 @@ async def websocket_endpoint(
             token_data = await user_ops.decode_token(token)
             if not token_data:
                 print("WebSocket authentication failed: Invalid token")
+                await websocket.send_json({
+                    "type": "error",
+                    "message": "Authentication failed: Invalid or expired token"
+                })
                 await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                 return
             user_id = token_data.user_id
             print(f"WebSocket authenticated for user {user_id}")
         except Exception as e:
             print(f"WebSocket authentication error: {str(e)}")
+            await websocket.send_json({
+                "type": "error",
+                "message": "Authentication error"
+            })
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
             return
         
@@ -260,14 +285,33 @@ async def websocket_endpoint(
                 execution_options={"no_parameters": True, "use_server_side_cursors": False}
             )
             
+            # Check if search is an error dictionary
+            if isinstance(search, dict) and "error" in search:
+                print(f"WebSocket error: {search['error']}")
+                await websocket.send_json({
+                    "type": "error",
+                    "message": f"Search error: {search['error']}"
+                })
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                return
+            
+            # Now we know search is a SearchDTO object, check user access
             if not search or str(search.user_id) != str(user_id):
                 print(f"WebSocket access denied: User {user_id} does not have access to search {search_id}")
+                await websocket.send_json({
+                    "type": "error",
+                    "message": "Access denied: You do not have permission to access this search"
+                })
                 await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                 return
             
             print(f"WebSocket access granted: User {user_id} has access to search {search_id}")
         except Exception as e:
             print(f"WebSocket error verifying search access: {e}")
+            await websocket.send_json({
+                "type": "error",
+                "message": "Failed to verify search access"
+            })
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
             return
         
@@ -338,18 +382,63 @@ async def websocket_endpoint(
                             )
                             
                             # Convert to dict for JSON serialization
-                            messages_data = [m.model_dump() for m in messages]
+                            messages_data = [m.model_dump() for m in messages.items]
                             
                             await websocket.send_json({
                                 "type": "messages",
-                                "data": messages_data
+                                "data": messages_data,
+                                "total": messages.total,
+                                "offset": messages.offset,
+                                "limit": messages.limit
                             })
                         except Exception as e:
+                            error_message = str(e).lower()
                             print(f"Error fetching latest messages: {e}")
-                            await websocket.send_json({
-                                "type": "error",
-                                "message": "Failed to fetch latest messages"
-                            })
+                            
+                            # Handle pgBouncer prepared statement errors
+                            if ("prepared statement" in error_message or 
+                                "duplicatepreparedstatementerror" in error_message or 
+                                "invalidsqlstatementnameerror" in error_message):
+                                print(f"pgBouncer prepared statement error encountered: {str(e)}")
+                                try:
+                                    # Try to create a fresh session and retry
+                                    from sqlalchemy.ext.asyncio import AsyncSession
+                                    from core.database import async_engine
+                                    
+                                    print("Creating fresh session to retry operation after pgBouncer error")
+                                    async with AsyncSession(async_engine) as fresh_db:
+                                        # Create a new instance with the fresh session
+                                        fresh_ops = SearchMessageOperations(fresh_db)
+                                        # Retry the operation with explicit execution options
+                                        messages = await fresh_ops.list_messages_by_search(
+                                            search_id=search_id,
+                                            limit=data.get("limit", 10),
+                                            offset=data.get("offset", 0),
+                                            execution_options={"no_parameters": True, "use_server_side_cursors": False}
+                                        )
+                                        
+                                        # Convert to dict for JSON serialization
+                                        messages_data = [m.model_dump() for m in messages.items]
+                                        
+                                        await websocket.send_json({
+                                            "type": "messages",
+                                            "data": messages_data,
+                                            "total": messages.total,
+                                            "offset": messages.offset,
+                                            "limit": messages.limit
+                                        })
+                                        continue  # Skip the error response
+                                except Exception as retry_error:
+                                    print(f"Error in retry attempt after pgBouncer error: {str(retry_error)}")
+                                    await websocket.send_json({
+                                        "type": "error",
+                                        "message": "Database connection error. Please try again."
+                                    })
+                            else:
+                                await websocket.send_json({
+                                    "type": "error",
+                                    "message": "Failed to fetch latest messages"
+                                })
                     
                     elif command == "typing":
                         # Client is typing - could broadcast to other connected clients
@@ -386,6 +475,10 @@ async def websocket_endpoint(
         except Exception as e:
             # Log the error
             print(f"WebSocket error for search {search_id}: {str(e)}")
+            await websocket.send_json({
+                "type": "error",
+                "message": "Internal server error"
+            })
             await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
         finally:
             # Cancel the heartbeat task if it's still running
@@ -399,6 +492,10 @@ async def websocket_endpoint(
         print(f"Unexpected WebSocket error: {str(e)}")
         # Try to close the connection if possible
         try:
+            await websocket.send_json({
+                "type": "error",
+                "message": "Internal server error"
+            })
             await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
         except Exception:
             pass

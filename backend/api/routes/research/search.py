@@ -27,7 +27,13 @@ from models.schemas.research.search import (
     SearchUpdate,
     SearchMessageResponse
 )
-from models.schemas.research.search_message import SearchMessageListResponse
+from models.schemas.research.search_message import (
+    SearchMessageListResponse, 
+    SearchMessageCreate, 
+    SearchMessageUpdate,
+    SearchMessageResponse,
+    SearchMessageForwardRequest
+)
 from models.domain.research.search_message_operations import SearchMessageOperations
 
 # Import DTOs
@@ -347,7 +353,11 @@ async def get_search(
     Retrieves the full details of a search, including all messages in the conversation.
     """
     try:
-        search_result = await operations.get_search_by_id(search_id)
+        # Add execution_options for pgBouncer compatibility
+        search_result = await operations.get_search_by_id(
+            search_id,
+            execution_options={"no_parameters": True, "use_server_side_cursors": False}
+        )
         
         # Check if we got an error dictionary instead of SearchDTO
         if isinstance(search_result, dict) and "error" in search_result:
@@ -401,14 +411,22 @@ async def get_search_messages(
     """
     # Verify user has access to the search
     search_ops = ResearchOperations(operations.db_session)
-    search_dto = await search_ops.get_search_by_id(search_id)
+    search_dto = await search_ops.get_search_by_id(
+        search_id,
+        execution_options={"no_parameters": True, "use_server_side_cursors": False}
+    )
     
     if not search_dto or (str(search_dto.user_id) != str(current_user.id) and "admin" not in user_permissions):
         raise HTTPException(status_code=403, detail="Not authorized to access this search")
     
     # Get messages with pagination
     message_ops = SearchMessageOperations(operations.db_session)
-    message_list_dto = await message_ops.list_messages_by_search(search_id, limit, offset)
+    message_list_dto = await message_ops.list_messages_by_search(
+        search_id, 
+        limit, 
+        offset,
+        execution_options={"no_parameters": True, "use_server_side_cursors": False}
+    )
     
     # Convert DTO to API response model
     return search_message_list_dto_to_response(message_list_dto)
@@ -458,7 +476,10 @@ async def update_search(
     Updates the title, description, featured status, tags, category, and type of a search.
     """
     # Verify ownership of search
-    search_dto = await operations.get_search_by_id(search_id)
+    search_dto = await operations.get_search_by_id(
+        search_id,
+        execution_options={"no_parameters": True, "use_server_side_cursors": False}
+    )
     if not search_dto or str(search_dto.user_id) != str(current_user.id):
         raise HTTPException(status_code=404, detail="Search not found")
     
@@ -469,7 +490,8 @@ async def update_search(
     # Update search
     updated_search_dto = await operations.update_search_metadata(
         search_id=search_id,
-        updates=update_dto
+        updates=update_dto,
+        execution_options={"no_parameters": True, "use_server_side_cursors": False}
     )
     
     if not updated_search_dto:
@@ -491,7 +513,10 @@ async def delete_search(
     Permanently removes a search and all its messages.
     """
     # Verify ownership of search
-    search_dto = await operations.get_search_by_id(search_id)
+    search_dto = await operations.get_search_by_id(
+        search_id,
+        execution_options={"no_parameters": True, "use_server_side_cursors": False}
+    )
     if not search_dto:
         raise HTTPException(status_code=404, detail="Search not found")
     
@@ -500,9 +525,184 @@ async def delete_search(
         raise HTTPException(status_code=403, detail="Not authorized to delete this search")
     
     # Delete search
-    success = await operations.delete_search(search_id)
+    success = await operations.delete_search(
+        search_id,
+        execution_options={"no_parameters": True, "use_server_side_cursors": False}
+    )
     if not success:
         raise HTTPException(status_code=500, detail="Failed to delete search")
+
+@router.post("/{search_id}/messages", response_model=SearchMessageResponse)
+async def create_search_message(
+    search_id: UUID,
+    message: SearchMessageCreate,
+    current_user: User = Depends(get_current_user),
+    user_permissions: List[str] = Depends(get_user_permissions),
+    operations: ResearchOperations = Depends(get_research_operations)
+):
+    """
+    Create a new message for a search.
+    
+    This endpoint allows adding messages to an existing search conversation.
+    """
+    # Verify user has access to the search
+    search_dto = await operations.get_search_by_id(
+        search_id,
+        execution_options={"no_parameters": True, "use_server_side_cursors": False}
+    )
+    
+    if not search_dto or (str(search_dto.user_id) != str(current_user.id) and "admin" not in user_permissions):
+        raise HTTPException(status_code=403, detail="Not authorized to access this search")
+    
+    # Create message
+    message_ops = SearchMessageOperations(operations.db_session)
+    
+    # Create DTO from API model
+    message_dto = SearchMessageCreateDTO(
+        search_id=search_id,
+        role=message.role,
+        content=message.content,
+        sequence=message.sequence if hasattr(message, 'sequence') else None,
+        status=message.status if hasattr(message, 'status') else QueryStatus.PENDING
+    )
+    
+    # Create the message
+    created_message = await message_ops.create_message_with_commit(message_dto, execution_options={"no_parameters": True, "use_server_side_cursors": False})
+    
+    if not created_message:
+        raise HTTPException(status_code=500, detail="Failed to create message")
+    
+    # Return the created message
+    return search_message_dto_to_response(created_message)
+
+@router.get("/{search_id}/messages/{message_id}", response_model=SearchMessageResponse)
+async def get_search_message(
+    search_id: UUID,
+    message_id: UUID,
+    current_user: User = Depends(get_current_user),
+    user_permissions: List[str] = Depends(get_user_permissions),
+    operations: ResearchOperations = Depends(get_research_operations)
+):
+    """
+    Get a specific message from a search.
+    
+    This endpoint retrieves a single message by its ID within a search context.
+    """
+    # Verify user has access to the search
+    search_dto = await operations.get_search_by_id(
+        search_id,
+        execution_options={"no_parameters": True, "use_server_side_cursors": False}
+    )
+    
+    if not search_dto or (str(search_dto.user_id) != str(current_user.id) and "admin" not in user_permissions):
+        raise HTTPException(status_code=403, detail="Not authorized to access this search")
+    
+    # Get the message
+    message_ops = SearchMessageOperations(operations.db_session)
+    message_dto = await message_ops.get_message_by_id(
+        message_id,
+        execution_options={"no_parameters": True, "use_server_side_cursors": False}
+    )
+    
+    if not message_dto or str(message_dto.search_id) != str(search_id):
+        raise HTTPException(status_code=404, detail="Message not found")
+    
+    # Return the message
+    return search_message_dto_to_response(message_dto)
+
+@router.patch("/{search_id}/messages/{message_id}", response_model=SearchMessageResponse)
+async def update_search_message(
+    search_id: UUID,
+    message_id: UUID,
+    message_update: SearchMessageUpdate,
+    current_user: User = Depends(get_current_user),
+    user_permissions: List[str] = Depends(get_user_permissions),
+    operations: ResearchOperations = Depends(get_research_operations)
+):
+    """
+    Update a message in a search.
+    
+    This endpoint allows updating the content or status of a message.
+    """
+    # Verify user has access to the search
+    search_dto = await operations.get_search_by_id(
+        search_id,
+        execution_options={"no_parameters": True, "use_server_side_cursors": False}
+    )
+    
+    if not search_dto or (str(search_dto.user_id) != str(current_user.id) and "admin" not in user_permissions):
+        raise HTTPException(status_code=403, detail="Not authorized to access this search")
+    
+    # Get the message to verify it belongs to this search
+    message_ops = SearchMessageOperations(operations.db_session)
+    message_dto = await message_ops.get_message_by_id(
+        message_id,
+        execution_options={"no_parameters": True, "use_server_side_cursors": False}
+    )
+    
+    if not message_dto or str(message_dto.search_id) != str(search_id):
+        raise HTTPException(status_code=404, detail="Message not found")
+    
+    # Update the message
+    update_data = message_update.model_dump(exclude_unset=True)
+    
+    # Create update DTO
+    update_dto = SearchMessageUpdateDTO(**update_data)
+    
+    updated_message = await message_ops.update_message(
+        message_id, 
+        update_dto,
+        execution_options={"no_parameters": True, "use_server_side_cursors": False}
+    )
+    
+    if not updated_message:
+        raise HTTPException(status_code=500, detail="Failed to update message")
+    
+    # Return the updated message
+    return search_message_dto_to_response(updated_message)
+
+@router.delete("/{search_id}/messages/{message_id}")
+async def delete_search_message(
+    search_id: UUID,
+    message_id: UUID,
+    current_user: User = Depends(get_current_user),
+    user_permissions: List[str] = Depends(get_user_permissions),
+    operations: ResearchOperations = Depends(get_research_operations)
+):
+    """
+    Delete a message from a search.
+    
+    This endpoint permanently removes a message from a search conversation.
+    """
+    # Verify user has access to the search
+    search_dto = await operations.get_search_by_id(
+        search_id,
+        execution_options={"no_parameters": True, "use_server_side_cursors": False}
+    )
+    
+    if not search_dto or (str(search_dto.user_id) != str(current_user.id) and "admin" not in user_permissions):
+        raise HTTPException(status_code=403, detail="Not authorized to access this search")
+    
+    # Get the message to verify it belongs to this search
+    message_ops = SearchMessageOperations(operations.db_session)
+    message_dto = await message_ops.get_message_by_id(
+        message_id,
+        execution_options={"no_parameters": True, "use_server_side_cursors": False}
+    )
+    
+    if not message_dto or str(message_dto.search_id) != str(search_id):
+        raise HTTPException(status_code=404, detail="Message not found")
+    
+    # Delete the message
+    success = await message_ops.delete_message(
+        message_id,
+        execution_options={"no_parameters": True, "use_server_side_cursors": False}
+    )
+    
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to delete message")
+    
+    return {"message": "Message deleted successfully"}
 
 # Helper function to get user's enterprise ID
 async def get_user_enterprise(current_user: User, db: AsyncSession) -> Optional[UUID]:
