@@ -4,6 +4,7 @@ from typing import List, Optional, Union
 from uuid import UUID, uuid4
 from fastapi import APIRouter, Depends, HTTPException, Query
 import logging
+from datetime import datetime
 
 # Get logger for this module
 logger = logging.getLogger(__name__)
@@ -24,7 +25,6 @@ from models.schemas.research.search import (
     SearchResponse,
     SearchListResponse,
     SearchUpdate,
-    QueryStatus,
     SearchMessageResponse
 )
 from models.schemas.research.search_message import SearchMessageListResponse
@@ -32,7 +32,7 @@ from models.domain.research.search_message_operations import SearchMessageOperat
 
 # Import DTOs
 from models.dtos.research.search_dto import (
-    SearchDTO, SearchListDTO, SearchStatusDTO, SearchCreateDTO, SearchUpdateDTO
+    SearchDTO, SearchListDTO, SearchCreateDTO, SearchUpdateDTO
 )
 from models.dtos.research.search_message_dto import (
     SearchMessageDTO, SearchMessageListDTO
@@ -41,7 +41,7 @@ from models.dtos.research.search_message_dto import (
 # Import custom exceptions
 from services.workflow.research.search_workflow import (
     SearchWorkflowError, QueryValidationError, QueryClarificationError,
-    IrrelevantQueryError, APIError, PersistenceError
+    IrrelevantQueryError, PersistenceError
 )
 
 router = APIRouter(
@@ -61,11 +61,50 @@ def get_search_workflow(operations: ResearchOperations = Depends(get_research_op
     return ResearchSearchWorkflow(llm_service, operations)
 
 # Conversion functions for DTOs to API response models
-def search_dto_to_response(search_dto: SearchDTO) -> SearchResponse:
+def search_dto_to_response(search_dto: Union[SearchDTO, tuple]) -> SearchResponse:
     """Convert SearchDTO to SearchResponse for API layer."""
+    # Handle case where search_dto is a tuple (from raw SQL queries with pgBouncer)
+    if isinstance(search_dto, tuple):
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.debug(f"Received tuple in search_dto_to_response with length {len(search_dto)}")
+        
+        # Extract data from tuple with safe fallbacks
+        # This assumes the tuple structure matches the database query columns
+        try:
+            search_response = SearchResponse(
+                id=search_dto[0] if len(search_dto) > 0 else None,
+                title=search_dto[1] if len(search_dto) > 1 else "",
+                description=search_dto[2] if len(search_dto) > 2 else None,
+                user_id=search_dto[3] if len(search_dto) > 3 else None,
+                enterprise_id=search_dto[4] if len(search_dto) > 4 else None,
+                search_params=search_dto[6] if len(search_dto) > 6 else {},
+                created_at=search_dto[7] if len(search_dto) > 7 else datetime.now(),
+                updated_at=search_dto[8] if len(search_dto) > 8 else datetime.now(),
+                messages=[],
+                category=getattr(search_dto, 'category', None),
+                query_type=getattr(search_dto, 'query_type', None)
+            )
+            return search_response
+        except Exception as e:
+            logger.error(f"Error converting tuple to SearchResponse: {str(e)}")
+            logger.debug(f"Tuple structure: {search_dto}")
+            # Return a minimal valid response rather than failing
+            return SearchResponse(
+                id=None,
+                title="Error retrieving search data",
+                description=None,
+                user_id=None,
+                enterprise_id=None,
+                search_params=search_dto[6] if len(search_dto) > 6 else {},
+                created_at=datetime.now(),
+                updated_at=datetime.now(),
+                messages=[]
+            )
+    
     # Convert messages to SearchMessageResponse objects
     messages = []
-    if search_dto.messages:
+    if hasattr(search_dto, 'messages') and search_dto.messages:
         messages = [
             SearchMessageResponse(
                 role=msg.role,
@@ -88,54 +127,94 @@ def search_dto_to_response(search_dto: SearchDTO) -> SearchResponse:
         created_at=search_dto.created_at,
         updated_at=search_dto.updated_at,
         messages=messages,
-        status=search_dto.status,
-        category=search_dto.category,
-        query_type=search_dto.query_type
+        category=getattr(search_dto, 'category', None),
+        query_type=getattr(search_dto, 'query_type', None)
     )
 
-def search_list_dto_to_response(search_list_dto: SearchListDTO) -> SearchListResponse:
+def search_list_dto_to_response(search_list_dto: Union[SearchListDTO, tuple]) -> SearchListResponse:
     """Convert SearchListDTO to SearchListResponse for API layer."""
-    # Handle items whether it's a method or a property
-    if callable(getattr(search_list_dto, 'items', None)):
-        items_data = search_list_dto.items()
+    # Handle case where search_list_dto is a tuple
+    if isinstance(search_list_dto, tuple):
+        logger.debug(f"Received tuple in search_list_dto_to_response: {search_list_dto}")
+        # Assuming tuple structure: (items, total, offset, limit)
+        items_data = search_list_dto[0] if len(search_list_dto) > 0 else []
+        total = search_list_dto[1] if len(search_list_dto) > 1 else 0
+        offset = search_list_dto[2] if len(search_list_dto) > 2 else 0
+        limit = search_list_dto[3] if len(search_list_dto) > 3 else 20
     else:
-        items_data = search_list_dto.items
+        # Handle items whether it's a method or a property
+        if callable(getattr(search_list_dto, 'items', None)):
+            items_data = search_list_dto.items()
+        else:
+            items_data = search_list_dto.items
         
+        total = getattr(search_list_dto, 'total', 0)
+        offset = getattr(search_list_dto, 'offset', 0)
+        limit = getattr(search_list_dto, 'limit', 20)
+    
+    # Convert each item in items_data to a SearchResponse
     items = [search_dto_to_response(search_dto) for search_dto in items_data]
+    
     return SearchListResponse(
         items=items,
-        total=search_list_dto.total,
-        offset=search_list_dto.offset,
-        limit=search_list_dto.limit
+        total=total,
+        offset=offset,
+        limit=limit
     )
 
-def search_message_list_dto_to_response(message_list_dto: SearchMessageListDTO) -> SearchMessageListResponse:
+def search_message_list_dto_to_response(message_list_dto: Union[SearchMessageListDTO, tuple]) -> SearchMessageListResponse:
     """Convert SearchMessageListDTO to SearchMessageListResponse for API layer."""
-    items = []
-    
-    # Handle items whether it's a method or a property
-    if callable(getattr(message_list_dto, 'items', None)):
-        items_data = message_list_dto.items()
+    # Handle case where message_list_dto is a tuple
+    if isinstance(message_list_dto, tuple):
+        logger.debug(f"Received tuple in search_message_list_dto_to_response: {message_list_dto}")
+        # Assuming tuple structure: (items, total, offset, limit)
+        items_data = message_list_dto[0] if len(message_list_dto) > 0 else []
+        total = message_list_dto[1] if len(message_list_dto) > 1 else 0
+        offset = message_list_dto[2] if len(message_list_dto) > 2 else 0
+        limit = message_list_dto[3] if len(message_list_dto) > 3 else 20
     else:
-        items_data = message_list_dto.items
-        
+        # Handle items whether it's a method or a property
+        if callable(getattr(message_list_dto, 'items', None)):
+            items_data = message_list_dto.items()
+        else:
+            items_data = message_list_dto.items
+            
+        total = getattr(message_list_dto, 'total', 0)
+        offset = getattr(message_list_dto, 'offset', 0)
+        limit = getattr(message_list_dto, 'limit', 20)
+    
+    items = []
     for msg_dto in items_data:
-        items.append(SearchMessageResponse(
-            id=msg_dto.id,
-            search_id=msg_dto.search_id,
-            search_title=msg_dto.search_title,
-            role=msg_dto.role,
-            content=msg_dto.content,
-            sequence=msg_dto.sequence,
-            created_at=msg_dto.created_at,
-            updated_at=msg_dto.updated_at
-        ))
+        # Handle case where msg_dto is a tuple
+        if isinstance(msg_dto, tuple):
+            # Adjust indices based on your actual query structure
+            items.append(SearchMessageResponse(
+                id=msg_dto[0] if len(msg_dto) > 0 else None,
+                search_id=msg_dto[1] if len(msg_dto) > 1 else None,
+                search_title=msg_dto[2] if len(msg_dto) > 2 else None,
+                role=msg_dto[3] if len(msg_dto) > 3 else None,
+                content=msg_dto[4] if len(msg_dto) > 4 else {},
+                sequence=msg_dto[5] if len(msg_dto) > 5 else 0,
+                created_at=msg_dto[6] if len(msg_dto) > 6 else datetime.now(),
+                updated_at=msg_dto[7] if len(msg_dto) > 7 else datetime.now()
+            ))
+        else:
+            items.append(SearchMessageResponse(
+                id=getattr(msg_dto, 'id', None),
+                search_id=getattr(msg_dto, 'search_id', None),
+                search_title=getattr(msg_dto, 'search_title', None),
+                role=getattr(msg_dto, 'role', None),
+                content=getattr(msg_dto, 'content', {}),
+                sequence=getattr(msg_dto, 'sequence', 0),
+                created_at=getattr(msg_dto, 'created_at', datetime.now()),
+                updated_at=getattr(msg_dto, 'updated_at', datetime.now())
+            ))
     
     return SearchMessageListResponse(
         items=items,
-        total=message_list_dto.total,
-        offset=message_list_dto.offset,
-        limit=message_list_dto.limit
+        total=total,
+        offset=offset,
+        limit=limit
     )
 
 @router.post("/", response_model=SearchResponse)
@@ -191,8 +270,6 @@ async def create_search(
         )
     except IrrelevantQueryError as e:
         raise HTTPException(status_code=400, detail=e.message)
-    except APIError as e:
-        raise HTTPException(status_code=e.status_code, detail=e.message)
     except PersistenceError as e:
         raise HTTPException(status_code=500, detail=e.message)
     except SearchWorkflowError as e:
@@ -247,8 +324,6 @@ async def continue_search(
         )
     except IrrelevantQueryError as e:
         raise HTTPException(status_code=400, detail=e.message)
-    except APIError as e:
-        raise HTTPException(status_code=e.status_code, detail=e.message)
     except PersistenceError as e:
         raise HTTPException(status_code=500, detail=e.message)
     except SearchWorkflowError as e:
@@ -310,7 +385,6 @@ async def get_search_messages(
 
 @router.get("/", response_model=SearchListResponse)
 async def list_searches(
-    status: Optional[QueryStatus] = Query(None, description="Filter by search status"),
     limit: int = Query(20, ge=1, le=100, description="Maximum number of results"),
     offset: int = Query(0, ge=0, description="Pagination offset"),
     sort_by: str = Query("created_at", description="Field to sort by (created_at, updated_at, title)"),
@@ -322,8 +396,8 @@ async def list_searches(
     """
     List searches with optional filtering.
     
-    Returns a list of searches created by the current user. Can be filtered by status
-    and sorted by various fields.
+    Returns a list of searches created by the current user.
+    Can be sorted by various fields.
     """
     # Get enterprise_id from user context
     enterprise_id = await get_user_enterprise(current_user, operations.db_session)
@@ -334,8 +408,7 @@ async def list_searches(
         limit=limit,
         offset=offset,
         sort_by=sort_by,
-        sort_order=sort_order,
-        status=status.value if status else None
+        sort_order=sort_order
     )
     
     # Convert DTO to API response model
@@ -352,7 +425,7 @@ async def update_search(
     """
     Update search metadata.
     
-    Updates the title, description, featured status, tags, category, type or status of a search.
+    Updates the title, description, featured status, tags, category, and type of a search.
     """
     # Verify ownership of search
     search_dto = await operations.get_search_by_id(search_id)
@@ -375,7 +448,7 @@ async def update_search(
     # Convert DTO to API response model
     return search_dto_to_response(updated_search_dto)
 
-@router.delete("/{search_id}", status_code=204)
+@router.delete("/{search_id}")
 async def delete_search(
     search_id: UUID,
     current_user: User = Depends(get_current_user),

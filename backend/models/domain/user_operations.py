@@ -311,7 +311,10 @@ class UserOperations:
         query = text("""
             SELECT id, auth_user_id, first_name, last_name, name, role, email, virtual_paralegal_id, enterprise_id, created_at, updated_at
             FROM public.users WHERE id = :user_id
-        """)
+        """).execution_options(
+            no_parameters=True,  # Required for pgBouncer compatibility
+            use_server_side_cursors=False  # Disable server-side cursors
+        )
         result = await self.db.execute(query, {"user_id": user_id})
         user_data = result.fetchone()
 
@@ -348,7 +351,10 @@ class UserOperations:
             query = text("""
                 SELECT id, auth_user_id, first_name, last_name, name, role, email, virtual_paralegal_id, enterprise_id, created_at, updated_at
                 FROM public.users WHERE auth_user_id = :auth_user_id
-            """)
+            """).execution_options(
+                no_parameters=True,  # Required for pgBouncer compatibility
+                use_server_side_cursors=False  # Disable server-side cursors
+            )
             result = await self.db.execute(query, {"auth_user_id": auth_user_id})
             user_data = result.fetchone()
             
@@ -386,7 +392,10 @@ class UserOperations:
         query = text("""
             SELECT id, auth_user_id, first_name, last_name, name, role, email, virtual_paralegal_id, enterprise_id, created_at, updated_at
             FROM public.users WHERE id = :user_id
-        """)
+        """).execution_options(
+            no_parameters=True,  # Required for pgBouncer compatibility
+            use_server_side_cursors=False  # Disable server-side cursors
+        )
         
         try:
             logger.debug(f"Retrieving user profile for user_id: {user_id}")

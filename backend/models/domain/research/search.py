@@ -5,7 +5,7 @@ from uuid import UUID
 import logging
 from datetime import datetime
 
-from models.enums.research_enums import QueryCategory, QueryType, QueryStatus
+from models.enums.research_enums import QueryCategory, QueryType
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,6 @@ class ResearchSearch:
         self.user_id = user_id
         self.enterprise_id = enterprise_id
         self.created_at = datetime.utcnow()
-        self.status = QueryStatus.PENDING  # Default to PENDING until processing completes
         self._validate()
         
     def _validate(self) -> None:
@@ -109,15 +108,6 @@ class ResearchSearch:
         else:
             return QueryType.GENERAL
     
-    def update_status(self, status: QueryStatus) -> None:
-        """
-        Update the status of this search.
-        
-        Args:
-            status: New status value
-        """
-        self.status = status
-        
     def to_dict(self) -> Dict[str, Any]:
         """
         Convert the domain model to a dictionary representation.
@@ -130,6 +120,5 @@ class ResearchSearch:
             "description": self.description,
             "user_id": str(self.user_id) if self.user_id else None,
             "enterprise_id": str(self.enterprise_id) if self.enterprise_id else None,
-            "created_at": self.created_at.isoformat(),
-            "status": self.status.value
+            "created_at": self.created_at.isoformat()
         }

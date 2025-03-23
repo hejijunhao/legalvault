@@ -66,7 +66,7 @@ async def get_current_user(
             print(f"No user found with auth_user_id: {token_data.user_id}")
             raise credentials_exception
             
-        print(f"Found user: {user_row[6]} (ID: {user_row[0]})")  # email and ID
+        print(f"Found user: {user_row[6]} (ID: {user_row[0]})")
         
         # Create a User object from the row data
         user = User(
@@ -105,16 +105,18 @@ async def get_current_user(
                 await fresh_session.execute(test_query)
                 
                 # Create a completely new query with the fresh session
-                fresh_query = text(f"""
+                # Use a parameterized query with execution_options instead of string interpolation
+                fresh_query = text("""
                     SELECT id, auth_user_id, first_name, last_name, name, role, email, virtual_paralegal_id, enterprise_id, created_at, updated_at
-                    FROM public.users WHERE auth_user_id = '{user_id_str}'::UUID
+                    FROM public.users WHERE auth_user_id = :auth_user_id
                 """).execution_options(
                     no_parameters=True,  # Required for pgBouncer compatibility
                     use_server_side_cursors=False  # Disable server-side cursors
                 )
                 
                 # Execute the fresh query
-                result = await fresh_session.execute(fresh_query)
+                # Convert the UUID string back to a UUID object for the parameter
+                result = await fresh_session.execute(fresh_query, {"auth_user_id": UUID(user_id_str)})
                 user_row = result.fetchone()
                 
                 if not user_row:
@@ -141,10 +143,55 @@ async def get_current_user(
                 return user
             except Exception as retry_error:
                 print(f"Retry also failed: {retry_error}")
-                raise HTTPException(
-                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    detail=f"Database connection error: {retry_error}"
-                )
+                # If the retry error is also a prepared statement error, try one more approach
+                if ("prepared statement" in str(retry_error).lower() or 
+                    "duplicatepreparedstatementerror" in str(retry_error).lower() or 
+                    "invalidsqlstatementnameerror" in str(retry_error).lower()):
+                    try:
+                        # Try a final approach with a completely raw query and no parameters at all
+                        final_query = text(f"""
+                            SELECT id, auth_user_id, first_name, last_name, name, role, email, virtual_paralegal_id, enterprise_id, created_at, updated_at
+                            FROM public.users WHERE auth_user_id = '{user_id_str}'::UUID
+                        """).execution_options(
+                            no_parameters=True,
+                            use_server_side_cursors=False
+                        )
+                        result = await fresh_session.execute(final_query)
+                        user_row = result.fetchone()
+                        
+                        if not user_row:
+                            print(f"No user found with auth_user_id: {token_data.user_id}")
+                            raise credentials_exception
+                        
+                        print(f"Final retry successful: Found user: {user_row[6]} (ID: {user_row[0]})")
+                        
+                        # Create a User object from the row data
+                        user = User(
+                            id=user_row[0],
+                            auth_user_id=user_row[1],
+                            first_name=user_row[2],
+                            last_name=user_row[3],
+                            name=user_row[4],
+                            role=user_row[5],
+                            email=user_row[6],
+                            virtual_paralegal_id=user_row[7],
+                            enterprise_id=user_row[8],
+                            created_at=user_row[9],
+                            updated_at=user_row[10]
+                        )
+                        
+                        return user
+                    except Exception as final_error:
+                        print(f"Final retry also failed: {final_error}")
+                        raise HTTPException(
+                            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                            detail=f"Database connection error after multiple retries: {final_error}"
+                        )
+                else:
+                    raise HTTPException(
+                        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                        detail=f"Database connection error: {retry_error}"
+                    )
             finally:
                 # Always close the fresh session
                 await fresh_session.close()

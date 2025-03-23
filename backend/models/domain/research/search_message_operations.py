@@ -21,6 +21,47 @@ class SearchMessageOperations:
     def __init__(self, db_session: AsyncSession):
         self.db = db_session
 
+    def _tuple_to_message_dto(self, message_tuple: tuple) -> SearchMessageDTO:
+        """Convert a database tuple to a SearchMessageDTO
+        
+        This method handles the conversion of raw database tuples to proper DTOs
+        when pgBouncer compatibility settings cause SQLAlchemy to return tuples.
+        
+        The tuple structure is expected to match the columns in the PublicSearchMessage table.
+        """
+        try:
+            # Extract values from tuple with safe fallbacks
+            # Adjust indices based on the actual query column order
+            id_val = message_tuple[0] if len(message_tuple) > 0 else None
+            search_id = message_tuple[1] if len(message_tuple) > 1 else None
+            role = message_tuple[2] if len(message_tuple) > 2 else "assistant"
+            content = message_tuple[3] if len(message_tuple) > 3 else {}
+            sequence = message_tuple[4] if len(message_tuple) > 4 else 0
+            status = message_tuple[5] if len(message_tuple) > 5 else "completed"
+            created_at = message_tuple[6] if len(message_tuple) > 6 else None
+            updated_at = message_tuple[7] if len(message_tuple) > 7 else None
+            
+            # Convert status enum to string if needed
+            if hasattr(status, "value"):
+                status = status.value
+                
+            return SearchMessageDTO(
+                role=role,
+                content=content,
+                sequence=sequence
+            )
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error converting tuple to SearchMessageDTO: {str(e)}")
+            logger.debug(f"Tuple structure: {message_tuple}")
+            # Return a minimal valid DTO rather than failing
+            return SearchMessageDTO(
+                role="system",
+                content={"text": "Error retrieving message data"},
+                sequence=0
+            )
+
     async def get_next_sequence(self, search_id: UUID) -> int:
         """Get the next sequence number for a message in a search."""
         query = select(func.max(PublicSearchMessage.sequence)).where(
@@ -54,9 +95,19 @@ class SearchMessageOperations:
         )
         result = await self.db.execute(query)
         db_message = result.scalars().first()
-        if db_message:
+        
+        if not db_message:
+            return None
+            
+        # Check if we got a tuple instead of an ORM object
+        if isinstance(db_message, tuple):
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info("Received tuple instead of ORM object in get_message_by_id")
+            return self._tuple_to_message_dto(db_message)
+        else:
+            # Convert to DTO using the conversion function for ORM objects
             return to_search_message_dto(db_message)
-        return None
 
     async def update_message(self, message_id: UUID, updates: SearchMessageUpdateDTO) -> Optional[SearchMessageDTO]:
         """Update a message's content or other attributes."""
@@ -69,22 +120,43 @@ class SearchMessageOperations:
         if not db_message:
             return None
             
-        # Convert DTO to dict and update fields
-        updates_dict = updates.dict(exclude_unset=True)
-        if not updates_dict:
-            # No updates provided, return current state
-            return to_search_message_dto(db_message)
-            
-        if "content" in updates_dict:
-            temp_message = ResearchMessage(content=updates_dict["content"], role=db_message.role)
-            db_message.content = temp_message.content
+        # Check if we got a tuple instead of an ORM object
+        if isinstance(db_message, tuple):
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning("Received tuple in update_message, cannot update tuple directly")
+            # We need to re-query to get the actual ORM object for updating
+            try:
+                # Create a new query with different execution options
+                retry_query = select(PublicSearchMessage).where(PublicSearchMessage.id == message_id)
+                retry_result = await self.db.execute(retry_query)
+                db_message = retry_result.scalars().first()
+                if not db_message or isinstance(db_message, tuple):
+                    logger.error("Failed to get ORM object for update operation")
+                    return None
+            except Exception as e:
+                logger.error(f"Error re-querying for ORM object: {str(e)}")
+                return None
         
-        for key, value in updates_dict.items():
-            if key != "content" and hasattr(db_message, key):
-                setattr(db_message, key, value)
-                
-        await self.db.commit()
-        return to_search_message_dto(db_message)
+        # Update the message attributes
+        if hasattr(updates, 'content') and updates.content is not None:
+            db_message.content = updates.content
+        if hasattr(updates, 'role') and updates.role is not None:
+            db_message.role = updates.role
+        if hasattr(updates, 'status') and updates.status is not None:
+            db_message.status = updates.status
+        
+        # Commit the changes
+        try:
+            await self.db.commit()
+            await self.db.refresh(db_message)
+            return to_search_message_dto(db_message)
+        except Exception as e:
+            await self.db.rollback()
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error updating message: {str(e)}")
+            return None
 
     async def update_message_status(self, message_id: UUID, status: QueryStatus) -> Optional[SearchMessageDTO]:
         """Update a message's status."""
@@ -97,9 +169,38 @@ class SearchMessageOperations:
         if not db_message:
             return None
             
+        # Check if we got a tuple instead of an ORM object
+        if isinstance(db_message, tuple):
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning("Received tuple in update_message_status, cannot update tuple directly")
+            # We need to re-query to get the actual ORM object for updating
+            try:
+                # Create a new query with different execution options
+                retry_query = select(PublicSearchMessage).where(PublicSearchMessage.id == message_id)
+                retry_result = await self.db.execute(retry_query)
+                db_message = retry_result.scalars().first()
+                if not db_message or isinstance(db_message, tuple):
+                    logger.error("Failed to get ORM object for update operation")
+                    return None
+            except Exception as e:
+                logger.error(f"Error re-querying for ORM object: {str(e)}")
+                return None
+        
+        # Update the status
         db_message.status = status
-        await self.db.commit()
-        return to_search_message_dto(db_message)
+        
+        # Commit the changes
+        try:
+            await self.db.commit()
+            await self.db.refresh(db_message)
+            return to_search_message_dto(db_message)
+        except Exception as e:
+            await self.db.rollback()
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error updating message status: {str(e)}")
+            return None
 
     async def delete_message(self, message_id: UUID) -> bool:
         """Delete a message from the database."""
@@ -122,6 +223,18 @@ class SearchMessageOperations:
         result = await self.db.execute(query)
         messages = result.scalars().all()
         
+        # Check if we got tuples instead of ORM objects
+        message_dtos = []
+        if messages and len(messages) > 0:
+            if isinstance(messages[0], tuple):
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.info("Received tuples instead of ORM objects in list_messages_by_search")
+                message_dtos = [self._tuple_to_message_dto(message) for message in messages]
+            else:
+                # Normal ORM object conversion
+                message_dtos = [to_search_message_dto(message) for message in messages]
+        
         # Count total messages
         count_query = select(func.count()).select_from(PublicSearchMessage).where(
             PublicSearchMessage.search_id == search_id
@@ -132,8 +245,12 @@ class SearchMessageOperations:
         count_result = await self.db.execute(count_query)
         total_count = count_result.scalar() or 0
         
-        # Convert to DTO
-        return to_search_message_list_dto(messages, total_count, search_id)
+        # Return custom DTO with our processed items
+        return SearchMessageListDTO(
+            items=message_dtos,
+            total=total_count,
+            search_id=search_id
+        )
 
     async def list_messages_by_status(self, status: QueryStatus, limit: int = 100, offset: int = 0) -> List[SearchMessageDTO]:
         """List messages by status with pagination."""
@@ -145,7 +262,19 @@ class SearchMessageOperations:
         result = await self.db.execute(query)
         messages = result.scalars().all()
         
-        return [to_search_message_dto(msg) for msg in messages]
+        # Check if we got tuples instead of ORM objects
+        message_dtos = []
+        if messages and len(messages) > 0:
+            if isinstance(messages[0], tuple):
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.info("Received tuples instead of ORM objects in list_messages_by_status")
+                message_dtos = [self._tuple_to_message_dto(message) for message in messages]
+            else:
+                # Normal ORM object conversion
+                message_dtos = [to_search_message_dto(message) for message in messages]
+        
+        return message_dtos
 
     async def create_message_with_commit(self, message_create_dto: SearchMessageCreateDTO) -> SearchMessageDTO:
         """Create a new message and commit it to the database."""

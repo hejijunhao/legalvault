@@ -19,12 +19,6 @@ class QueryType(str, Enum):
     COMMERCIAL = "commercial"
     GENERAL = "general"
 
-class QueryStatus(str, Enum):
-    COMPLETED = "completed"
-    FAILED = "failed"
-    NEEDS_CLARIFICATION = "needs_clarification"
-    IRRELEVANT = "irrelevant_query"
-
 class SearchBase(BaseModel):
     """Base schema with common search fields"""
     query: str = Field(..., min_length=3, description="Search query text")
@@ -77,10 +71,9 @@ class SearchResponse(SearchBase):
     created_at: datetime
     updated_at: datetime
     messages: List[SearchMessageResponse]
-    status: QueryStatus
     category: Optional[QueryCategory] = None
     query_type: Optional[QueryType] = None
-
+    
     model_config = {"from_attributes": True}
 
 class SearchListResponse(BaseModel):
@@ -97,6 +90,5 @@ class SearchUpdate(BaseModel):
     tags: Optional[List[str]] = None
     category: Optional[QueryCategory] = None
     query_type: Optional[QueryType] = None
-    status: Optional[QueryStatus] = None
     
     model_config = {"from_attributes": True}

@@ -8,7 +8,6 @@ from pydantic import BaseModel, Field
 # Import enums from centralized location and rename with DTO suffix
 from models.enums.research_enums import QueryCategory as QueryCategoryDTO
 from models.enums.research_enums import QueryType as QueryTypeDTO
-from models.enums.research_enums import QueryStatus as QueryStatusDTO
 
 # Base DTOs
 class SearchMessageDTO(BaseModel):
@@ -29,7 +28,6 @@ class SearchDTO(BaseModel):
     search_params: Dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
     updated_at: datetime
-    status: str
     messages: List[SearchMessageDTO] = Field(default_factory=list)
     
     class Config:
@@ -42,14 +40,6 @@ class SearchListDTO(BaseModel):
     total: int
     offset: int
     limit: int
-
-class SearchStatusDTO(BaseModel):
-    """DTO for search status information"""
-    id: str
-    status: str
-    created_at: datetime
-    updated_at: datetime
-    message_count: int
 
 class SearchCreateDTO(BaseModel):
     """DTO for creating a new search"""
@@ -68,7 +58,9 @@ class SearchUpdateDTO(BaseModel):
     description: Optional[str] = None
     is_featured: Optional[bool] = None
     tags: Optional[List[str]] = None
-    status: Optional[str] = None
+    
+    class Config:
+        from_attributes = True
 
 class SearchContinueDTO(BaseModel):
     """DTO for continuing an existing search"""
@@ -94,27 +86,17 @@ class SearchResultDTO(BaseModel):
 
 # Conversion functions
 def to_search_dto(db_search: Any) -> SearchDTO:
-    """Convert database model to SearchDTO"""
-    messages = []
-    if hasattr(db_search, "messages") and db_search.messages:
-        messages = [
-            SearchMessageDTO(
-                role=msg.role,
-                content=msg.content,
-                sequence=msg.sequence
-            ) for msg in sorted(db_search.messages, key=lambda m: m.sequence)
-        ]
+    """
+    Convert database model to SearchDTO.
     
-    # Determine status based on metadata or default to COMPLETED
-    status = QueryStatusDTO.COMPLETED
-    if db_search.search_params and "metadata" in db_search.search_params:
-        metadata = db_search.search_params.get("metadata", {})
-        if "query_analysis" in metadata:
-            query_analysis = metadata["query_analysis"]
-            if query_analysis.get("category") == "unclear":
-                status = QueryStatusDTO.NEEDS_CLARIFICATION
-            elif query_analysis.get("category") == "irrelevant":
-                status = QueryStatusDTO.IRRELEVANT
+    Args:
+        db_search: Database model instance or tuple
+        
+    Returns:
+        SearchDTO with data from model
+    """
+    if isinstance(db_search, tuple):
+        return _tuple_to_search_dto(db_search)
     
     return SearchDTO(
         id=db_search.id,
@@ -127,16 +109,21 @@ def to_search_dto(db_search: Any) -> SearchDTO:
         search_params=db_search.search_params or {},
         created_at=db_search.created_at,
         updated_at=db_search.updated_at,
-        status=status,
-        messages=messages
+        messages=[SearchMessageDTO(**msg.to_dict()) for msg in db_search.messages] if hasattr(db_search, 'messages') else []
     )
 
 def to_search_dto_without_messages(db_search: Any) -> SearchDTO:
-    """Convert database model to SearchDTO without loading messages (for list views)"""
-    # Determine status from string or enum
-    status = db_search.status
-    if hasattr(status, "value"):
-        status = status.value
+    """
+    Convert database model to SearchDTO without loading messages (for list views).
+    
+    Args:
+        db_search: Database model instance or tuple
+        
+    Returns:
+        SearchDTO with data from model, but without messages
+    """
+    if isinstance(db_search, tuple):
+        return _tuple_to_search_dto(db_search)
     
     return SearchDTO(
         id=db_search.id,
@@ -144,51 +131,30 @@ def to_search_dto_without_messages(db_search: Any) -> SearchDTO:
         description=db_search.description,
         user_id=db_search.user_id,
         enterprise_id=db_search.enterprise_id,
-        is_featured=db_search.is_featured if hasattr(db_search, "is_featured") else False,
+        is_featured=db_search.is_featured,
         tags=db_search.tags or [],
         search_params=db_search.search_params or {},
         created_at=db_search.created_at,
         updated_at=db_search.updated_at,
-        status=status,
-        messages=[]  # Empty list for messages to avoid loading them
+        messages=[]
     )
 
-def to_search_list_dto(db_searches: List[Any], total: int, offset: int, limit: int) -> SearchListDTO:
-    """Convert list of database models to SearchListDTO"""
+def to_search_list_dto(db_searches: List[Any], total: int, offset: int = 0, limit: int = 10) -> SearchListDTO:
+    """
+    Convert list of database models to SearchListDTO.
+    
+    Args:
+        db_searches: List of database model instances or tuples
+        total: Total number of items in database
+        offset: Starting offset for pagination
+        limit: Number of items per page
+        
+    Returns:
+        SearchListDTO with converted items and pagination info
+    """
     return SearchListDTO(
-        items=[to_search_dto(db_search) for db_search in db_searches],
+        items=[to_search_dto_without_messages(s) for s in db_searches],
         total=total,
         offset=offset,
         limit=limit
     )
-
-def to_search_status_dto(search: Any) -> SearchStatusDTO:
-    """Convert SearchDTO or database model to SearchStatusDTO"""
-    # If it's a database model, convert to DTO first
-    if not isinstance(search, SearchDTO):
-        # Determine status from string or enum
-        status = search.status
-        if hasattr(status, "value"):
-            status = status.value
-            
-        # Get message count
-        message_count = 0
-        if hasattr(search, "messages") and search.messages is not None:
-            message_count = len(search.messages)
-            
-        return SearchStatusDTO(
-            id=str(search.id),
-            status=status,
-            created_at=search.created_at,
-            updated_at=search.updated_at,
-            message_count=message_count
-        )
-    else:
-        # It's already a SearchDTO
-        return SearchStatusDTO(
-            id=str(search.id),
-            status=search.status,
-            created_at=search.created_at,
-            updated_at=search.updated_at,
-            message_count=len(search.messages)
-        )

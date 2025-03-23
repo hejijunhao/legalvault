@@ -1,27 +1,26 @@
 # models/domain/research/search_operations.py
 
-from typing import Dict, List, Optional, Any, Union
 from uuid import UUID
+from typing import Dict, List, Optional, Any, Union
 from datetime import datetime
 import logging
 
+from sqlalchemy import select, desc, asc, func
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, delete, func, update, desc, asc
-from sqlalchemy.orm import selectinload
 
+# Import domain models
+from models.domain.research.search import ResearchSearch
 from models.database.research.public_searches import PublicSearch
-from models.domain.research.search import ResearchSearch, QueryStatus
 from models.database.research.public_search_messages import PublicSearchMessage
 from models.domain.research.search_message_operations import SearchMessageOperations
 
-# Import DTOs
+# Import DTOs and conversion functions
 from models.dtos.research.search_dto import (
-    SearchDTO, SearchListDTO, SearchStatusDTO, SearchCreateDTO, SearchUpdateDTO,
-    to_search_dto, to_search_list_dto, to_search_status_dto, to_search_dto_without_messages
+    SearchDTO, SearchListDTO, SearchCreateDTO, SearchUpdateDTO,
+    to_search_dto, to_search_list_dto, to_search_dto_without_messages
 )
 from models.dtos.research.search_message_dto import SearchMessageDTO
 
-# Set up logging
 logger = logging.getLogger(__name__)
 
 class ResearchOperations:
@@ -248,8 +247,49 @@ class ResearchOperations:
                 logger.error(f"Search with ID {search_id} not found")
                 return {"error": f"Search with ID {search_id} not found"}
             
-            # Convert to DTO using the conversion function
-            return to_search_dto(db_search)
+            # Check if we got a tuple instead of an ORM object
+            if isinstance(db_search, tuple):
+                logger.info("Received tuple instead of ORM object in get_search_by_id")
+                # We need to handle messages separately since they won't be loaded in the tuple
+                search_dto = self._tuple_to_search_dto(db_search)
+                
+                # Try to load messages separately
+                try:
+                    msg_query = select(PublicSearchMessage).where(
+                        PublicSearchMessage.search_id == search_id
+                    ).order_by(PublicSearchMessage.sequence).execution_options(
+                        no_parameters=True,
+                        use_server_side_cursors=False
+                    )
+                    msg_result = await self.db_session.execute(msg_query)
+                    messages = msg_result.scalars().all()
+                    
+                    # Convert messages to DTOs
+                    if messages:
+                        message_dtos = []
+                        if isinstance(messages[0], tuple):
+                            # Handle tuple messages
+                            from models.domain.research.search_message_operations import SearchMessageOperations
+                            msg_ops = SearchMessageOperations(self.db_session)
+                            message_dtos = [msg_ops._tuple_to_message_dto(msg) for msg in messages]
+                        else:
+                            # Handle ORM messages
+                            message_dtos = [
+                                SearchMessageDTO(
+                                    role=msg.role,
+                                    content=msg.content,
+                                    sequence=msg.sequence
+                                ) for msg in messages
+                            ]
+                        search_dto.messages = message_dtos
+                except Exception as msg_error:
+                    logger.error(f"Error loading messages for search {search_id}: {str(msg_error)}")
+                    # Continue with empty messages list
+                
+                return search_dto
+            else:
+                # Convert to DTO using the conversion function for ORM objects
+                return to_search_dto(db_search)
         except Exception as e:
             error_message = str(e).lower()
             await self.db_session.rollback()
@@ -284,8 +324,7 @@ class ResearchOperations:
         offset: int = 0,
         limit: int = 20,
         sort_by: str = "created_at",
-        sort_order: str = "desc",
-        status: Optional[str] = None
+        sort_order: str = "desc"
     ) -> Union[SearchListDTO, Dict[str, Any]]:
         """
         List searches with pagination and filtering.
@@ -297,7 +336,6 @@ class ResearchOperations:
             limit: Maximum items to return
             sort_by: Field to sort by
             sort_order: Sort direction ('asc' or 'desc')
-            status: Optional filter by status value
             
         Returns:
             SearchListDTO with paginated results, or error dict on failure
@@ -321,10 +359,6 @@ class ResearchOperations:
             if enterprise_id:
                 query = query.where(PublicSearch.enterprise_id == enterprise_id)
                 count_query = count_query.where(PublicSearch.enterprise_id == enterprise_id)
-            
-            if status:
-                query = query.where(PublicSearch.status == status)
-                count_query = count_query.where(PublicSearch.status == status)
             
             # Apply sorting
             if sort_by not in ["created_at", "updated_at", "title"]:
@@ -350,7 +384,13 @@ class ResearchOperations:
             total_count = count_result.scalar()
             
             # Convert to DTOs
-            search_dtos = [to_search_dto_without_messages(search) for search in searches]
+            search_dtos = []
+            if searches and len(searches) > 0:
+                if isinstance(searches[0], tuple):
+                    logger.info("Received tuples instead of ORM objects in list_searches")
+                    search_dtos = [self._tuple_to_search_dto(search) for search in searches]
+                else:
+                    search_dtos = [to_search_dto_without_messages(search) for search in searches]
             
             return SearchListDTO(
                 items=search_dtos,
@@ -378,7 +418,7 @@ class ResearchOperations:
                         fresh_ops = ResearchOperations(fresh_session)
                         # Retry the operation
                         return await fresh_ops.list_searches(
-                            user_id, enterprise_id, offset, limit, sort_by, sort_order, status
+                            user_id, enterprise_id, offset, limit, sort_by, sort_order
                         )
                 except Exception as retry_error:
                     logger.error(f"Error in retry attempt after pgBouncer error: {str(retry_error)}")
@@ -525,122 +565,46 @@ class ResearchOperations:
             logger.error(f"Error deleting search: {str(e)}")
             return {"error": str(e)}
     
-    async def get_search_status(self, search_id: UUID) -> Union[SearchStatusDTO, Dict[str, Any]]:
+    def _tuple_to_search_dto(self, search_tuple: tuple) -> SearchDTO:
         """
-        Get the current status of a search.
+        Convert a database tuple to a SearchDTO.
         
         Args:
-            search_id: UUID of the search
+            search_tuple: Tuple from database query
             
         Returns:
-            SearchStatusDTO with status information, or error dict if not found
+            SearchDTO with data from tuple
         """
         try:
-            query = select(PublicSearch).where(PublicSearch.id == search_id).execution_options(
-                no_parameters=True,
-                use_server_side_cursors=False  # Disable server-side cursors which use prepared statements
+            # Extract fields from tuple
+            id = search_tuple[0] if len(search_tuple) > 0 else None
+            title = search_tuple[1] if len(search_tuple) > 1 else ""
+            description = search_tuple[2] if len(search_tuple) > 2 else None
+            user_id = search_tuple[3] if len(search_tuple) > 3 else None
+            enterprise_id = search_tuple[4] if len(search_tuple) > 4 else None
+            created_at = search_tuple[6] if len(search_tuple) > 6 else datetime.now()
+            updated_at = search_tuple[7] if len(search_tuple) > 7 else datetime.now()
+            search_params = search_tuple[8] if len(search_tuple) > 8 else {}
+            tags = search_tuple[9] if len(search_tuple) > 9 else []
+            is_featured = search_tuple[10] if len(search_tuple) > 10 else False
+            
+            return SearchDTO(
+                id=id,
+                title=title,
+                description=description,
+                user_id=user_id,
+                enterprise_id=enterprise_id,
+                created_at=created_at,
+                updated_at=updated_at,
+                search_params=search_params or {},
+                tags=tags or [],
+                is_featured=is_featured or False,
+                messages=[]
             )
-            result = await self.db_session.execute(query)
-            db_search = result.scalars().first()
-            
-            if not db_search:
-                logger.error(f"Search with ID {search_id} not found")
-                return {"error": f"Search with ID {search_id} not found"}
-            
-            # Convert to DTO using the conversion function
-            return to_search_status_dto(db_search)
         except Exception as e:
-            error_message = str(e).lower()
-            await self.db_session.rollback()
-            
-            # Handle pgBouncer prepared statement errors
-            if ("prepared statement" in error_message or 
-                "duplicatepreparedstatementerror" in error_message or 
-                "invalidsqlstatementnameerror" in error_message):
-                logger.warning(f"pgBouncer prepared statement error encountered: {str(e)}")
-                try:
-                    # Try to create a fresh session and retry
-                    from sqlalchemy.ext.asyncio import AsyncSession
-                    from core.database import async_engine
-                    
-                    logger.info("Creating fresh session to retry operation after pgBouncer error")
-                    async with AsyncSession(async_engine) as fresh_session:
-                        # Create a new instance with the fresh session
-                        fresh_ops = ResearchOperations(fresh_session)
-                        # Retry the operation
-                        return await fresh_ops.get_search_status(search_id)
-                except Exception as retry_error:
-                    logger.error(f"Error in retry attempt after pgBouncer error: {str(retry_error)}")
-                    return {"error": f"Database error: {str(retry_error)}"}
-            
-            logger.error(f"Error retrieving search status: {str(e)}")
-            return {"error": str(e)}
-
-    async def update_search_status(self, search_id: UUID, status: QueryStatus) -> Union[SearchStatusDTO, Dict[str, Any]]:
-        """
-        Update the status of a search.
-        
-        Args:
-            search_id: UUID of the search
-            status: New status value from QueryStatus enum
-            
-        Returns:
-            SearchStatusDTO with updated status, or error dict if not found
-        """
-        try:
-            # First get the search to check if it exists
-            query = select(PublicSearch).where(PublicSearch.id == search_id).execution_options(
-                no_parameters=True,
-                use_server_side_cursors=False  # Disable server-side cursors which use prepared statements
-            )
-            result = await self.db_session.execute(query)
-            db_search = result.scalars().first()
-            
-            if not db_search:
-                logger.error(f"Search with ID {search_id} not found")
-                return {"error": f"Search with ID {search_id} not found"}
-            
-            # Create domain model and update status
-            search = ResearchSearch(
-                title=db_search.title,
-                description=db_search.description,
-                user_id=db_search.user_id,
-                enterprise_id=db_search.enterprise_id
-            )
-            search.update_status(status)
-            
-            # Update database record
-            db_search.status = status.value
-            db_search.updated_at = datetime.utcnow()
-            
-            await self.db_session.commit()
-            await self.db_session.refresh(db_search)
-            
-            # Return updated status
-            return to_search_status_dto(db_search)
-        except Exception as e:
-            error_message = str(e).lower()
-            await self.db_session.rollback()
-            
-            # Handle pgBouncer prepared statement errors
-            if ("prepared statement" in error_message or 
-                "duplicatepreparedstatementerror" in error_message or 
-                "invalidsqlstatementnameerror" in error_message):
-                logger.warning(f"pgBouncer prepared statement error encountered: {str(e)}")
-                try:
-                    # Try to create a fresh session and retry
-                    from sqlalchemy.ext.asyncio import AsyncSession
-                    from core.database import async_engine
-                    
-                    logger.info("Creating fresh session to retry operation after pgBouncer error")
-                    async with AsyncSession(async_engine) as fresh_session:
-                        # Create a new instance with the fresh session
-                        fresh_ops = ResearchOperations(fresh_session)
-                        # Retry the operation
-                        return await fresh_ops.update_search_status(search_id, status)
-                except Exception as retry_error:
-                    logger.error(f"Error in retry attempt after pgBouncer error: {str(retry_error)}")
-                    return {"error": f"Database error: {str(retry_error)}"}
-            
-            logger.error(f"Error updating search status: {str(e)}")
-            return {"error": str(e)}
+            logger.error(f"Error converting tuple to SearchDTO: {str(e)}")
+            return {
+                "error": f"Failed to convert search tuple: {str(e)}",
+                "status": "error",
+                "data": None
+            }
