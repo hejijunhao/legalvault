@@ -56,14 +56,14 @@ async def register(
 
 @router.get("/me", response_model=UserProfile)
 async def get_current_user_profile(
-    current_user: dict = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db)
 ):
     """
     Get the current user's profile.
     """
     user_ops = UserOperations(session)
-    profile = await user_ops.get_user_profile(current_user["id"])
+    profile = await user_ops.get_user_profile(current_user.id)
     
     if not profile:
         raise HTTPException(

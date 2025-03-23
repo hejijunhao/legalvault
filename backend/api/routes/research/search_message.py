@@ -17,6 +17,7 @@ from models.schemas.research.search_message import (
     SearchMessageListResponse,
     SearchMessageForwardRequest
 )
+from models.database.user import User
 
 router = APIRouter(
     prefix="/research/messages",
@@ -27,7 +28,7 @@ router = APIRouter(
 @router.get("/{message_id}", response_model=SearchMessageResponse)
 async def get_message(
     message_id: UUID,
-    current_user: dict = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     user_permissions: List[str] = Depends(get_user_permissions),
     db: AsyncSession = Depends(get_db)
 ):
@@ -46,7 +47,7 @@ async def get_message(
     search_ops = ResearchOperations(db)
     search = await search_ops.get_search_by_id(message.search_id)
     
-    if not search or (str(search["user_id"]) != str(current_user["id"]) and "admin" not in user_permissions):
+    if not search or (str(search.user_id) != str(current_user.id) and "admin" not in user_permissions):
         raise HTTPException(status_code=403, detail="Not authorized to access this message")
     
     return message
@@ -57,7 +58,7 @@ async def list_messages(
     search_id: UUID,
     limit: int = Query(100, ge=1, le=500, description="Maximum number of messages"),
     offset: int = Query(0, ge=0, description="Pagination offset"),
-    current_user: dict = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     user_permissions: List[str] = Depends(get_user_permissions),
     db: AsyncSession = Depends(get_db)
 ):
@@ -70,7 +71,7 @@ async def list_messages(
     search_ops = ResearchOperations(db)
     search = await search_ops.get_search_by_id(search_id)
     
-    if not search or (str(search["user_id"]) != str(current_user["id"]) and "admin" not in user_permissions):
+    if not search or (str(search.user_id) != str(current_user.id) and "admin" not in user_permissions):
         raise HTTPException(status_code=403, detail="Not authorized to access this search")
     
     # Get messages with pagination
@@ -82,7 +83,7 @@ async def list_messages(
 async def update_message(
     message_id: UUID,
     data: SearchMessageUpdate,
-    current_user: dict = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     user_permissions: List[str] = Depends(get_user_permissions),
     db: AsyncSession = Depends(get_db)
 ):
@@ -102,7 +103,7 @@ async def update_message(
     search_ops = ResearchOperations(db)
     search = await search_ops.get_search_by_id(message.search_id)
     
-    if not search or str(search["user_id"]) != str(current_user["id"]):
+    if not search or str(search.user_id) != str(current_user.id):
         raise HTTPException(status_code=403, detail="Not authorized to update this message")
     
     # Only allow updating user messages, not assistant responses
@@ -126,7 +127,7 @@ async def update_message(
 @router.delete("/{message_id}", status_code=204)
 async def delete_message(
     message_id: UUID,
-    current_user: dict = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     user_permissions: List[str] = Depends(get_user_permissions),
     db: AsyncSession = Depends(get_db)
 ):
@@ -163,7 +164,7 @@ async def delete_message(
 async def forward_message(
     message_id: UUID,
     data: SearchMessageForwardRequest,
-    current_user: dict = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -183,7 +184,7 @@ async def forward_message(
     search_ops = ResearchOperations(db)
     search = await search_ops.get_search_by_id(message.search_id)
     
-    if not search or str(search["user_id"]) != str(current_user["id"]):
+    if not search or str(search.user_id) != str(current_user.id):
         raise HTTPException(status_code=403, detail="Not authorized to forward this message")
     
     # Format message for forwarding using domain model
@@ -249,7 +250,7 @@ async def websocket_endpoint(
     search_ops = ResearchOperations(db)
     search = await search_ops.get_search_by_id(search_id)
     
-    if not search or str(search["user_id"]) != str(user_id):
+    if not search or str(search.user_id) != str(user_id):
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
     

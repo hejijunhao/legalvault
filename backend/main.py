@@ -65,8 +65,11 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allow_headers=["Content-Type", "Authorization", "Accept", "Origin", "X-Requested-With", 
+                  "X-CSRF-Token", "X-Auth-Token", "X-User-Agent", "X-Requested-With"],
+    expose_headers=["Content-Length", "Content-Range"],
+    max_age=600,  # Maximum time (in seconds) that results can be cached
 )
 
 logger.info(f"Configured CORS origins: {','.join(origins)}")

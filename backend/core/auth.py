@@ -9,17 +9,18 @@ from models.database.auth_user import AuthUser
 from models.database.user import User
 from models.schemas.auth.token import TokenData
 from models.domain.user_operations import UserOperations
-from core.database import get_db
+from core.database import get_db, async_session_factory
 import jwt
+from sqlalchemy import text
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 async def get_current_user(
     token: str = Depends(oauth2_scheme), 
     session: AsyncSession = Depends(get_db)
-) -> dict:
+) -> User:
     """
-    Validate the access token and return the current user as a dictionary.
+    Validate the access token and return the current user.
     """
     print(f"\n\n===== Authentication Debug =====\nReceived token: {token[:10]}...")
     
@@ -40,20 +41,25 @@ async def get_current_user(
         raise credentials_exception
         
     # Get user from database using direct SQL to avoid relationship loading issues
-    from sqlalchemy import text
     
-    query = text("""
+    # Create a safe string representation of the UUID
+    # UUIDs have a fixed format and come from a validated token, so this is safe from SQL injection
+    user_id_str = str(token_data.user_id)
+    
+    # Create a query with the UUID as a string literal with proper type casting
+    query = text(f"""
         SELECT id, auth_user_id, first_name, last_name, name, role, email, virtual_paralegal_id, enterprise_id, created_at, updated_at
-        FROM public.users WHERE auth_user_id = :auth_user_id
+        FROM public.users WHERE auth_user_id = '{user_id_str}'::UUID
     """).execution_options(
-        no_parameters=True,  # Helps with pgBouncer compatibility
-        use_server_side_cursors=False  # Disable server-side cursors which use prepared statements
+        no_parameters=True,  # Required for pgBouncer compatibility
+        use_server_side_cursors=False  # Disable server-side cursors
     )
     
     print(f"Looking up user with auth_user_id: {token_data.user_id}")
     
     try:
-        result = await session.execute(query, {"auth_user_id": token_data.user_id})
+        # Execute without parameters since they're already embedded in the query
+        result = await session.execute(query)
         user_row = result.fetchone()
         
         if not user_row:
@@ -62,21 +68,89 @@ async def get_current_user(
             
         print(f"Found user: {user_row[6]} (ID: {user_row[0]})")  # email and ID
         
-        # Convert row to dict
-        user_dict = {}
-        for idx, column_name in enumerate(result.keys()):
-            user_dict[column_name] = user_row[idx]
-            
-        return user_dict
+        # Create a User object from the row data
+        user = User(
+            id=user_row[0],
+            auth_user_id=user_row[1],
+            first_name=user_row[2],
+            last_name=user_row[3],
+            name=user_row[4],
+            role=user_row[5],
+            email=user_row[6],
+            virtual_paralegal_id=user_row[7],
+            enterprise_id=user_row[8],
+            created_at=user_row[9],
+            updated_at=user_row[10]
+        )
         
+        return user
     except Exception as e:
-        print(f"Error querying user: {str(e)}")
-        import traceback
-        print(traceback.format_exc())
-        raise credentials_exception
+        error_message = str(e).lower()
+        # Check for pgBouncer-related errors
+        if ("prepared statement" in error_message or 
+            "duplicatepreparedstatementerror" in error_message or 
+            "invalidsqlstatementnameerror" in error_message):
+            print(f"pgBouncer error encountered: {e}. Attempting with a fresh session...")
+            # Close the current session
+            await session.close()
+            
+            # Create a fresh session directly instead of using get_db() as a context manager
+            fresh_session = async_session_factory()
+            try:
+                # Execute the test query to ensure connection is valid
+                test_query = text("SELECT 1").execution_options(
+                    no_parameters=True, 
+                    use_server_side_cursors=False
+                )
+                await fresh_session.execute(test_query)
+                
+                # Execute the actual query
+                result = await fresh_session.execute(query)
+                user_row = result.fetchone()
+                
+                if not user_row:
+                    print(f"No user found with auth_user_id: {token_data.user_id}")
+                    raise credentials_exception
+                
+                print(f"Retry successful: Found user: {user_row[6]} (ID: {user_row[0]})")
+                
+                # Create a User object from the row data
+                user = User(
+                    id=user_row[0],
+                    auth_user_id=user_row[1],
+                    first_name=user_row[2],
+                    last_name=user_row[3],
+                    name=user_row[4],
+                    role=user_row[5],
+                    email=user_row[6],
+                    virtual_paralegal_id=user_row[7],
+                    enterprise_id=user_row[8],
+                    created_at=user_row[9],
+                    updated_at=user_row[10]
+                )
+                
+                return user
+            except Exception as retry_error:
+                print(f"Retry also failed: {retry_error}")
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail=f"Database connection error: {retry_error}"
+                )
+            finally:
+                # Always close the fresh session
+                await fresh_session.close()
+        else:
+            # For non-pgBouncer errors, log and raise appropriate exception
+            print(f"Error getting user: {e}")
+            if "no user found" in error_message:
+                raise credentials_exception
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error retrieving user: {e}"
+            )
 
 async def get_user_permissions(
-    user: dict = Depends(get_current_user)
+    user: User = Depends(get_current_user)
 ) -> List[str]:
     """
     Get permissions for the current user based on their role.
@@ -88,26 +162,26 @@ async def get_user_permissions(
         "paralegal": ["read:all", "write:limited"],
     }
     
-    return role_permissions.get(user["role"], [])
+    return role_permissions.get(user.role, [])
 
-async def require_admin(user: dict = Depends(get_current_user)):
+async def require_admin(user: User = Depends(get_current_user)):
     """
     Require the user to have admin role.
     """
-    if user["role"] != "admin":
+    if user.role != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Insufficient permissions"
         )
     return user
 
-async def require_super_admin(user: dict = Depends(get_current_user)):
+async def require_super_admin(user: User = Depends(get_current_user)):
     """
     Require the user to have super_admin role.
     """
     # This would typically check the auth_user.is_super_admin flag
     # For now, we'll just check the role
-    if user["role"] != "super_admin":
+    if user.role != "super_admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Insufficient permissions"

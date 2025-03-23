@@ -5,7 +5,7 @@ import asyncio
 from typing import Dict, Any
 from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import text
+from sqlalchemy import text, bindparam
 from sqlalchemy.exc import SQLAlchemyError
 import re
 
@@ -83,8 +83,14 @@ async def update_user_email_with_retry(auth_user_id: UUID, email: str, session: 
             query = text("""
                 SELECT id, email FROM public.users 
                 WHERE auth_user_id = :auth_user_id
-            """)
-            result = await session.execute(query, {"auth_user_id": auth_user_id})
+            """).bindparams(
+                bindparam("auth_user_id", auth_user_id)
+            ).execution_options(
+                no_parameters=True,
+                use_server_side_cursors=False,
+                render_bind_params=True
+            )
+            result = await session.execute(query)
             user_data = result.fetchone()
             
             if not user_data:
@@ -102,8 +108,15 @@ async def update_user_email_with_retry(auth_user_id: UUID, email: str, session: 
                 SET email = :email, updated_at = NOW()
                 WHERE id = :user_id
                 RETURNING id
-            """)
-            result = await session.execute(update_query, {"email": email, "user_id": user_id})
+            """).bindparams(
+                bindparam("email", email),
+                bindparam("user_id", user_id)
+            ).execution_options(
+                no_parameters=True,
+                use_server_side_cursors=False,
+                render_bind_params=True
+            )
+            result = await session.execute(update_query)
             updated = result.fetchone()
             
             if not updated:

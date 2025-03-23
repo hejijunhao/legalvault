@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from core.database import get_db
+from core.database import get_db, async_session_factory
 from core.auth import get_current_user, get_user_permissions
 from models.database.user import User
 from models.domain.research.search_operations import ResearchOperations
@@ -141,7 +141,7 @@ def search_message_list_dto_to_response(message_list_dto: SearchMessageListDTO) 
 @router.post("/", response_model=SearchResponse)
 async def create_search(
     data: SearchCreate,
-    current_user: dict = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     user_permissions: List[str] = Depends(get_user_permissions),
     workflow: ResearchSearchWorkflow = Depends(get_search_workflow)
 ):
@@ -157,7 +157,7 @@ async def create_search(
     try:
         # Execute search using workflow - now handles persistence internally
         result = await workflow.execute_search(
-            user_id=current_user["id"],
+            user_id=current_user.id,
             query=data.query,
             enterprise_id=enterprise_id,
             search_params=data.search_params
@@ -205,7 +205,7 @@ async def create_search(
 async def continue_search(
     search_id: UUID,
     data: SearchContinue,
-    current_user: dict = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     user_permissions: List[str] = Depends(get_user_permissions),
     workflow: ResearchSearchWorkflow = Depends(get_search_workflow)
 ):
@@ -219,7 +219,7 @@ async def continue_search(
         # Execute follow-up using workflow - now handles persistence internally
         result = await workflow.execute_follow_up(
             search_id=search_id,
-            user_id=current_user["id"],
+            user_id=current_user.id,
             follow_up_query=data.follow_up_query,
             enterprise_id=data.enterprise_id,
             thread_id=data.thread_id,
@@ -260,7 +260,7 @@ async def continue_search(
 @router.get("/{search_id}", response_model=SearchResponse)
 async def get_search(
     search_id: UUID,
-    current_user: dict = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     user_permissions: List[str] = Depends(get_user_permissions),
     operations: ResearchOperations = Depends(get_research_operations)
 ):
@@ -274,7 +274,7 @@ async def get_search(
         raise HTTPException(status_code=404, detail="Search not found")
     
     # Verify ownership or permissions
-    if str(search_dto.user_id) != str(current_user["id"]) and "admin" not in user_permissions:
+    if str(search_dto.user_id) != str(current_user.id) and "admin" not in user_permissions:
         raise HTTPException(status_code=403, detail="Not authorized to access this search")
     
     return search_dto_to_response(search_dto)
@@ -284,7 +284,7 @@ async def get_search_messages(
     search_id: UUID,
     limit: int = Query(100, ge=1, le=500, description="Maximum number of messages"),
     offset: int = Query(0, ge=0, description="Pagination offset"),
-    current_user: dict = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     user_permissions: List[str] = Depends(get_user_permissions),
     operations: ResearchOperations = Depends(get_research_operations)
 ):
@@ -298,7 +298,7 @@ async def get_search_messages(
     search_ops = ResearchOperations(operations.db_session)
     search_dto = await search_ops.get_search_by_id(search_id)
     
-    if not search_dto or (str(search_dto.user_id) != str(current_user["id"]) and "admin" not in user_permissions):
+    if not search_dto or (str(search_dto.user_id) != str(current_user.id) and "admin" not in user_permissions):
         raise HTTPException(status_code=403, detail="Not authorized to access this search")
     
     # Get messages with pagination
@@ -315,7 +315,7 @@ async def list_searches(
     offset: int = Query(0, ge=0, description="Pagination offset"),
     sort_by: str = Query("created_at", description="Field to sort by (created_at, updated_at, title)"),
     sort_order: str = Query("desc", description="Sort direction (asc or desc)"),
-    current_user: dict = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     user_permissions: List[str] = Depends(get_user_permissions),
     operations: ResearchOperations = Depends(get_research_operations)
 ):
@@ -329,7 +329,7 @@ async def list_searches(
     enterprise_id = await get_user_enterprise(current_user, operations.db_session)
     
     search_list_dto = await operations.list_searches(
-        user_id=current_user["id"],
+        user_id=current_user.id,
         enterprise_id=enterprise_id,
         limit=limit,
         offset=offset,
@@ -345,7 +345,7 @@ async def list_searches(
 async def update_search(
     search_id: UUID,
     data: SearchUpdate,
-    current_user: dict = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     user_permissions: List[str] = Depends(get_user_permissions),
     operations: ResearchOperations = Depends(get_research_operations)
 ):
@@ -356,7 +356,7 @@ async def update_search(
     """
     # Verify ownership of search
     search_dto = await operations.get_search_by_id(search_id)
-    if not search_dto or str(search_dto.user_id) != str(current_user["id"]):
+    if not search_dto or str(search_dto.user_id) != str(current_user.id):
         raise HTTPException(status_code=404, detail="Search not found")
     
     # Create DTO from update data
@@ -378,7 +378,7 @@ async def update_search(
 @router.delete("/{search_id}", status_code=204)
 async def delete_search(
     search_id: UUID,
-    current_user: dict = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     user_permissions: List[str] = Depends(get_user_permissions),
     operations: ResearchOperations = Depends(get_research_operations)
 ):
@@ -393,7 +393,7 @@ async def delete_search(
         raise HTTPException(status_code=404, detail="Search not found")
     
     # Only allow deletion by owner or admin
-    if str(search_dto.user_id) != str(current_user["id"]) and "admin" not in user_permissions:
+    if str(search_dto.user_id) != str(current_user.id) and "admin" not in user_permissions:
         raise HTTPException(status_code=403, detail="Not authorized to delete this search")
     
     # Delete search
@@ -402,24 +402,53 @@ async def delete_search(
         raise HTTPException(status_code=500, detail="Failed to delete search")
 
 # Helper function to get user's enterprise ID
-async def get_user_enterprise(current_user: Union[dict, UUID], db: AsyncSession) -> Optional[UUID]:
+async def get_user_enterprise(current_user: User, db: AsyncSession) -> Optional[UUID]:
     """
     Get the enterprise ID for a user.
     
     Args:
-        current_user: Either a dictionary containing user data, or a UUID representing the user ID
+        current_user: User object
         db: SQLAlchemy async session
         
     Returns:
         UUID of the user's enterprise or None if user has no associated enterprise
     """
-    user_id = current_user["id"] if isinstance(current_user, dict) else current_user
+    # If the User object already has enterprise_id, return it directly
+    if hasattr(current_user, 'enterprise_id') and current_user.enterprise_id:
+        return current_user.enterprise_id
     
-    query = select(User).where(User.id == user_id)
-    result = await db.execute(query)
-    user = result.scalars().first()
-    
-    if user and user.enterprise_id:
-        return user.enterprise_id
+    try:
+        # If we don't have the enterprise_id yet, query the database
+        query = select(User).where(User.id == current_user.id)
+        # Add execution options for pgBouncer compatibility
+        query = query.execution_options(no_parameters=True, use_server_side_cursors=False)
+        result = await db.execute(query)
+        user = result.scalars().first()
+        
+        if user and user.enterprise_id:
+            return user.enterprise_id
+    except Exception as e:
+        error_message = str(e).lower()
+        # Handle pgBouncer prepared statement errors
+        if ("prepared statement" in error_message or 
+            "duplicatepreparedstatementerror" in error_message or 
+            "invalidsqlstatementnameerror" in error_message):
+            # Create a fresh session directly instead of using the dependency
+            async with async_session_factory() as fresh_session:
+                try:
+                    # Retry the query with the fresh session
+                    query = select(User).where(User.id == current_user.id)
+                    query = query.execution_options(no_parameters=True, use_server_side_cursors=False)
+                    result = await fresh_session.execute(query)
+                    user = result.scalars().first()
+                    
+                    if user and user.enterprise_id:
+                        return user.enterprise_id
+                except Exception as inner_e:
+                    # Log the error but don't raise it to avoid breaking the application
+                    logger.error(f"Error in get_user_enterprise retry: {inner_e}")
+        else:
+            # Log other errors
+            logger.error(f"Error in get_user_enterprise: {e}")
     
     return None
