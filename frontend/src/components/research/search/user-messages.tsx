@@ -47,12 +47,12 @@ export function UserMessages({
 
   return (
     <div className="space-y-6 mb-8">
-      {messages.map((message, index) => (
+      {messages.map((message) => (
         <motion.div
-          key={message.id}
+          key={`message-${message.id}`}
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: index * 0.1 }}
+          transition={{ duration: 0.3, delay: messages.indexOf(message) * 0.1 }}
           className={cn(
             "flex items-start gap-3",
             message.role === "user" ? "justify-end" : "justify-start"
@@ -86,7 +86,7 @@ export function UserMessages({
             {/* Message Text */}
             <div className="prose prose-sm max-w-none">
               <p className="text-sm leading-relaxed whitespace-pre-wrap">
-                {message.content.text}
+                {message.content?.text || 'No content available'}
                 {message.id === streamingMessageId && isStreaming && (
                   <Loader2 className="ml-2 inline h-3 w-3 animate-spin" />
                 )}
@@ -94,7 +94,7 @@ export function UserMessages({
             </div>
 
             {/* Citations */}
-            {message.content.citations && message.content.citations.length > 0 && (
+            {message.content?.citations && message.content.citations.length > 0 && (
               <div className="mt-2">
                 <SourceCitations sources={message.content.citations} />
               </div>
@@ -110,7 +110,7 @@ export function UserMessages({
                     </button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-72">
-                    <DropdownMenuItem onSelect={() => handleCopyMessage(message.content.text)}>
+                    <DropdownMenuItem onSelect={() => handleCopyMessage(message.content?.text || '')}>
                       <Copy className="mr-2 h-4 w-4" />
                       <span>Copy</span>
                     </DropdownMenuItem>

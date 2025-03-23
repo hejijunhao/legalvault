@@ -16,33 +16,37 @@ export function PastSearchesGrid() {
   const [offset, setOffset] = useState(0)
   const [hasMore, setHasMore] = useState(true)
   const observerTarget = useRef<HTMLDivElement>(null)
+  const isInitialMount = useRef(true)
 
+  // Combined effect for initial fetch and infinite scroll
   useEffect(() => {
-    // Initial fetch
-    getSessions({ limit: ITEMS_PER_PAGE, offset: 0, skipAuthCheck: true })
-  }, [getSessions])
+    // Only fetch on initial mount
+    if (isInitialMount.current) {
+      getSessions({ limit: ITEMS_PER_PAGE, offset: 0, skipAuthCheck: true })
+      isInitialMount.current = false
+      return
+    }
 
-  useEffect(() => {
-    // Set hasMore based on whether we've loaded all sessions
+    // Update hasMore whenever sessions or totalSessions change
     setHasMore(sessions.length < totalSessions)
-  }, [sessions.length, totalSessions])
 
-  useEffect(() => {
+    // Set up intersection observer for infinite scroll
     const observer = new IntersectionObserver(
       (entries) => {
         // If the target is visible and we have more items to load
-        if (entries[0].isIntersecting && hasMore && !loadingStates.fetchingSessions) {
-          const newOffset = offset + ITEMS_PER_PAGE
-          setOffset(newOffset)
+        if (entries[0].isIntersecting && 
+            sessions.length < totalSessions && 
+            !loadingStates.fetchingSessions) {
+          const newOffset = sessions.length // Use sessions.length instead of offset state
           getSessions({ 
             limit: ITEMS_PER_PAGE, 
             offset: newOffset,
-            append: true, // Signal to context to append rather than replace sessions
+            append: true,
             skipAuthCheck: true
           })
         }
       },
-      { threshold: 0.1 } // Trigger when 10% of the target is visible
+      { threshold: 0.1 }
     )
 
     if (observerTarget.current) {
@@ -50,7 +54,7 @@ export function PastSearchesGrid() {
     }
 
     return () => observer.disconnect()
-  }, [getSessions, hasMore, loadingStates.fetchingSessions, offset, ITEMS_PER_PAGE])
+  }, [getSessions, sessions.length, totalSessions, loadingStates.fetchingSessions])
 
   const handleSearchClick = (id: string) => {
     router.push(`/research/${id}`)

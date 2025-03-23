@@ -23,12 +23,12 @@ export default function ResearchPage() {
     clearError()
     // Only clear on unmount, not on every render
     return () => {}
-  }, []) // Empty dependency array to run only on mount
+  }, [clearError]) // Add clearError as dependency since it's memoized
 
   // Fetch sessions when component mounts
   useEffect(() => {
     getSessions({ limit: 12, skipAuthCheck: true }) // Show up to 12 recent searches
-  }, [getSessions])
+  }, []) // Empty dependency array to run only on mount
 
   const handleSearch = async (queryType: QueryType | null) => {
     const trimmedQuery = query.trim()
