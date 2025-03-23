@@ -1,3 +1,5 @@
+# models/enums/research_enums.py
+
 from enum import Enum
 
 class QueryCategory(str, Enum):
