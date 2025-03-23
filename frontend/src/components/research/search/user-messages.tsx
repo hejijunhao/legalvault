@@ -47,9 +47,9 @@ export function UserMessages({
 
   return (
     <div className="space-y-6 mb-8">
-      {messages.map((message) => (
+      {messages.map((message, index) => (
         <motion.div
-          key={`message-${message.id}`}
+          key={`message-${message.id || `index-${index}`}`}
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, delay: messages.indexOf(message) * 0.1 }}

@@ -77,15 +77,24 @@ export async function connectToMessageUpdates(
   let wsHost: string;
   
   try {
-    wsHost = process.env.NEXT_PUBLIC_API_URL ? 
-      new URL(process.env.NEXT_PUBLIC_API_URL).host : 
-      window.location.host;
+    // Improved URL parsing with better error handling
+    if (process.env.NEXT_PUBLIC_API_URL) {
+      const apiUrl = new URL(process.env.NEXT_PUBLIC_API_URL);
+      wsHost = apiUrl.host;
+      console.log(`Using API URL from environment: ${apiUrl.toString()}, host: ${wsHost}`);
+    } else {
+      wsHost = window.location.host;
+      console.log(`No API URL in environment, using current host: ${wsHost}`);
+    }
   } catch (error) {
     console.error('Error parsing API URL:', error);
     wsHost = window.location.host; // Fallback to current host
+    console.log(`Error parsing API URL, falling back to current host: ${wsHost}`);
   }
   
+  // Ensure we have a valid WebSocket URL
   const wsUrl = `${wsProtocol}//${wsHost}/api/research/messages/ws/${searchId}?token=${encodeURIComponent(token)}`;
+  console.log(`Connecting to WebSocket at ${wsUrl}`);
   
   // Reconnection settings
   const maxReconnectAttempts = 5;
@@ -95,7 +104,6 @@ export async function connectToMessageUpdates(
   let pingInterval: ReturnType<typeof setInterval> | null = null;
   let heartbeatTimeout: ReturnType<typeof setTimeout> | null = null;
   
-  console.log(`Connecting to WebSocket at ${wsUrl}`);
   let socket = new WebSocket(wsUrl);
   let isConnected = false;
   let isReconnecting = false;

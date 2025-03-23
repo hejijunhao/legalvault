@@ -713,9 +713,21 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
             setCurrentSession(prev => {
               if (!prev || prev.id !== sessionId) return prev;
               
+              // Ensure all messages have valid IDs to prevent React key warnings
+              const processedMessages = message.data.map((m: Message) => {
+                if (!m.id) {
+                  // Generate a random ID for messages without one
+                  return {
+                    ...m,
+                    id: `generated-${Math.random().toString(36).substring(2, 11)}`
+                  };
+                }
+                return m;
+              });
+              
               // Merge new messages with existing ones, avoiding duplicates
               const existingMessageIds = new Set(prev.messages?.map(m => m.id) ?? [])
-              const newMessages = message.data.filter((m: Message) => !existingMessageIds.has(m.id));
+              const newMessages = processedMessages.filter((m: Message) => !existingMessageIds.has(m.id));
               
               if (newMessages.length === 0) return prev;
               
