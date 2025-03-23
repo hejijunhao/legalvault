@@ -112,7 +112,31 @@ class ResearchOperations:
             # Return the created search with all data
             return await self.get_search_by_id(search_id)
         except Exception as e:
+            error_message = str(e).lower()
             await self.db_session.rollback()
+            
+            # Handle pgBouncer prepared statement errors
+            if ("prepared statement" in error_message or 
+                "duplicatepreparedstatementerror" in error_message or 
+                "invalidsqlstatementnameerror" in error_message):
+                logger.warning(f"pgBouncer prepared statement error encountered: {str(e)}")
+                try:
+                    # Try to create a fresh session and retry
+                    from sqlalchemy.ext.asyncio import AsyncSession
+                    from core.database import async_engine
+                    
+                    logger.info("Creating fresh session to retry operation after pgBouncer error")
+                    async with AsyncSession(async_engine) as fresh_session:
+                        # Create a new instance with the fresh session
+                        fresh_ops = ResearchOperations(fresh_session)
+                        # Retry the operation
+                        return await fresh_ops.create_search_record(
+                            search_id, user_id, query, enterprise_id, search_params, response
+                        )
+                except Exception as retry_error:
+                    logger.error(f"Error in retry attempt after pgBouncer error: {str(retry_error)}")
+                    return {"error": f"Database error: {str(retry_error)}"}
+            
             logger.error(f"Error creating search record: {str(e)}")
             return {"error": str(e)}
 
@@ -130,8 +154,14 @@ class ResearchOperations:
         """
         try:
             # First validate the search exists
-            search_dto = await self.get_search_by_id(search_id)
-            if not search_dto:
+            query = select(PublicSearch).where(PublicSearch.id == search_id).execution_options(
+                no_parameters=True,
+                use_server_side_cursors=False  # Disable server-side cursors which use prepared statements
+            )
+            result = await self.db_session.execute(query)
+            db_search = result.scalars().first()
+            
+            if not db_search:
                 logger.error(f"Search with ID {search_id} not found")
                 return {"error": f"Search with ID {search_id} not found"}
                 
@@ -168,7 +198,29 @@ class ResearchOperations:
             await self.db_session.commit()
             return True
         except Exception as e:
+            error_message = str(e).lower()
             await self.db_session.rollback()
+            
+            # Handle pgBouncer prepared statement errors
+            if ("prepared statement" in error_message or 
+                "duplicatepreparedstatementerror" in error_message or 
+                "invalidsqlstatementnameerror" in error_message):
+                logger.warning(f"pgBouncer prepared statement error encountered: {str(e)}")
+                try:
+                    # Try to create a fresh session and retry
+                    from sqlalchemy.ext.asyncio import AsyncSession
+                    from core.database import async_engine
+                    
+                    logger.info("Creating fresh session to retry operation after pgBouncer error")
+                    async with AsyncSession(async_engine) as fresh_session:
+                        # Create a new instance with the fresh session
+                        fresh_ops = ResearchOperations(fresh_session)
+                        # Retry the operation
+                        return await fresh_ops.add_search_messages(search_id, user_query, response)
+                except Exception as retry_error:
+                    logger.error(f"Error in retry attempt after pgBouncer error: {str(retry_error)}")
+                    return {"error": f"Database error: {str(retry_error)}"}
+            
             logger.error(f"Error adding search messages: {str(e)}")
             return {"error": str(e)}
     
@@ -199,6 +251,29 @@ class ResearchOperations:
             # Convert to DTO using the conversion function
             return to_search_dto(db_search)
         except Exception as e:
+            error_message = str(e).lower()
+            await self.db_session.rollback()
+            
+            # Handle pgBouncer prepared statement errors
+            if ("prepared statement" in error_message or 
+                "duplicatepreparedstatementerror" in error_message or 
+                "invalidsqlstatementnameerror" in error_message):
+                logger.warning(f"pgBouncer prepared statement error encountered: {str(e)}")
+                try:
+                    # Try to create a fresh session and retry
+                    from sqlalchemy.ext.asyncio import AsyncSession
+                    from core.database import async_engine
+                    
+                    logger.info("Creating fresh session to retry operation after pgBouncer error")
+                    async with AsyncSession(async_engine) as fresh_session:
+                        # Create a new instance with the fresh session
+                        fresh_ops = ResearchOperations(fresh_session)
+                        # Retry the operation
+                        return await fresh_ops.get_search_by_id(search_id)
+                except Exception as retry_error:
+                    logger.error(f"Error in retry attempt after pgBouncer error: {str(retry_error)}")
+                    return {"error": f"Database error: {str(retry_error)}"}
+            
             logger.error(f"Error retrieving search: {str(e)}")
             return {"error": str(e)}
 
@@ -229,8 +304,14 @@ class ResearchOperations:
         """
         try:
             # Build base query
-            query = select(PublicSearch)
-            count_query = select(func.count(PublicSearch.id))
+            query = select(PublicSearch).execution_options(
+                no_parameters=True,
+                use_server_side_cursors=False  # Disable server-side cursors which use prepared statements
+            )
+            count_query = select(func.count(PublicSearch.id)).execution_options(
+                no_parameters=True,
+                use_server_side_cursors=False  # Disable server-side cursors which use prepared statements
+            )
             
             # Apply filters
             if user_id:
@@ -261,16 +342,6 @@ class ResearchOperations:
             # Apply pagination
             query = query.offset(offset).limit(limit)
             
-            # Add pgBouncer compatibility options
-            query = query.execution_options(
-                no_parameters=True,
-                use_server_side_cursors=False  # Disable server-side cursors which use prepared statements
-            )
-            count_query = count_query.execution_options(
-                no_parameters=True,
-                use_server_side_cursors=False  # Disable server-side cursors which use prepared statements
-            )
-            
             # Execute queries
             result = await self.db_session.execute(query)
             count_result = await self.db_session.execute(count_query)
@@ -288,6 +359,31 @@ class ResearchOperations:
                 limit=limit
             )
         except Exception as e:
+            error_message = str(e).lower()
+            await self.db_session.rollback()
+            
+            # Handle pgBouncer prepared statement errors
+            if ("prepared statement" in error_message or 
+                "duplicatepreparedstatementerror" in error_message or 
+                "invalidsqlstatementnameerror" in error_message):
+                logger.warning(f"pgBouncer prepared statement error encountered: {str(e)}")
+                try:
+                    # Try to create a fresh session and retry
+                    from sqlalchemy.ext.asyncio import AsyncSession
+                    from core.database import async_engine
+                    
+                    logger.info("Creating fresh session to retry operation after pgBouncer error")
+                    async with AsyncSession(async_engine) as fresh_session:
+                        # Create a new instance with the fresh session
+                        fresh_ops = ResearchOperations(fresh_session)
+                        # Retry the operation
+                        return await fresh_ops.list_searches(
+                            user_id, enterprise_id, offset, limit, sort_by, sort_order, status
+                        )
+                except Exception as retry_error:
+                    logger.error(f"Error in retry attempt after pgBouncer error: {str(retry_error)}")
+                    return {"error": f"Database error: {str(retry_error)}"}
+            
             logger.error(f"Error listing searches: {str(e)}")
             return {"error": str(e)}
 
@@ -339,7 +435,29 @@ class ResearchOperations:
             # Return updated search as DTO
             return to_search_dto(db_search)
         except Exception as e:
+            error_message = str(e).lower()
             await self.db_session.rollback()
+            
+            # Handle pgBouncer prepared statement errors
+            if ("prepared statement" in error_message or 
+                "duplicatepreparedstatementerror" in error_message or 
+                "invalidsqlstatementnameerror" in error_message):
+                logger.warning(f"pgBouncer prepared statement error encountered: {str(e)}")
+                try:
+                    # Try to create a fresh session and retry
+                    from sqlalchemy.ext.asyncio import AsyncSession
+                    from core.database import async_engine
+                    
+                    logger.info("Creating fresh session to retry operation after pgBouncer error")
+                    async with AsyncSession(async_engine) as fresh_session:
+                        # Create a new instance with the fresh session
+                        fresh_ops = ResearchOperations(fresh_session)
+                        # Retry the operation
+                        return await fresh_ops.update_search_metadata(search_id, updates)
+                except Exception as retry_error:
+                    logger.error(f"Error in retry attempt after pgBouncer error: {str(retry_error)}")
+                    return {"error": f"Database error: {str(retry_error)}"}
+            
             logger.error(f"Error updating search metadata: {str(e)}")
             return {"error": str(e)}
 
@@ -381,7 +499,29 @@ class ResearchOperations:
             await self.db_session.commit()
             return True
         except Exception as e:
+            error_message = str(e).lower()
             await self.db_session.rollback()
+            
+            # Handle pgBouncer prepared statement errors
+            if ("prepared statement" in error_message or 
+                "duplicatepreparedstatementerror" in error_message or 
+                "invalidsqlstatementnameerror" in error_message):
+                logger.warning(f"pgBouncer prepared statement error encountered: {str(e)}")
+                try:
+                    # Try to create a fresh session and retry
+                    from sqlalchemy.ext.asyncio import AsyncSession
+                    from core.database import async_engine
+                    
+                    logger.info("Creating fresh session to retry operation after pgBouncer error")
+                    async with AsyncSession(async_engine) as fresh_session:
+                        # Create a new instance with the fresh session
+                        fresh_ops = ResearchOperations(fresh_session)
+                        # Retry the operation
+                        return await fresh_ops.delete_search(search_id)
+                except Exception as retry_error:
+                    logger.error(f"Error in retry attempt after pgBouncer error: {str(retry_error)}")
+                    return {"error": f"Database error: {str(retry_error)}"}
+            
             logger.error(f"Error deleting search: {str(e)}")
             return {"error": str(e)}
     
@@ -410,6 +550,29 @@ class ResearchOperations:
             # Convert to DTO using the conversion function
             return to_search_status_dto(db_search)
         except Exception as e:
+            error_message = str(e).lower()
+            await self.db_session.rollback()
+            
+            # Handle pgBouncer prepared statement errors
+            if ("prepared statement" in error_message or 
+                "duplicatepreparedstatementerror" in error_message or 
+                "invalidsqlstatementnameerror" in error_message):
+                logger.warning(f"pgBouncer prepared statement error encountered: {str(e)}")
+                try:
+                    # Try to create a fresh session and retry
+                    from sqlalchemy.ext.asyncio import AsyncSession
+                    from core.database import async_engine
+                    
+                    logger.info("Creating fresh session to retry operation after pgBouncer error")
+                    async with AsyncSession(async_engine) as fresh_session:
+                        # Create a new instance with the fresh session
+                        fresh_ops = ResearchOperations(fresh_session)
+                        # Retry the operation
+                        return await fresh_ops.get_search_status(search_id)
+                except Exception as retry_error:
+                    logger.error(f"Error in retry attempt after pgBouncer error: {str(retry_error)}")
+                    return {"error": f"Database error: {str(retry_error)}"}
+            
             logger.error(f"Error retrieving search status: {str(e)}")
             return {"error": str(e)}
 
@@ -456,6 +619,28 @@ class ResearchOperations:
             # Return updated status
             return to_search_status_dto(db_search)
         except Exception as e:
+            error_message = str(e).lower()
             await self.db_session.rollback()
+            
+            # Handle pgBouncer prepared statement errors
+            if ("prepared statement" in error_message or 
+                "duplicatepreparedstatementerror" in error_message or 
+                "invalidsqlstatementnameerror" in error_message):
+                logger.warning(f"pgBouncer prepared statement error encountered: {str(e)}")
+                try:
+                    # Try to create a fresh session and retry
+                    from sqlalchemy.ext.asyncio import AsyncSession
+                    from core.database import async_engine
+                    
+                    logger.info("Creating fresh session to retry operation after pgBouncer error")
+                    async with AsyncSession(async_engine) as fresh_session:
+                        # Create a new instance with the fresh session
+                        fresh_ops = ResearchOperations(fresh_session)
+                        # Retry the operation
+                        return await fresh_ops.update_search_status(search_id, status)
+                except Exception as retry_error:
+                    logger.error(f"Error in retry attempt after pgBouncer error: {str(retry_error)}")
+                    return {"error": f"Database error: {str(retry_error)}"}
+            
             logger.error(f"Error updating search status: {str(e)}")
             return {"error": str(e)}

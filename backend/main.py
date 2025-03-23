@@ -63,16 +63,15 @@ if settings.ENV == "production":
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["*"] if settings.ENV == "development" else origins,  # Allow all origins in development
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-    allow_headers=["Content-Type", "Authorization", "Accept", "Origin", "X-Requested-With", 
-                  "X-CSRF-Token", "X-Auth-Token", "X-User-Agent", "X-Requested-With"],
+    allow_methods=["*"],  # Allow all methods
+    allow_headers=["*"],  # Allow all headers
     expose_headers=["Content-Length", "Content-Range"],
     max_age=600,  # Maximum time (in seconds) that results can be cached
 )
 
-logger.info(f"Configured CORS origins: {','.join(origins)}")
+logger.info(f"Configured CORS origins: {'*'}" if settings.ENV == "development" else f"{','.join(origins)}")
 
 # Include all routers
 app.include_router(api_router, prefix="/api")

@@ -178,5 +178,29 @@ class SearchMessageOperations:
             # Return as DTO
             return to_search_message_dto(db_message)
         except Exception as e:
+            error_message = str(e).lower()
             await self.db.rollback()
+            
+            # Handle pgBouncer prepared statement errors
+            if ("prepared statement" in error_message or 
+                "duplicatepreparedstatementerror" in error_message or 
+                "invalidsqlstatementnameerror" in error_message):
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(f"pgBouncer prepared statement error encountered: {str(e)}")
+                try:
+                    # Try to create a fresh session and retry
+                    from sqlalchemy.ext.asyncio import AsyncSession
+                    from core.database import async_engine
+                    
+                    logger.info("Creating fresh session to retry operation after pgBouncer error")
+                    async with AsyncSession(async_engine) as fresh_session:
+                        # Create a new instance with the fresh session
+                        fresh_ops = SearchMessageOperations(fresh_session)
+                        # Retry the operation
+                        return await fresh_ops.create_message_with_commit(message_create_dto)
+                except Exception as retry_error:
+                    logger.error(f"Error in retry attempt after pgBouncer error: {str(retry_error)}")
+                    raise retry_error
+            
             raise e

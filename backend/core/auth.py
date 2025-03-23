@@ -104,8 +104,17 @@ async def get_current_user(
                 )
                 await fresh_session.execute(test_query)
                 
-                # Execute the actual query
-                result = await fresh_session.execute(query)
+                # Create a completely new query with the fresh session
+                fresh_query = text(f"""
+                    SELECT id, auth_user_id, first_name, last_name, name, role, email, virtual_paralegal_id, enterprise_id, created_at, updated_at
+                    FROM public.users WHERE auth_user_id = '{user_id_str}'::UUID
+                """).execution_options(
+                    no_parameters=True,  # Required for pgBouncer compatibility
+                    use_server_side_cursors=False  # Disable server-side cursors
+                )
+                
+                # Execute the fresh query
+                result = await fresh_session.execute(fresh_query)
                 user_row = result.fetchone()
                 
                 if not user_row:
