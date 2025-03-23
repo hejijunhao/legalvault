@@ -250,9 +250,21 @@ async def websocket_endpoint(
     
     # Verify user has access to the search
     search_ops = ResearchOperations(db)
-    search = await search_ops.get_search_by_id(search_id)
-    
-    if not search or str(search.user_id) != str(user_id):
+    try:
+        # Add execution_options for pgBouncer compatibility
+        search = await search_ops.get_search_by_id(
+            search_id,
+            execution_options={"no_parameters": True, "use_server_side_cursors": False}
+        )
+        
+        if not search or str(search.user_id) != str(user_id):
+            print(f"WebSocket access denied: User {user_id} does not have access to search {search_id}")
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+        
+        print(f"WebSocket access granted: User {user_id} has access to search {search_id}")
+    except Exception as e:
+        print(f"WebSocket error verifying search access: {e}")
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
     
@@ -312,19 +324,28 @@ async def websocket_endpoint(
                 if command == "get_latest":
                     # Fetch latest messages
                     message_ops = SearchMessageOperations(db)
-                    messages = await message_ops.list_messages_by_search(
-                        search_id=search_id,
-                        limit=data.get("limit", 10),
-                        offset=data.get("offset", 0)
-                    )
-                    
-                    # Convert to dict for JSON serialization
-                    messages_data = [m.model_dump() for m in messages]
-                    
-                    await websocket.send_json({
-                        "type": "messages",
-                        "data": messages_data
-                    })
+                    try:
+                        # Add execution_options for pgBouncer compatibility
+                        messages = await message_ops.list_messages_by_search(
+                            search_id=search_id,
+                            limit=data.get("limit", 10),
+                            offset=data.get("offset", 0),
+                            execution_options={"no_parameters": True, "use_server_side_cursors": False}
+                        )
+                        
+                        # Convert to dict for JSON serialization
+                        messages_data = [m.model_dump() for m in messages]
+                        
+                        await websocket.send_json({
+                            "type": "messages",
+                            "data": messages_data
+                        })
+                    except Exception as e:
+                        print(f"Error fetching latest messages: {e}")
+                        await websocket.send_json({
+                            "type": "error",
+                            "message": "Failed to fetch latest messages"
+                        })
                 
                 elif command == "typing":
                     # Client is typing - could broadcast to other connected clients
