@@ -68,10 +68,10 @@ async_engine = create_async_engine(
         }
     },
     execution_options={
-        "isolation_level": "AUTOCOMMIT",  # Required for pgBouncer
         "compiled_cache": None,
         "no_parameters": True  # Required for pgBouncer
-    }
+    },
+    isolation_level="AUTOCOMMIT"  # Move this to engine level
 )
 
 # Create session factory with pgBouncer-compatible options

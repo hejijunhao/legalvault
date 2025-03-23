@@ -5,7 +5,7 @@ from typing import Dict, List, Optional, Any, Union
 from datetime import datetime
 import logging
 
-from sqlalchemy import select, desc, asc, func, delete
+from sqlalchemy import select, desc, asc, func, delete, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -40,6 +40,23 @@ class ResearchOperations:
             db_session: SQLAlchemy async session for database operations
         """
         self.db_session = db_session
+        # Set pgBouncer compatibility options for all operations
+        self.execution_options = {
+            "no_parameters": True,
+            "use_server_side_cursors": False
+        }
+    
+    async def _execute_query(self, query):
+        """Execute a query with pgBouncer compatibility settings."""
+        try:
+            # Apply pgBouncer compatibility options
+            result = await self.db_session.execute(
+                query.execution_options(**self.execution_options)
+            )
+            return result
+        except Exception as e:
+            logger.error(f"Error executing query: {str(e)}")
+            raise
     
     async def create_search_record(self, search_id: UUID, user_id: UUID, query: str, 
                            enterprise_id: Optional[UUID] = None,
@@ -82,6 +99,9 @@ class ResearchOperations:
                 enterprise_id=enterprise_id,
                 search_params=search_params
             )
+            
+            # Add with pgBouncer compatibility options
+            await self._execute_query(text("SELECT 1"))
             self.db_session.add(db_search)
             
             # If we have a response, create message records
@@ -156,11 +176,8 @@ class ResearchOperations:
         """
         try:
             # First validate the search exists
-            query = select(PublicSearch).where(PublicSearch.id == search_id).execution_options(
-                no_parameters=True,
-                use_server_side_cursors=False  # Disable server-side cursors which use prepared statements
-            )
-            result = await self.db_session.execute(query)
+            query = select(PublicSearch).where(PublicSearch.id == search_id)
+            result = await self._execute_query(query)
             db_search = result.scalars().first()
             
             if not db_search:
@@ -237,13 +254,11 @@ class ResearchOperations:
             SearchDTO with search data and messages, or error dict if not found
         """
         try:
+            # Add pgBouncer compatibility options
             query = select(PublicSearch).options(
                 selectinload(PublicSearch.messages)
-            ).where(PublicSearch.id == search_id).execution_options(
-                no_parameters=True,
-                use_server_side_cursors=False  # Disable server-side cursors which use prepared statements
-            )
-            result = await self.db_session.execute(query)
+            ).where(PublicSearch.id == search_id)
+            result = await self._execute_query(query)
             db_search = result.scalars().first()
             
             if not db_search:
@@ -258,16 +273,19 @@ class ResearchOperations:
                 # Load messages separately for tuple case
                 msg_query = select(PublicSearchMessage).where(
                     PublicSearchMessage.search_id == search_id
-                ).order_by(PublicSearchMessage.sequence).execution_options(
-                    no_parameters=True,
-                    use_server_side_cursors=False
-                )
-                msg_result = await self.db_session.execute(msg_query)
+                ).order_by(PublicSearchMessage.sequence)
+                msg_result = await self._execute_query(msg_query)
                 messages = msg_result.scalars().all()
                 
-                # Convert messages to DTOs
+                # Convert messages to DTOs, handling both tuple and ORM cases
                 if messages:
-                    message_dtos = [to_search_message_dto(msg) for msg in messages]
+                    message_dtos = []
+                    for msg in messages:
+                        if isinstance(msg, tuple):
+                            msg_ops = SearchMessageOperations(self.db_session)
+                            message_dtos.append(msg_ops._tuple_to_message_dto(msg))
+                        else:
+                            message_dtos.append(to_search_message_dto(msg))
                     search_dto.messages = message_dtos
                 
                 return search_dto
@@ -277,8 +295,31 @@ class ResearchOperations:
                 if db_search.messages:
                     search_dto.messages = [to_search_message_dto(msg) for msg in db_search.messages]
                 return search_dto
-                
+
         except Exception as e:
+            error_message = str(e).lower()
+            await self.db_session.rollback()
+            
+            # Handle pgBouncer prepared statement errors
+            if ("prepared statement" in error_message or 
+                "duplicatepreparedstatementerror" in error_message or 
+                "invalidsqlstatementnameerror" in error_message):
+                logger.warning(f"pgBouncer prepared statement error encountered: {str(e)}")
+                try:
+                    # Try to create a fresh session and retry
+                    from sqlalchemy.ext.asyncio import AsyncSession
+                    from core.database import async_engine
+                    
+                    logger.info("Creating fresh session to retry operation after pgBouncer error")
+                    async with AsyncSession(async_engine) as fresh_session:
+                        # Create a new instance with the fresh session
+                        fresh_ops = ResearchOperations(fresh_session)
+                        # Retry the operation
+                        return await fresh_ops.get_search_by_id(search_id)
+                except Exception as retry_error:
+                    logger.error(f"Error in retry attempt after pgBouncer error: {str(retry_error)}")
+                    return {"error": f"Database error: {str(retry_error)}", "user_id": None}
+            
             logger.error(f"Error retrieving search: {str(e)}")
             return {"error": str(e), "user_id": None}
 
@@ -307,14 +348,8 @@ class ResearchOperations:
         """
         try:
             # Build base query
-            query = select(PublicSearch).execution_options(
-                no_parameters=True,
-                use_server_side_cursors=False  # Disable server-side cursors which use prepared statements
-            )
-            count_query = select(func.count(PublicSearch.id)).execution_options(
-                no_parameters=True,
-                use_server_side_cursors=False  # Disable server-side cursors which use prepared statements
-            )
+            query = select(PublicSearch)
+            count_query = select(func.count(PublicSearch.id))
             
             # Apply filters
             if user_id:
@@ -342,20 +377,21 @@ class ResearchOperations:
             query = query.offset(offset).limit(limit)
             
             # Execute queries
-            result = await self.db_session.execute(query)
-            count_result = await self.db_session.execute(count_query)
+            result = await self._execute_query(query)
+            count_result = await self._execute_query(count_query)
             
             searches = result.scalars().all()
             total_count = count_result.scalar()
             
             # Convert to DTOs
             search_dtos = []
-            if searches and len(searches) > 0:
-                if isinstance(searches[0], tuple):
-                    logger.info("Received tuples instead of ORM objects in list_searches")
-                    search_dtos = [self._tuple_to_search_dto(search) for search in searches]
-                else:
-                    search_dtos = [to_search_dto_without_messages(search) for search in searches]
+            if searches:
+                for search in searches:
+                    if isinstance(search, tuple):
+                        logger.info("Received tuple instead of ORM object in list_searches")
+                        search_dtos.append(self._tuple_to_search_dto(search))
+                    else:
+                        search_dtos.append(to_search_dto_without_messages(search))
             
             return SearchListDTO(
                 items=search_dtos,
@@ -404,11 +440,8 @@ class ResearchOperations:
             Updated SearchDTO if successful, error dict otherwise
         """
         try:
-            query = select(PublicSearch).where(PublicSearch.id == search_id).execution_options(
-                no_parameters=True,
-                use_server_side_cursors=False  # Disable server-side cursors which use prepared statements
-            )
-            result = await self.db_session.execute(query)
+            query = select(PublicSearch).where(PublicSearch.id == search_id)
+            result = await self._execute_query(query)
             db_search = result.scalars().first()
             
             if not db_search:
@@ -478,28 +511,19 @@ class ResearchOperations:
         """
         try:
             # First check if the search exists
-            check_query = select(PublicSearch).where(PublicSearch.id == search_id).execution_options(
-                no_parameters=True,
-                use_server_side_cursors=False  # Disable server-side cursors which use prepared statements
-            )
-            check_result = await self.db_session.execute(check_query)
+            check_query = select(PublicSearch).where(PublicSearch.id == search_id)
+            check_result = await self._execute_query(check_query)
             if not check_result.scalars().first():
                 logger.error(f"Search with ID {search_id} not found")
                 return {"error": f"Search with ID {search_id} not found"}
             
             # Delete messages first (cascade would handle this, but being explicit)
-            msg_delete = delete(PublicSearchMessage).where(PublicSearchMessage.search_id == search_id).execution_options(
-                no_parameters=True,
-                use_server_side_cursors=False  # Disable server-side cursors which use prepared statements
-            )
-            await self.db_session.execute(msg_delete)
+            msg_delete = delete(PublicSearchMessage).where(PublicSearchMessage.search_id == search_id)
+            await self._execute_query(msg_delete)
             
             # Delete the search
-            search_delete = delete(PublicSearch).where(PublicSearch.id == search_id).execution_options(
-                no_parameters=True,
-                use_server_side_cursors=False  # Disable server-side cursors which use prepared statements
-            )
-            result = await self.db_session.execute(search_delete)
+            search_delete = delete(PublicSearch).where(PublicSearch.id == search_id)
+            result = await self._execute_query(search_delete)
             
             await self.db_session.commit()
             return True

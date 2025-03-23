@@ -20,6 +20,38 @@ class SearchMessageOperations:
 
     def __init__(self, db_session: AsyncSession):
         self.db = db_session
+        # Set pgBouncer compatibility options for all operations
+        self.execution_options = {
+            "no_parameters": True,
+            "use_server_side_cursors": False
+        }
+    
+    async def _execute_query(self, query):
+        """Execute a query with pgBouncer compatibility settings."""
+        try:
+            # Apply pgBouncer compatibility options
+            result = await self.db.execute(
+                query.execution_options(**self.execution_options)
+            )
+            return result
+        except Exception as e:
+            if any(err_type in str(e) for err_type in [
+                "DuplicatePreparedStatementError",
+                "prepared statement",
+                "InvalidSQLStatementNameError"
+            ]):
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning("pgBouncer prepared statement error encountered: %s", str(e))
+                logger.info("Creating fresh session to retry operation after pgBouncer error")
+                # Create a fresh session and retry
+                await self.db.close()
+                self.db = AsyncSession(bind=self.db.bind)
+                result = await self.db.execute(
+                    query.execution_options(**self.execution_options)
+                )
+                return result
+            raise
 
     def _tuple_to_message_dto(self, message_tuple: tuple) -> SearchMessageDTO:
         """Convert a database tuple to a SearchMessageDTO
@@ -66,11 +98,8 @@ class SearchMessageOperations:
         """Get the next sequence number for a message in a search."""
         query = select(func.max(PublicSearchMessage.sequence)).where(
             PublicSearchMessage.search_id == search_id
-        ).execution_options(
-            no_parameters=True,
-            use_server_side_cursors=False  # Disable server-side cursors which use prepared statements
         )
-        result = await self.db.execute(query)
+        result = await self._execute_query(query)
         max_sequence = result.scalar() or 0
         return max_sequence + 1
 
@@ -89,11 +118,8 @@ class SearchMessageOperations:
 
     async def get_message_by_id(self, message_id: UUID) -> Optional[SearchMessageDTO]:
         """Retrieve a message by its ID."""
-        query = select(PublicSearchMessage).where(PublicSearchMessage.id == message_id).execution_options(
-            no_parameters=True,
-            use_server_side_cursors=False  # Disable server-side cursors which use prepared statements
-        )
-        result = await self.db.execute(query)
+        query = select(PublicSearchMessage).where(PublicSearchMessage.id == message_id)
+        result = await self._execute_query(query)
         db_message = result.scalars().first()
         
         if not db_message:
@@ -111,11 +137,8 @@ class SearchMessageOperations:
 
     async def update_message(self, message_id: UUID, updates: SearchMessageUpdateDTO) -> Optional[SearchMessageDTO]:
         """Update a message's content or other attributes."""
-        query = select(PublicSearchMessage).where(PublicSearchMessage.id == message_id).execution_options(
-            no_parameters=True,
-            use_server_side_cursors=False  # Disable server-side cursors which use prepared statements
-        )
-        result = await self.db.execute(query)
+        query = select(PublicSearchMessage).where(PublicSearchMessage.id == message_id)
+        result = await self._execute_query(query)
         db_message = result.scalars().first()
         if not db_message:
             return None
@@ -129,7 +152,7 @@ class SearchMessageOperations:
             try:
                 # Create a new query with different execution options
                 retry_query = select(PublicSearchMessage).where(PublicSearchMessage.id == message_id)
-                retry_result = await self.db.execute(retry_query)
+                retry_result = await self._execute_query(retry_query)
                 db_message = retry_result.scalars().first()
                 if not db_message or isinstance(db_message, tuple):
                     logger.error("Failed to get ORM object for update operation")
@@ -160,11 +183,8 @@ class SearchMessageOperations:
 
     async def update_message_status(self, message_id: UUID, status: QueryStatus) -> Optional[SearchMessageDTO]:
         """Update a message's status."""
-        query = select(PublicSearchMessage).where(PublicSearchMessage.id == message_id).execution_options(
-            no_parameters=True,
-            use_server_side_cursors=False  # Disable server-side cursors which use prepared statements
-        )
-        result = await self.db.execute(query)
+        query = select(PublicSearchMessage).where(PublicSearchMessage.id == message_id)
+        result = await self._execute_query(query)
         db_message = result.scalars().first()
         if not db_message:
             return None
@@ -178,7 +198,7 @@ class SearchMessageOperations:
             try:
                 # Create a new query with different execution options
                 retry_query = select(PublicSearchMessage).where(PublicSearchMessage.id == message_id)
-                retry_result = await self.db.execute(retry_query)
+                retry_result = await self._execute_query(retry_query)
                 db_message = retry_result.scalars().first()
                 if not db_message or isinstance(db_message, tuple):
                     logger.error("Failed to get ORM object for update operation")
@@ -204,11 +224,8 @@ class SearchMessageOperations:
 
     async def delete_message(self, message_id: UUID) -> bool:
         """Delete a message from the database."""
-        query = delete(PublicSearchMessage).where(PublicSearchMessage.id == message_id).execution_options(
-            no_parameters=True,
-            use_server_side_cursors=False  # Disable server-side cursors which use prepared statements
-        )
-        result = await self.db.execute(query)
+        query = delete(PublicSearchMessage).where(PublicSearchMessage.id == message_id)
+        result = await self._execute_query(query)
         await self.db.commit()
         return result.rowcount > 0
 
@@ -216,33 +233,27 @@ class SearchMessageOperations:
         """List all messages for a given search with pagination."""
         # Query for messages
         query = select(PublicSearchMessage).where(PublicSearchMessage.search_id == search_id)\
-            .order_by(PublicSearchMessage.sequence).offset(offset).limit(limit).execution_options(
-                no_parameters=True,
-                use_server_side_cursors=False  # Disable server-side cursors which use prepared statements
-            )
-        result = await self.db.execute(query)
+            .order_by(PublicSearchMessage.sequence).offset(offset).limit(limit)
+        result = await self._execute_query(query)
         messages = result.scalars().all()
         
-        # Check if we got tuples instead of ORM objects
+        # Convert messages to DTOs, handling both tuple and ORM cases
         message_dtos = []
-        if messages and len(messages) > 0:
-            if isinstance(messages[0], tuple):
-                import logging
-                logger = logging.getLogger(__name__)
-                logger.info("Received tuples instead of ORM objects in list_messages_by_search")
-                message_dtos = [self._tuple_to_message_dto(message) for message in messages]
-            else:
-                # Normal ORM object conversion
-                message_dtos = [to_search_message_dto(message) for message in messages]
+        if messages:
+            for message in messages:
+                if isinstance(message, tuple):
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.info("Received tuple instead of ORM object in list_messages_by_search")
+                    message_dtos.append(self._tuple_to_message_dto(message))
+                else:
+                    message_dtos.append(to_search_message_dto(message))
         
         # Count total messages
         count_query = select(func.count()).select_from(PublicSearchMessage).where(
             PublicSearchMessage.search_id == search_id
-        ).execution_options(
-            no_parameters=True,
-            use_server_side_cursors=False  # Disable server-side cursors which use prepared statements
         )
-        count_result = await self.db.execute(count_query)
+        count_result = await self._execute_query(count_query)
         total_count = count_result.scalar() or 0
         
         # Return custom DTO with our processed items
@@ -255,11 +266,8 @@ class SearchMessageOperations:
     async def list_messages_by_status(self, status: QueryStatus, limit: int = 100, offset: int = 0) -> List[SearchMessageDTO]:
         """List messages by status with pagination."""
         query = select(PublicSearchMessage).where(PublicSearchMessage.status == status)\
-            .order_by(PublicSearchMessage.created_at).offset(offset).limit(limit).execution_options(
-                no_parameters=True,
-                use_server_side_cursors=False  # Disable server-side cursors which use prepared statements
-            )
-        result = await self.db.execute(query)
+            .order_by(PublicSearchMessage.created_at).offset(offset).limit(limit)
+        result = await self._execute_query(query)
         messages = result.scalars().all()
         
         # Check if we got tuples instead of ORM objects

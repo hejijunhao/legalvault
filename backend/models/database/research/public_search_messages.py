@@ -3,7 +3,7 @@
 from models.database.research.public_searches import PublicSearch
 from sqlalchemy import Column, String, ForeignKey, Text, Integer, Index, Enum as SQLAlchemyEnum
 from sqlalchemy.dialects.postgresql import UUID, JSONB
-from typing import Optional, Dict, TYPE_CHECKING
+from typing import Optional, Dict, TYPE_CHECKING, Any
 from models.database.base import PublicBase
 from models.database.mixins.timestamp_mixin import TimestampMixin
 from models.enums.research_enums import QueryStatus
@@ -49,3 +49,13 @@ class PublicSearchMessage(PublicBase, TimestampMixin):
     
     def __repr__(self):
         return f"PublicSearchMessage(id={self.id}, search_id={self.search_id}, role={self.role}, status={self.status})"
+
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Convert the model to a dictionary representation using the standard DTO conversion.
+        
+        Returns:
+            Dictionary representation of the message using the established DTO pattern
+        """
+        from models.dtos.research.search_message_dto import to_search_message_dto
+        return to_search_message_dto(self).model_dump()

@@ -231,6 +231,8 @@ async def websocket_endpoint(
     - Command-based interaction (subscribe, get_latest, typing, ping)
     - Authentication via token
     """
+    await websocket.accept()
+    
     # Authenticate user from token
     try:
         user_ops = UserOperations(db)
@@ -253,8 +255,6 @@ async def websocket_endpoint(
     if not search or str(search.user_id) != str(user_id):
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
-    
-    await websocket.accept()
     
     # Send initial message
     await websocket.send_json({

@@ -63,43 +63,45 @@ def get_search_workflow(operations: ResearchOperations = Depends(get_research_op
 # Conversion functions for DTOs to API response models
 def search_dto_to_response(search_dto: Union[SearchDTO, tuple]) -> SearchResponse:
     """Convert SearchDTO to SearchResponse for API layer."""
-    # Handle case where search_dto is a tuple (from raw SQL queries with pgBouncer)
+    # Handle case where search_dto is a tuple
     if isinstance(search_dto, tuple):
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.debug(f"Received tuple in search_dto_to_response with length {len(search_dto)}")
-        
-        # Extract data from tuple with safe fallbacks
-        # This assumes the tuple structure matches the database query columns
         try:
-            search_response = SearchResponse(
-                id=search_dto[0] if len(search_dto) > 0 else None,
-                title=search_dto[1] if len(search_dto) > 1 else "",
-                description=search_dto[2] if len(search_dto) > 2 else None,
-                user_id=search_dto[3] if len(search_dto) > 3 else None,
-                enterprise_id=search_dto[4] if len(search_dto) > 4 else None,
+            # Assuming tuple structure: (id, title, description, user_id, enterprise_id, is_featured, search_params, created_at, updated_at, tags)
+            return SearchResponse(
+                id=search_dto[0] if search_dto[0] else uuid4(),
+                query=search_dto[1],  # Title is used as query
+                title=search_dto[1],
+                description=search_dto[2],
+                user_id=search_dto[3] if search_dto[3] else uuid4(),
+                enterprise_id=search_dto[4],
+                is_featured=search_dto[5] if len(search_dto) > 5 else False,
                 search_params=search_dto[6] if len(search_dto) > 6 else {},
                 created_at=search_dto[7] if len(search_dto) > 7 else datetime.now(),
                 updated_at=search_dto[8] if len(search_dto) > 8 else datetime.now(),
+                tags=search_dto[9] if len(search_dto) > 9 else [],
                 messages=[],
-                category=getattr(search_dto, 'category', None),
-                query_type=getattr(search_dto, 'query_type', None)
+                category=None,
+                query_type=None
             )
-            return search_response
         except Exception as e:
             logger.error(f"Error converting tuple to SearchResponse: {str(e)}")
             logger.debug(f"Tuple structure: {search_dto}")
             # Return a minimal valid response rather than failing
             return SearchResponse(
-                id=None,
+                id=uuid4(),
+                query="Error retrieving search data",  # Use error message as query
                 title="Error retrieving search data",
-                description=None,
-                user_id=None,
+                description="An error occurred while retrieving search data",
+                user_id=uuid4(),
                 enterprise_id=None,
-                search_params=search_dto[6] if len(search_dto) > 6 else {},
+                is_featured=False,
+                search_params={},
                 created_at=datetime.now(),
                 updated_at=datetime.now(),
-                messages=[]
+                messages=[],
+                tags=[],
+                category=None,
+                query_type=None
             )
     
     # Convert messages to SearchMessageResponse objects
@@ -345,19 +347,42 @@ async def get_search(
     Retrieves the full details of a search, including all messages in the conversation.
     """
     try:
-        search_dto = await operations.get_search_by_id(search_id)
-        if not search_dto:
+        search_result = await operations.get_search_by_id(search_id)
+        
+        # Check if we got an error dictionary instead of SearchDTO
+        if isinstance(search_result, dict) and "error" in search_result:
+            logger.error(f"Database error in get_search: {search_result['error']}")
+            # If it's a "not found" error, return 404
+            if "not found" in search_result["error"].lower():
+                raise HTTPException(status_code=404, detail=search_result["error"])
+            # For database errors, return 503
+            if "database error" in search_result["error"].lower():
+                raise HTTPException(
+                    status_code=503, 
+                    detail="Database connection failed. Please try again later."
+                )
+            # For other errors, return 500
+            raise HTTPException(status_code=500, detail=search_result["error"])
+            
+        if not search_result:
             raise HTTPException(status_code=404, detail="Search not found")
         
         # Verify ownership or permissions
-        if str(search_dto.user_id) != str(current_user.id) and "admin" not in user_permissions:
+        if str(search_result.user_id) != str(current_user.id) and "admin" not in user_permissions:
             raise HTTPException(status_code=403, detail="Not authorized to access this search")
         
         # Convert DTO to API response model
-        return search_dto_to_response(search_dto)
+        return search_dto_to_response(search_result)
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions as is
+        raise
     except Exception as e:
-        logger.error(f"Error in get_search: {str(e)}")
-        raise HTTPException(status_code=500, detail="An unexpected error occurred")
+        logger.error(f"Unexpected error in get_search: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail="An unexpected error occurred. Please try again later."
+        )
 
 @router.get("/{search_id}/messages", response_model=SearchMessageListResponse)
 async def get_search_messages(
