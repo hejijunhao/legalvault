@@ -3,6 +3,7 @@
 from typing import Dict, Any, Optional, Literal
 from uuid import UUID
 from models.enums.research_enums import QueryStatus
+from models.domain.research.research_errors import ValidationError
 
 class ResearchMessage:
     """Domain model for search message operations within a public search conversation."""
@@ -28,10 +29,26 @@ class ResearchMessage:
 
     def _validate(self) -> None:
         """Validate message properties."""
-        if not isinstance(self.content, dict) or "text" not in self.content:
-            raise ValueError("Content must be a dictionary with a 'text' key")
+        if not isinstance(self.content, dict):
+            raise ValidationError("Content must be a dictionary")
+            
+        if "text" not in self.content:
+            raise ValidationError("Content must include 'text' field")
+            
+        if not isinstance(self.content["text"], str):
+            raise ValidationError("Content 'text' must be a string")
+            
+        if not self.content["text"].strip():
+            raise ValidationError("Content 'text' cannot be empty")
+            
         if self.role not in ["user", "assistant"]:
-            raise ValueError("Role must be 'user' or 'assistant'")
+            raise ValidationError("Role must be 'user' or 'assistant'")
+            
+        if self.sequence is not None and not isinstance(self.sequence, int):
+            raise ValidationError("Sequence must be an integer")
+            
+        if self.sequence is not None and self.sequence < 0:
+            raise ValidationError("Sequence cannot be negative")
 
     def format_for_external_sharing(self) -> str:
         """Format message content for external sharing."""
@@ -55,28 +72,6 @@ class ResearchMessage:
             "status": self.status.value if hasattr(self.status, 'value') else self.status
         }
 
-    def forward_message(self, destination: str, destination_type: str) -> Dict[str, Any]:
-        """
-        Prepare data for forwarding this message to another destination.
-        
-        Args:
-            destination: Where the message is being forwarded (e.g., email, user ID).
-            destination_type: Type of destination (e.g., 'email', 'internal').
-        
-        Returns:
-            Dict with forwarding details.
-        """
-        if not destination or not destination_type:
-            raise ValueError("Destination and destination_type are required")
-        return {
-            "message_id": self.message_id,
-            "content": self.content,
-            "role": self.role,
-            "destination": destination,
-            "destination_type": destination_type,
-            "sequence": self.sequence,
-            "status": self.status.value if hasattr(self.status, 'value') else self.status
-        }
         
     def categorize_message(self) -> Literal["question", "answer", "clarification", "citation"]:
         """

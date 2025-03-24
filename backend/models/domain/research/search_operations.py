@@ -47,21 +47,70 @@ class ResearchOperations:
         }
     
     async def _execute_query(self, query):
-        """Execute a query with pgBouncer compatibility settings."""
+        """
+        Execute a query with pgBouncer compatibility settings.
+        
+        Args:
+            query: SQLAlchemy query to execute
+            
+        Returns:
+            Query result
+            
+        Raises:
+            DatabaseError: If query execution fails
+        """
         try:
             # Apply pgBouncer compatibility options
             result = await self.db_session.execute(
                 query.execution_options(**self.execution_options)
             )
             return result
+            
         except Exception as e:
+            error_message = str(e).lower()
+            await self.db_session.rollback()
+            
+            # Handle pgBouncer prepared statement errors
+            if ("prepared statement" in error_message or 
+                "duplicatepreparedstatementerror" in error_message or 
+                "invalidsqlstatementnameerror" in error_message):
+                logger.warning(f"pgBouncer prepared statement error encountered: {str(e)}")
+                try:
+                    # Try to create a fresh session and retry
+                    from sqlalchemy.ext.asyncio import AsyncSession
+                    from core.database import async_engine
+                    
+                    logger.info("Creating fresh session to retry operation after pgBouncer error")
+                    async with AsyncSession(async_engine) as fresh_session:
+                        result = await fresh_session.execute(
+                            query.execution_options(**self.execution_options)
+                        )
+                        return result
+                        
+                except Exception as retry_error:
+                    logger.error(f"Error in retry attempt after pgBouncer error: {str(retry_error)}")
+                    raise DatabaseError(
+                        "Database connection error",
+                        details={"original_error": str(retry_error)},
+                        original_error=retry_error
+                    )
+            
             logger.error(f"Error executing query: {str(e)}")
-            raise
-    
-    async def create_search_record(self, search_id: UUID, user_id: UUID, query: str, 
-                           enterprise_id: Optional[UUID] = None,
-                           search_params: Optional[Dict] = None,
-                           response: Optional[Dict] = None) -> Union[SearchDTO, Dict[str, Any]]:
+            raise DatabaseError(
+                "Query execution failed",
+                details={"error": str(e)},
+                original_error=e
+            )
+
+    async def create_search_record(
+            self,
+            search_id: UUID,
+            user_id: UUID,
+            query: str,
+            enterprise_id: Optional[UUID] = None,
+            search_params: Optional[Dict] = None,
+            response: Optional[Dict] = None
+        ) -> SearchDTO:
         """
         Create a new search record in the database.
         
@@ -74,95 +123,97 @@ class ResearchOperations:
             response: Optional response data from the search execution
             
         Returns:
-            SearchDTO if successful, error dict otherwise
+            SearchDTO with created search data
+            
+        Raises:
+            DatabaseError: If database operation fails
+            ValidationError: If input validation fails
         """
         try:
             # Create domain model for validation
             search = ResearchSearch(
-                title=query,
-                description=None,
+                title=query[:50],  # Use first 50 chars as title
+                description=query,
                 user_id=user_id,
                 enterprise_id=enterprise_id
             )
             
-            # Validate the query using domain logic
-            if not search.validate_query(query):
-                logger.error("Invalid query. Query must be at least 3 characters.")
-                return {"error": "Invalid query. Query must be at least 3 characters."}
-            
-            # Create database record
+            # Create database model
             db_search = PublicSearch(
                 id=search_id,
                 title=search.title,
                 description=search.description,
                 user_id=user_id,
                 enterprise_id=enterprise_id,
-                search_params=search_params
+                search_params=search_params or {},
+                tags=[],
+                is_featured=False
             )
             
-            # Add with pgBouncer compatibility options
-            await self._execute_query(text("SELECT 1"))
-            self.db_session.add(db_search)
-            
-            # If we have a response, create message records
-            if response:
-                # Add user query as first message
-                msg_ops = SearchMessageOperations(self.db_session)
+            try:
+                # Add and commit the search
+                self.db_session.add(db_search)
+                await self.db_session.commit()
+                await self.db_session.refresh(db_search)
                 
-                # Get next sequence numbers using the centralized method
-                user_msg_seq = await msg_ops.get_next_sequence(search_id)
+                # If response provided, add initial messages
+                if response:
+                    try:
+                        # Create message operations
+                        msg_ops = SearchMessageOperations(self.db_session)
+                        
+                        # Add user query message
+                        await msg_ops.create_message(
+                            search_id=search_id,
+                            content={"text": query},
+                            role="user",
+                            sequence=1
+                        )
+                        
+                        # Add assistant response message
+                        await msg_ops.create_message(
+                            search_id=search_id,
+                            content=response,
+                            role="assistant",
+                            sequence=2
+                        )
+                        
+                        # Refresh search to get messages
+                        await self.db_session.refresh(db_search)
+                        
+                    except Exception as msg_error:
+                        logger.error(f"Error creating initial messages: {str(msg_error)}")
+                        # Don't fail the whole operation if message creation fails
+                        # Just log and continue
+                        
+                return to_search_dto(db_search)
                 
-                msg_ops.create_message(
-                    search_id=search_id,
-                    role="user",
-                    content={"text": query},
-                    sequence=user_msg_seq
+            except Exception as e:
+                await self.db_session.rollback()
+                raise DatabaseError(
+                    "Failed to create search record",
+                    details={
+                        "search_id": str(search_id),
+                        "user_id": str(user_id)
+                    },
+                    original_error=e
                 )
                 
-                # Add assistant response as second message
-                if "text" in response and "citations" in response:
-                    assistant_msg_seq = await msg_ops.get_next_sequence(search_id)
-                    msg_ops.create_message(
-                        search_id=search_id,
-                        role="assistant",
-                        content=response,
-                        sequence=assistant_msg_seq
-                    )
-            
-            await self.db_session.commit()
-            
-            # Return the created search with all data
-            return await self.get_search_by_id(search_id)
+        except ValidationError:
+            raise
+        except DatabaseError:
+            raise
         except Exception as e:
-            error_message = str(e).lower()
-            await self.db_session.rollback()
-            
-            # Handle pgBouncer prepared statement errors
-            if ("prepared statement" in error_message or 
-                "duplicatepreparedstatementerror" in error_message or 
-                "invalidsqlstatementnameerror" in error_message):
-                logger.warning(f"pgBouncer prepared statement error encountered: {str(e)}")
-                try:
-                    # Try to create a fresh session and retry
-                    from sqlalchemy.ext.asyncio import AsyncSession
-                    from core.database import async_engine
-                    
-                    logger.info("Creating fresh session to retry operation after pgBouncer error")
-                    async with AsyncSession(async_engine) as fresh_session:
-                        # Create a new instance with the fresh session
-                        fresh_ops = ResearchOperations(fresh_session)
-                        # Retry the operation
-                        return await fresh_ops.create_search_record(
-                            search_id, user_id, query, enterprise_id, search_params, response
-                        )
-                except Exception as retry_error:
-                    logger.error(f"Error in retry attempt after pgBouncer error: {str(retry_error)}")
-                    return {"error": f"Database error: {str(retry_error)}"}
-            
-            logger.error(f"Error creating search record: {str(e)}")
-            return {"error": str(e)}
+            raise DatabaseError(
+                "Unexpected error creating search",
+                details={
+                    "search_id": str(search_id),
+                    "user_id": str(user_id)
+                },
+                original_error=e
+            )
 
-    async def add_search_messages(self, search_id: UUID, user_query: str, response: Dict[str, Any]) -> Union[bool, Dict[str, Any]]:
+    async def add_search_messages(self, search_id: UUID, user_query: str, response: Dict[str, Any]) -> bool:
         """
         Add user query and assistant response messages to an existing search.
         
@@ -172,165 +223,163 @@ class ResearchOperations:
             response: Response data from the search execution
             
         Returns:
-            True if successful, error dict otherwise
+            True if messages were added successfully
+            
+        Raises:
+            DatabaseError: If database operation fails
+            ValidationError: If search not found or validation fails
         """
         try:
             # First validate the search exists
             query = select(PublicSearch).where(PublicSearch.id == search_id)
             result = await self._execute_query(query)
-            db_search = result.scalars().first()
+            search = result.scalars().first()
             
-            if not db_search:
-                logger.error(f"Search with ID {search_id} not found")
-                return {"error": f"Search with ID {search_id} not found"}
-                
-            # Validate the query using domain logic
-            temp_search = ResearchSearch(title=user_query)
-            if not temp_search.validate_query(user_query):
-                logger.error("Invalid query. Query must be at least 3 characters.")
-                return {"error": "Invalid query. Query must be at least 3 characters."}
-            
-            # Create message operations
-            msg_ops = SearchMessageOperations(self.db_session)
-            
-            # Get next sequence number using the centralized method
-            next_sequence = await msg_ops.get_next_sequence(search_id)
-            
-            # Add user query message
-            msg_ops.create_message(
-                search_id=search_id,
-                role="user",
-                content={"text": user_query},
-                sequence=next_sequence
-            )
-            
-            # Add assistant response message
-            if "text" in response and "citations" in response:
-                assistant_seq = await msg_ops.get_next_sequence(search_id)
-                msg_ops.create_message(
-                    search_id=search_id,
-                    role="assistant",
-                    content=response,
-                    sequence=assistant_seq
+            if not search:
+                raise ValidationError(
+                    "Search not found",
+                    details={"search_id": str(search_id)}
                 )
             
-            await self.db_session.commit()
-            return True
+            # Validate the query
+            temp_search = ResearchSearch(title=user_query)
+            if not temp_search.validate_query(user_query):
+                raise ValidationError(
+                    "Invalid query",
+                    details={
+                        "reason": "Query must be at least 3 characters",
+                        "query": user_query
+                    }
+                )
+            
+            try:
+                # Create message operations
+                msg_ops = SearchMessageOperations(self.db_session)
+                
+                # Add user query message
+                next_sequence = await msg_ops.get_next_sequence(search_id)
+                await msg_ops.create_message(
+                    search_id=search_id,
+                    role="user",
+                    content={"text": user_query},
+                    sequence=next_sequence
+                )
+                
+                # Add assistant response if valid
+                if "text" in response and "citations" in response:
+                    assistant_seq = await msg_ops.get_next_sequence(search_id)
+                    await msg_ops.create_message(
+                        search_id=search_id,
+                        role="assistant",
+                        content=response,
+                        sequence=assistant_seq
+                    )
+                else:
+                    raise ValidationError(
+                        "Invalid response format",
+                        details={
+                            "required_fields": ["text", "citations"],
+                            "provided_fields": list(response.keys())
+                        }
+                    )
+                
+                await self.db_session.commit()
+                return True
+                
+            except Exception as e:
+                await self.db_session.rollback()
+                raise DatabaseError(
+                    "Failed to add search messages",
+                    details={
+                        "search_id": str(search_id),
+                        "has_response": bool(response)
+                    },
+                    original_error=e
+                )
+                
+        except ValidationError:
+            raise
+        except DatabaseError:
+            raise
         except Exception as e:
-            error_message = str(e).lower()
-            await self.db_session.rollback()
-            
-            # Handle pgBouncer prepared statement errors
-            if ("prepared statement" in error_message or 
-                "duplicatepreparedstatementerror" in error_message or 
-                "invalidsqlstatementnameerror" in error_message):
-                logger.warning(f"pgBouncer prepared statement error encountered: {str(e)}")
-                try:
-                    # Try to create a fresh session and retry
-                    from sqlalchemy.ext.asyncio import AsyncSession
-                    from core.database import async_engine
-                    
-                    logger.info("Creating fresh session to retry operation after pgBouncer error")
-                    async with AsyncSession(async_engine) as fresh_session:
-                        # Create a new instance with the fresh session
-                        fresh_ops = ResearchOperations(fresh_session)
-                        # Retry the operation
-                        return await fresh_ops.add_search_messages(search_id, user_query, response)
-                except Exception as retry_error:
-                    logger.error(f"Error in retry attempt after pgBouncer error: {str(retry_error)}")
-                    return {"error": f"Database error: {str(retry_error)}"}
-            
-            logger.error(f"Error adding search messages: {str(e)}")
-            return {"error": str(e)}
-    
-    async def get_search_by_id(self, search_id: UUID, execution_options: Optional[Dict[str, Any]] = None) -> Union[SearchDTO, Dict[str, Any]]:
+            raise DatabaseError(
+                "Unexpected error adding search messages",
+                details={"search_id": str(search_id)},
+                original_error=e
+            )
+
+    async def get_search_by_id(
+            self,
+            search_id: UUID,
+            include_messages: bool = True,
+            execution_options: Optional[Dict[str, Any]] = None
+        ) -> SearchDTO:
         """
-        Retrieve a search and its messages by ID.
+        Get a search by its ID, optionally including messages.
         
         Args:
-            search_id: UUID of the search
+            search_id: UUID of the search to retrieve
+            include_messages: Whether to include messages in the response
             execution_options: Optional execution options for pgBouncer compatibility
             
         Returns:
-            SearchDTO with search data and messages, or error dict if not found
+            SearchDTO with search data and optionally messages
+            
+        Raises:
+            DatabaseError: If database operation fails
+            ValidationError: If search not found
         """
         try:
-            # Add pgBouncer compatibility options
-            query = select(PublicSearch).options(
-                selectinload(PublicSearch.messages)
-            ).where(PublicSearch.id == search_id)
-            
-            # Use provided execution_options if given, otherwise use default
-            if execution_options:
-                result = await self.db_session.execute(
-                    query.execution_options(**execution_options)
-                )
+            # Build query based on whether messages should be included
+            if include_messages:
+                query = select(PublicSearch).options(
+                    selectinload(PublicSearch.messages)
+                ).where(PublicSearch.id == search_id)
             else:
-                result = await self._execute_query(query)
+                query = select(PublicSearch).where(PublicSearch.id == search_id)
                 
-            db_search = result.scalars().first()
-            
-            if not db_search:
-                logger.error(f"Search with ID {search_id} not found")
-                return {"error": f"Search with ID {search_id} not found", "user_id": None}
-            
-            # Check if we got a tuple instead of an ORM object
-            if isinstance(db_search, tuple):
-                logger.info("Received tuple instead of ORM object in get_search_by_id")
-                search_dto = self._tuple_to_search_dto(db_search)
-                
-                # Load messages separately for tuple case
-                msg_query = select(PublicSearchMessage).where(
-                    PublicSearchMessage.search_id == search_id
-                ).order_by(PublicSearchMessage.sequence)
-                msg_result = await self._execute_query(msg_query)
-                messages = msg_result.scalars().all()
-                
-                # Convert messages to DTOs, handling both tuple and ORM cases
-                if messages:
-                    message_dtos = []
-                    for msg in messages:
-                        if isinstance(msg, tuple):
-                            msg_ops = SearchMessageOperations(self.db_session)
-                            message_dtos.append(msg_ops._tuple_to_message_dto(msg))
-                        else:
-                            message_dtos.append(to_search_message_dto(msg))
-                    search_dto.messages = message_dtos
-                
-                return search_dto
-            else:
-                # Convert search and its messages to DTOs
-                search_dto = to_search_dto(db_search)
-                if db_search.messages:
-                    search_dto.messages = [to_search_message_dto(msg) for msg in db_search.messages]
-                return search_dto
-
-        except Exception as e:
-            error_message = str(e).lower()
-            await self.db_session.rollback()
-            
-            # Handle pgBouncer prepared statement errors
-            if ("prepared statement" in error_message or 
-                "duplicatepreparedstatementerror" in error_message or 
-                "invalidsqlstatementnameerror" in error_message):
-                logger.warning(f"pgBouncer prepared statement error encountered: {str(e)}")
-                try:
-                    # Try to create a fresh session and retry
-                    from sqlalchemy.ext.asyncio import AsyncSession
-                    from core.database import async_engine
+            # Execute query with options
+            try:
+                if execution_options:
+                    result = await self.db_session.execute(
+                        query.execution_options(**execution_options)
+                    )
+                else:
+                    result = await self._execute_query(query)
                     
-                    logger.info("Creating fresh session to retry operation after pgBouncer error")
-                    async with AsyncSession(async_engine) as fresh_session:
-                        # Create a new instance with the fresh session
-                        fresh_ops = ResearchOperations(fresh_session)
-                        # Retry the operation
-                        return await fresh_ops.get_search_by_id(search_id, execution_options)
-                except Exception as retry_error:
-                    logger.error(f"Error in retry attempt after pgBouncer error: {str(retry_error)}")
-                    return {"error": f"Database error: {str(retry_error)}", "user_id": None}
-            
-            logger.error(f"Error retrieving search: {str(e)}")
-            return {"error": str(e), "user_id": None}
+                search = result.scalars().first()
+                if not search:
+                    raise ValidationError(
+                        "Search not found",
+                        details={"search_id": str(search_id)}
+                    )
+                
+                # Convert to DTO based on whether messages were included
+                if include_messages:
+                    return to_search_dto(search)
+                else:
+                    return to_search_dto_without_messages(search)
+                    
+            except Exception as e:
+                raise DatabaseError(
+                    "Failed to retrieve search",
+                    details={
+                        "search_id": str(search_id),
+                        "include_messages": include_messages
+                    },
+                    original_error=e
+                )
+                
+        except ValidationError:
+            raise
+        except DatabaseError:
+            raise
+        except Exception as e:
+            raise DatabaseError(
+                "Unexpected error retrieving search",
+                details={"search_id": str(search_id)},
+                original_error=e
+            )
 
     async def list_searches(
         self,
@@ -447,7 +496,7 @@ class ResearchOperations:
             logger.error(f"Error listing searches: {str(e)}")
             return {"error": str(e)}
 
-    async def update_search_metadata(self, search_id: UUID, updates: SearchUpdateDTO, execution_options: Optional[Dict[str, Any]] = None) -> Union[SearchDTO, Dict[str, Any]]:
+    async def update_search_metadata(self, search_id: UUID, updates: SearchUpdateDTO, execution_options: Optional[Dict[str, Any]] = None) -> SearchDTO:
         """
         Update search metadata like title, description, tags, etc.
         
@@ -457,12 +506,15 @@ class ResearchOperations:
             execution_options: Optional execution options for pgBouncer compatibility
             
         Returns:
-            Updated SearchDTO if successful, error dict otherwise
+            Updated SearchDTO
+            
+        Raises:
+            DatabaseError: If database operation fails
+            ValidationError: If updates are invalid
         """
         try:
+            # First get the existing search
             query = select(PublicSearch).where(PublicSearch.id == search_id)
-            
-            # Use provided execution_options if given, otherwise use default
             if execution_options:
                 result = await self.db_session.execute(
                     query.execution_options(**execution_options)
@@ -471,139 +523,132 @@ class ResearchOperations:
                 result = await self._execute_query(query)
                 
             db_search = result.scalars().first()
-            
             if not db_search:
-                logger.error(f"Search with ID {search_id} not found")
-                return {"error": f"Search with ID {search_id} not found"}
+                raise ValidationError(
+                    "Search not found",
+                    details={"search_id": str(search_id)}
+                )
             
-            # Convert DTO to dict and check if there are any updates
-            updates_dict = updates.dict(exclude_unset=True)
-            if not updates_dict:
-                # No updates provided, return current state without database operation
+            # Create domain model for validation
+            search = ResearchSearch(
+                title=db_search.title,
+                description=db_search.description,
+                user_id=db_search.user_id,
+                enterprise_id=db_search.enterprise_id
+            )
+            
+            # Validate updates
+            search.validate_updates(updates.dict(exclude_unset=True))
+            
+            try:
+                # Apply updates
+                for field, value in updates.dict(exclude_unset=True).items():
+                    setattr(db_search, field, value)
+                
+                await self.db_session.commit()
+                await self.db_session.refresh(db_search)
+                
                 return to_search_dto(db_search)
                 
-            # Validate title if it's being updated
-            if "title" in updates_dict:
-                temp_search = ResearchSearch(title=updates_dict["title"])
-                # Validation happens in the constructor
+            except Exception as e:
+                await self.db_session.rollback()
+                raise DatabaseError(
+                    "Failed to update search metadata",
+                    details={
+                        "search_id": str(search_id),
+                        "updates": updates.dict(exclude_unset=True)
+                    },
+                    original_error=e
+                )
                 
-            # Update fields
-            for key, value in updates_dict.items():
-                if hasattr(db_search, key):
-                    setattr(db_search, key, value)
-            
-            # Update the updated_at timestamp
-            db_search.updated_at = datetime.utcnow()
-            
-            await self.db_session.commit()
-            await self.db_session.refresh(db_search)
-            
-            # Return updated search as DTO
-            return to_search_dto(db_search)
+        except ValidationError:
+            raise
+        except DatabaseError:
+            raise
         except Exception as e:
-            error_message = str(e).lower()
-            await self.db_session.rollback()
-            
-            # Handle pgBouncer prepared statement errors
-            if ("prepared statement" in error_message or 
-                "duplicatepreparedstatementerror" in error_message or 
-                "invalidsqlstatementnameerror" in error_message):
-                logger.warning(f"pgBouncer prepared statement error encountered: {str(e)}")
-                try:
-                    # Try to create a fresh session and retry
-                    from sqlalchemy.ext.asyncio import AsyncSession
-                    from core.database import async_engine
-                    
-                    logger.info("Creating fresh session to retry operation after pgBouncer error")
-                    async with AsyncSession(async_engine) as fresh_session:
-                        # Create a new instance with the fresh session
-                        fresh_ops = ResearchOperations(fresh_session)
-                        # Retry the operation
-                        return await fresh_ops.update_search_metadata(search_id, updates, execution_options)
-                except Exception as retry_error:
-                    logger.error(f"Error in retry attempt after pgBouncer error: {str(retry_error)}")
-                    return {"error": f"Database error: {str(retry_error)}"}
-            
-            logger.error(f"Error updating search metadata: {str(e)}")
-            return {"error": str(e)}
+            raise DatabaseError(
+                "Unexpected error updating search metadata",
+                details={"search_id": str(search_id)},
+                original_error=e
+            )
 
-    async def delete_search(self, search_id: UUID, execution_options: Optional[Dict[str, Any]] = None) -> Union[bool, Dict[str, Any]]:
+    async def delete_search(self, search_id: UUID, execution_options: Optional[Dict[str, Any]] = None) -> bool:
         """
-        Delete a search and all its messages.
+        Delete a search and all its associated messages.
         
         Args:
             search_id: UUID of the search to delete
             execution_options: Optional execution options for pgBouncer compatibility
             
         Returns:
-            True if successful, error dict otherwise
+            True if deletion was successful
+            
+        Raises:
+            DatabaseError: If deletion fails
+            ValidationError: If search not found
         """
         try:
-            # First check if the search exists
-            check_query = select(PublicSearch).where(PublicSearch.id == search_id)
-            
-            # Use provided execution_options if given, otherwise use default
-            if execution_options:
-                check_result = await self.db_session.execute(
-                    check_query.execution_options(**execution_options)
-                )
-            else:
-                check_result = await self._execute_query(check_query)
-                
-            if not check_result.scalars().first():
-                logger.error(f"Search with ID {search_id} not found")
-                return {"error": f"Search with ID {search_id} not found"}
-            
-            # Delete messages first (cascade would handle this, but being explicit)
-            msg_delete = delete(PublicSearchMessage).where(PublicSearchMessage.search_id == search_id)
-            
-            # Use provided execution_options if given, otherwise use default
-            if execution_options:
-                await self.db_session.execute(
-                    msg_delete.execution_options(**execution_options)
-                )
-            else:
-                await self._execute_query(msg_delete)
-            
-            # Delete the search
-            search_delete = delete(PublicSearch).where(PublicSearch.id == search_id)
-            
-            # Use provided execution_options if given, otherwise use default
+            # First verify search exists
+            query = select(PublicSearch).where(PublicSearch.id == search_id)
             if execution_options:
                 result = await self.db_session.execute(
-                    search_delete.execution_options(**execution_options)
+                    query.execution_options(**execution_options)
                 )
             else:
-                result = await self._execute_query(search_delete)
+                result = await self._execute_query(query)
+                
+            if not result.scalars().first():
+                raise ValidationError(
+                    "Search not found",
+                    details={"search_id": str(search_id)}
+                )
             
-            await self.db_session.commit()
-            return True
+            try:
+                # Delete associated messages first
+                messages_query = delete(PublicSearchMessage).where(
+                    PublicSearchMessage.search_id == search_id
+                )
+                
+                if execution_options:
+                    await self.db_session.execute(
+                        messages_query.execution_options(**execution_options)
+                    )
+                else:
+                    await self._execute_query(messages_query)
+                
+                # Then delete the search
+                search_query = delete(PublicSearch).where(
+                    PublicSearch.id == search_id
+                )
+                
+                if execution_options:
+                    await self.db_session.execute(
+                        search_query.execution_options(**execution_options)
+                    )
+                else:
+                    await self._execute_query(search_query)
+                
+                await self.db_session.commit()
+                return True
+                
+            except Exception as e:
+                await self.db_session.rollback()
+                raise DatabaseError(
+                    "Failed to delete search and messages",
+                    details={"search_id": str(search_id)},
+                    original_error=e
+                )
+                
+        except ValidationError:
+            raise
+        except DatabaseError:
+            raise
         except Exception as e:
-            error_message = str(e).lower()
-            await self.db_session.rollback()
-            
-            # Handle pgBouncer prepared statement errors
-            if ("prepared statement" in error_message or 
-                "duplicatepreparedstatementerror" in error_message or 
-                "invalidsqlstatementnameerror" in error_message):
-                logger.warning(f"pgBouncer prepared statement error encountered: {str(e)}")
-                try:
-                    # Try to create a fresh session and retry
-                    from sqlalchemy.ext.asyncio import AsyncSession
-                    from core.database import async_engine
-                    
-                    logger.info("Creating fresh session to retry operation after pgBouncer error")
-                    async with AsyncSession(async_engine) as fresh_session:
-                        # Create a new instance with the fresh session
-                        fresh_ops = ResearchOperations(fresh_session)
-                        # Retry the operation
-                        return await fresh_ops.delete_search(search_id, execution_options)
-                except Exception as retry_error:
-                    logger.error(f"Error in retry attempt after pgBouncer error: {str(retry_error)}")
-                    return {"error": f"Database error: {str(retry_error)}"}
-            
-            logger.error(f"Error deleting search: {str(e)}")
-            return {"error": str(e)}
+            raise DatabaseError(
+                "Unexpected error deleting search",
+                details={"search_id": str(search_id)},
+                original_error=e
+            )
     
     def _tuple_to_search_dto(self, search_tuple: tuple) -> SearchDTO:
         """

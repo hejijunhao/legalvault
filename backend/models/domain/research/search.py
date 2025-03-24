@@ -6,6 +6,7 @@ import logging
 from datetime import datetime
 
 from models.enums.research_enums import QueryCategory, QueryType
+from models.domain.research.research_errors import ValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -36,10 +37,13 @@ class ResearchSearch:
     def _validate(self) -> None:
         """Validate search properties."""
         if not self.title or not self.title.strip():
-            raise ValueError("Search title cannot be empty")
+            raise ValidationError("Search title cannot be empty")
             
         if len(self.title.strip()) < 3:
-            raise ValueError("Search title must be at least 3 characters")
+            raise ValidationError("Search title must be at least 3 characters")
+            
+        if self.user_id is None:
+            raise ValidationError("User ID is required for search creation")
 
     def validate_query(self, query: str) -> bool:
         """

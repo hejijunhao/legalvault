@@ -4,16 +4,20 @@ from typing import List, Dict, Any, Optional, Union
 from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete, update, func
+import logging
 
 from models.database.research.public_search_messages import PublicSearchMessage
 from models.domain.research.search_message import ResearchMessage
 from models.enums.research_enums import QueryStatus
+from models.domain.research.research_errors import ValidationError, DatabaseError
 
 # Import DTOs instead of schema models
 from models.dtos.research.search_message_dto import (
     SearchMessageDTO, SearchMessageListDTO, SearchMessageCreateDTO, SearchMessageUpdateDTO,
     to_search_message_dto, to_search_message_list_dto
 )
+
+logger = logging.getLogger(__name__)
 
 class SearchMessageOperations:
     """Operations for managing PublicSearchMessage records in the database."""
@@ -40,18 +44,27 @@ class SearchMessageOperations:
                 "prepared statement",
                 "InvalidSQLStatementNameError"
             ]):
-                import logging
-                logger = logging.getLogger(__name__)
                 logger.warning("pgBouncer prepared statement error encountered: %s", str(e))
                 logger.info("Creating fresh session to retry operation after pgBouncer error")
                 # Create a fresh session and retry
                 await self.db.close()
                 self.db = AsyncSession(bind=self.db.bind)
-                result = await self.db.execute(
-                    query.execution_options(**self.execution_options)
-                )
-                return result
-            raise
+                try:
+                    result = await self.db.execute(
+                        query.execution_options(**self.execution_options)
+                    )
+                    return result
+                except Exception as retry_error:
+                    raise DatabaseError(
+                        "Failed to execute query after retry",
+                        details={"query": str(query)},
+                        original_error=retry_error
+                    )
+            raise DatabaseError(
+                "Failed to execute query",
+                details={"query": str(query)},
+                original_error=e
+            )
 
     def _tuple_to_message_dto(self, message_tuple: tuple) -> SearchMessageDTO:
         """Convert a database tuple to a SearchMessageDTO
@@ -83,8 +96,6 @@ class SearchMessageOperations:
                 sequence=sequence
             )
         except Exception as e:
-            import logging
-            logger = logging.getLogger(__name__)
             logger.error(f"Error converting tuple to SearchMessageDTO: {str(e)}")
             logger.debug(f"Tuple structure: {message_tuple}")
             # Return a minimal valid DTO rather than failing
@@ -127,8 +138,6 @@ class SearchMessageOperations:
             
         # Check if we got a tuple instead of an ORM object
         if isinstance(db_message, tuple):
-            import logging
-            logger = logging.getLogger(__name__)
             logger.info("Received tuple instead of ORM object in get_message_by_id")
             return self._tuple_to_message_dto(db_message)
         else:
@@ -145,8 +154,6 @@ class SearchMessageOperations:
             
         # Check if we got a tuple instead of an ORM object
         if isinstance(db_message, tuple):
-            import logging
-            logger = logging.getLogger(__name__)
             logger.warning("Received tuple in update_message, cannot update tuple directly")
             # We need to re-query to get the actual ORM object for updating
             try:
@@ -159,7 +166,11 @@ class SearchMessageOperations:
                     return None
             except Exception as e:
                 logger.error(f"Error re-querying for ORM object: {str(e)}")
-                return None
+                raise DatabaseError(
+                    "Failed to update message",
+                    details={"message_id": str(message_id)},
+                    original_error=e
+                )
         
         # Update the message attributes
         if hasattr(updates, 'content') and updates.content is not None:
@@ -176,10 +187,12 @@ class SearchMessageOperations:
             return to_search_message_dto(db_message)
         except Exception as e:
             await self.db.rollback()
-            import logging
-            logger = logging.getLogger(__name__)
             logger.error(f"Error updating message: {str(e)}")
-            return None
+            raise DatabaseError(
+                "Failed to update message",
+                details={"message_id": str(message_id)},
+                original_error=e
+            )
 
     async def update_message_status(self, message_id: UUID, status: QueryStatus) -> Optional[SearchMessageDTO]:
         """Update a message's status."""
@@ -191,8 +204,6 @@ class SearchMessageOperations:
             
         # Check if we got a tuple instead of an ORM object
         if isinstance(db_message, tuple):
-            import logging
-            logger = logging.getLogger(__name__)
             logger.warning("Received tuple in update_message_status, cannot update tuple directly")
             # We need to re-query to get the actual ORM object for updating
             try:
@@ -205,7 +216,11 @@ class SearchMessageOperations:
                     return None
             except Exception as e:
                 logger.error(f"Error re-querying for ORM object: {str(e)}")
-                return None
+                raise DatabaseError(
+                    "Failed to update message status",
+                    details={"message_id": str(message_id)},
+                    original_error=e
+                )
         
         # Update the status
         db_message.status = status
@@ -217,10 +232,12 @@ class SearchMessageOperations:
             return to_search_message_dto(db_message)
         except Exception as e:
             await self.db.rollback()
-            import logging
-            logger = logging.getLogger(__name__)
             logger.error(f"Error updating message status: {str(e)}")
-            return None
+            raise DatabaseError(
+                "Failed to update message status",
+                details={"message_id": str(message_id)},
+                original_error=e
+            )
 
     async def delete_message(self, message_id: UUID) -> bool:
         """Delete a message from the database."""
@@ -250,8 +267,6 @@ class SearchMessageOperations:
         if messages:
             for message in messages:
                 if isinstance(message, tuple):
-                    import logging
-                    logger = logging.getLogger(__name__)
                     logger.info("Received tuple instead of ORM object in list_messages_by_search")
                     message_dtos.append(self._tuple_to_message_dto(message))
                 else:
@@ -290,8 +305,6 @@ class SearchMessageOperations:
         message_dtos = []
         if messages and len(messages) > 0:
             if isinstance(messages[0], tuple):
-                import logging
-                logger = logging.getLogger(__name__)
                 logger.info("Received tuples instead of ORM objects in list_messages_by_status")
                 message_dtos = [self._tuple_to_message_dto(message) for message in messages]
             else:
@@ -338,8 +351,6 @@ class SearchMessageOperations:
             if ("prepared statement" in error_message or 
                 "duplicatepreparedstatementerror" in error_message or 
                 "invalidsqlstatementnameerror" in error_message):
-                import logging
-                logger = logging.getLogger(__name__)
                 logger.warning(f"pgBouncer prepared statement error encountered: {str(e)}")
                 try:
                     # Try to create a fresh session and retry
@@ -354,9 +365,17 @@ class SearchMessageOperations:
                         return await fresh_ops.create_message_with_commit(message_create_dto)
                 except Exception as retry_error:
                     logger.error(f"Error in retry attempt after pgBouncer error: {str(retry_error)}")
-                    raise retry_error
+                    raise DatabaseError(
+                        "Failed to create message after retry",
+                        details={"message_create_dto": str(message_create_dto)},
+                        original_error=retry_error
+                    )
             
-            raise e
+            raise DatabaseError(
+                "Failed to create message",
+                details={"message_create_dto": str(message_create_dto)},
+                original_error=e
+            )
 
     async def get_messages_list_response(self, search_id: UUID, limit: int = 100, offset: int = 0, execution_options: Optional[Dict[str, Any]] = None) -> SearchMessageListDTO:
         """
@@ -380,5 +399,3 @@ class SearchMessageOperations:
             messages_list.limit = limit
             
         return messages_list
-
-

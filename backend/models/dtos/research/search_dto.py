@@ -1,22 +1,30 @@
 # models/dtos/research/search_dto.py
 
 from datetime import datetime
-from typing import Dict, List, Optional, Any, Union
+from typing import Dict, List, Optional, Any
 from uuid import UUID
 from pydantic import BaseModel, Field
 
-# Import enums from centralized location and rename with DTO suffix
-from models.enums.research_enums import QueryCategory as QueryCategoryDTO
-from models.enums.research_enums import QueryType as QueryTypeDTO
+from models.enums.research_enums import QueryCategory, QueryType, QueryStatus
+from models.dtos.base_dto import PaginatedListDTO, StatusDTO, TupleConverterMixin
 
-# Base DTOs
-class SearchMessageDTO(BaseModel):
-    """DTO for search messages"""
-    role: str
-    content: Dict[str, Any]
-    sequence: int
+# Field mappings for tuple conversion
+SEARCH_TUPLE_FIELDS = {
+    0: "id",
+    1: "title",
+    2: "description",
+    3: "user_id",
+    4: "enterprise_id",
+    5: "is_featured",
+    6: "tags",
+    7: "search_params",
+    8: "category",
+    9: "query_type",
+    10: "created_at",
+    11: "updated_at"
+}
 
-class SearchDTO(BaseModel):
+class SearchDTO(BaseModel, TupleConverterMixin):
     """Core DTO for search data transfer between layers"""
     id: UUID
     title: str
@@ -26,20 +34,37 @@ class SearchDTO(BaseModel):
     is_featured: bool = False
     tags: List[str] = Field(default_factory=list)
     search_params: Dict[str, Any] = Field(default_factory=dict)
+    category: Optional[QueryCategory] = None
+    query_type: Optional[QueryType] = None
     created_at: datetime
     updated_at: datetime
-    messages: List[SearchMessageDTO] = Field(default_factory=list)
     
     class Config:
         from_attributes = True
 
-# Specialized DTOs
-class SearchListDTO(BaseModel):
+    @classmethod
+    def from_db(cls, db_search: Any) -> "SearchDTO":
+        """Create DTO from database model or tuple"""
+        if isinstance(db_search, tuple):
+            return cls.from_tuple(db_search, SEARCH_TUPLE_FIELDS)
+        return cls(
+            id=db_search.id,
+            title=db_search.title,
+            description=db_search.description,
+            user_id=db_search.user_id,
+            enterprise_id=db_search.enterprise_id,
+            is_featured=db_search.is_featured,
+            tags=db_search.tags,
+            search_params=db_search.search_params,
+            category=db_search.category,
+            query_type=db_search.query_type,
+            created_at=db_search.created_at,
+            updated_at=db_search.updated_at
+        )
+
+class SearchListDTO(PaginatedListDTO[SearchDTO]):
     """DTO for transferring lists of searches"""
-    items: List[SearchDTO]
-    total: int
-    offset: int
-    limit: int
+    pass
 
 class SearchCreateDTO(BaseModel):
     """DTO for creating a new search"""
@@ -58,18 +83,35 @@ class SearchUpdateDTO(BaseModel):
     description: Optional[str] = None
     is_featured: Optional[bool] = None
     tags: Optional[List[str]] = None
-    
+    category: Optional[QueryCategory] = None
+    query_type: Optional[QueryType] = None
+
     class Config:
         from_attributes = True
 
 class SearchContinueDTO(BaseModel):
-    """DTO for continuing an existing search"""
-    search_id: UUID
-    user_id: UUID
-    follow_up_query: str
-    enterprise_id: Optional[UUID] = None
-    thread_id: Optional[str] = None
-    previous_messages: Optional[List[Dict[str, Any]]] = None
+    """DTO for continuing an existing search with follow-up queries"""
+    search_id: UUID = Field(..., description="ID of the search to continue")
+    user_id: UUID = Field(..., description="ID of the user making the follow-up query")
+    follow_up_query: str = Field(..., description="The follow-up question or query")
+    enterprise_id: UUID = Field(..., description="Enterprise ID for the search context")
+    thread_id: Optional[str] = Field(None, description="Optional thread ID for conversation tracking")
+    previous_messages: Optional[List[Dict[str, Any]]] = Field(
+        default_factory=list,
+        description="Previous messages for context maintenance"
+    )
+    search_params: Optional[Dict[str, Any]] = Field(
+        default_factory=dict,
+        description="Optional parameters to customize the search behavior"
+    )
+
+    def get_context(self) -> Dict[str, Any]:
+        """Get the context for the follow-up query"""
+        return {
+            "thread_id": self.thread_id,
+            "previous_messages": self.previous_messages,
+            "search_params": self.search_params
+        }
 
 class SearchResultDTO(BaseModel):
     """DTO for search execution results from workflow"""
@@ -86,72 +128,20 @@ class SearchResultDTO(BaseModel):
 
 # Conversion functions
 def to_search_dto(db_search: Any) -> SearchDTO:
-    """
-    Convert database model to SearchDTO.
-    
-    Args:
-        db_search: Database model instance or tuple
-        
-    Returns:
-        SearchDTO with data from model
-    """
-    if isinstance(db_search, tuple):
-        return _tuple_to_search_dto(db_search)
-    
-    return SearchDTO(
-        id=db_search.id,
-        title=db_search.title,
-        description=db_search.description,
-        user_id=db_search.user_id,
-        enterprise_id=db_search.enterprise_id,
-        is_featured=db_search.is_featured,
-        tags=db_search.tags or [],
-        search_params=db_search.search_params or {},
-        created_at=db_search.created_at,
-        updated_at=db_search.updated_at,
-        messages=[SearchMessageDTO(**msg.to_dict()) for msg in db_search.messages] if hasattr(db_search, 'messages') else []
-    )
+    """Convert database model to SearchDTO"""
+    return SearchDTO.from_db(db_search)
 
 def to_search_dto_without_messages(db_search: Any) -> SearchDTO:
-    """
-    Convert database model to SearchDTO without loading messages (for list views).
-    
-    Args:
-        db_search: Database model instance or tuple
-        
-    Returns:
-        SearchDTO with data from model, but without messages
-    """
-    if isinstance(db_search, tuple):
-        return _tuple_to_search_dto(db_search)
-    
-    return SearchDTO(
-        id=db_search.id,
-        title=db_search.title,
-        description=db_search.description,
-        user_id=db_search.user_id,
-        enterprise_id=db_search.enterprise_id,
-        is_featured=db_search.is_featured,
-        tags=db_search.tags or [],
-        search_params=db_search.search_params or {},
-        created_at=db_search.created_at,
-        updated_at=db_search.updated_at,
-        messages=[]
-    )
+    """Convert database model to SearchDTO without loading messages"""
+    return SearchDTO.from_db(db_search)
 
-def to_search_list_dto(db_searches: List[Any], total: int, offset: int = 0, limit: int = 10) -> SearchListDTO:
-    """
-    Convert list of database models to SearchListDTO.
-    
-    Args:
-        db_searches: List of database model instances or tuples
-        total: Total number of items in database
-        offset: Starting offset for pagination
-        limit: Number of items per page
-        
-    Returns:
-        SearchListDTO with converted items and pagination info
-    """
+def to_search_list_dto(
+    db_searches: List[Any],
+    total: int,
+    offset: int = 0,
+    limit: int = 10
+) -> SearchListDTO:
+    """Convert list of database models to SearchListDTO"""
     return SearchListDTO(
         items=[to_search_dto_without_messages(s) for s in db_searches],
         total=total,

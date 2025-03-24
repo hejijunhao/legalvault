@@ -2,7 +2,7 @@
 
 from typing import List, Optional, Union
 from uuid import UUID, uuid4
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 import logging
 from datetime import datetime
 
@@ -24,17 +24,9 @@ from models.schemas.research.search import (
     SearchContinue,
     SearchResponse,
     SearchListResponse,
-    SearchUpdate,
-    SearchMessageResponse
+    SearchUpdate
 )
-from models.schemas.research.search_message import (
-    SearchMessageListResponse, 
-    SearchMessageCreate, 
-    SearchMessageUpdate,
-    SearchMessageResponse,
-    SearchMessageForwardRequest
-)
-from models.domain.research.search_message_operations import SearchMessageOperations
+from models.schemas.research.search_message import SearchMessageResponse
 
 # Import DTOs
 from models.dtos.research.search_dto import (
@@ -43,6 +35,7 @@ from models.dtos.research.search_dto import (
 from models.dtos.research.search_message_dto import (
     SearchMessageDTO, SearchMessageListDTO
 )
+from models.dtos.research.search_continue_dto import SearchContinueDTO
 
 # Import custom exceptions
 from services.workflow.research.search_workflow import (
@@ -170,61 +163,6 @@ def search_list_dto_to_response(search_list_dto: Union[SearchListDTO, tuple]) ->
         limit=limit
     )
 
-def search_message_list_dto_to_response(message_list_dto: Union[SearchMessageListDTO, tuple]) -> SearchMessageListResponse:
-    """Convert SearchMessageListDTO to SearchMessageListResponse for API layer."""
-    # Handle case where message_list_dto is a tuple
-    if isinstance(message_list_dto, tuple):
-        logger.debug(f"Received tuple in search_message_list_dto_to_response: {message_list_dto}")
-        # Assuming tuple structure: (items, total, offset, limit)
-        items_data = message_list_dto[0] if len(message_list_dto) > 0 else []
-        total = message_list_dto[1] if len(message_list_dto) > 1 else 0
-        offset = message_list_dto[2] if len(message_list_dto) > 2 else 0
-        limit = message_list_dto[3] if len(message_list_dto) > 3 else 20
-    else:
-        # Handle items whether it's a method or a property
-        if callable(getattr(message_list_dto, 'items', None)):
-            items_data = message_list_dto.items()
-        else:
-            items_data = message_list_dto.items
-            
-        total = getattr(message_list_dto, 'total', 0)
-        offset = getattr(message_list_dto, 'offset', 0)
-        limit = getattr(message_list_dto, 'limit', 20)
-    
-    items = []
-    for msg_dto in items_data:
-        # Handle case where msg_dto is a tuple
-        if isinstance(msg_dto, tuple):
-            # Adjust indices based on your actual query structure
-            items.append(SearchMessageResponse(
-                id=msg_dto[0] if len(msg_dto) > 0 else None,
-                search_id=msg_dto[1] if len(msg_dto) > 1 else None,
-                search_title=msg_dto[2] if len(msg_dto) > 2 else None,
-                role=msg_dto[3] if len(msg_dto) > 3 else None,
-                content=msg_dto[4] if len(msg_dto) > 4 else {},
-                sequence=msg_dto[5] if len(msg_dto) > 5 else 0,
-                created_at=msg_dto[6] if len(msg_dto) > 6 else datetime.now(),
-                updated_at=msg_dto[7] if len(msg_dto) > 7 else datetime.now()
-            ))
-        else:
-            items.append(SearchMessageResponse(
-                id=getattr(msg_dto, 'id', None),
-                search_id=getattr(msg_dto, 'search_id', None),
-                search_title=getattr(msg_dto, 'search_title', None),
-                role=getattr(msg_dto, 'role', None),
-                content=getattr(msg_dto, 'content', {}),
-                sequence=getattr(msg_dto, 'sequence', 0),
-                created_at=getattr(msg_dto, 'created_at', datetime.now()),
-                updated_at=getattr(msg_dto, 'updated_at', datetime.now())
-            ))
-    
-    return SearchMessageListResponse(
-        items=items,
-        total=total,
-        offset=offset,
-        limit=limit
-    )
-
 @router.post("/", response_model=SearchResponse)
 async def create_search(
     data: SearchCreate,
@@ -238,25 +176,30 @@ async def create_search(
     Initiates a new search using the Perplexity Sonar API with a legal lens,
     storing both the query and results for future reference.
     """
-    # Get enterprise_id from user context (implementation depends on your auth system)
-    enterprise_id = await get_user_enterprise(current_user, workflow.research_operations.db_session)
-    
     try:
-        # Execute search using workflow - now handles persistence internally
-        result = await workflow.execute_search(
+        # Create DTO for workflow
+        create_dto = SearchCreateDTO(
             user_id=current_user.id,
             query=data.query,
-            enterprise_id=enterprise_id,
-            search_params=data.search_params
+            enterprise_id=current_user.enterprise_id,
+            search_params=data.search_params,
+            title=data.title,
+            description=data.description,
+            tags=data.tags,
+            is_featured=data.is_featured
         )
         
-        # Get the search record from the database using the search_id from metadata
-        search_id = UUID(result.metadata["search_id"]) if "search_id" in result.metadata else None
-        
-        if not search_id:
-            raise HTTPException(status_code=500, detail="Search creation failed: no search_id returned")
-        
-        search_dto = await workflow.research_operations.get_search_by_id(search_id)
+        # Execute search using workflow - now handles persistence internally
+        result = await workflow.execute_search(create_dto)
+        if not result or not result.get("search_id"):
+            raise HTTPException(status_code=500, detail="Failed to create search")
+            
+        # Get created search and return response
+        search_id = UUID(result["search_id"])
+        search_dto = await workflow.research_operations.get_search_by_id(
+            search_id,
+            execution_options={"no_parameters": True, "use_server_side_cursors": False}
+        )
         
         # Handle database errors
         if not search_dto:
@@ -290,34 +233,46 @@ async def create_search(
 async def continue_search(
     search_id: UUID,
     data: SearchContinue,
-    current_user: User = Depends(get_current_user),
-    user_permissions: List[str] = Depends(get_user_permissions),
-    workflow: ResearchSearchWorkflow = Depends(get_search_workflow)
-):
-    """
-    Continue an existing search with a follow-up query.
+    workflow: ResearchSearchWorkflow = Depends(get_search_workflow),
+    user: User = Depends(get_current_user)
+) -> SearchResponse:
+    """Continue an existing search with a follow-up query"""
+    # Verify search exists and user has access
+    search = await workflow.research_operations.get_search_by_id(
+        search_id,
+        execution_options={"no_parameters": True, "use_server_side_cursors": False}
+    )
+    if not search:
+        raise HTTPException(status_code=404, detail="Search not found")
+    if search.user_id != user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to continue this search")
     
-    Adds a follow-up question to an existing search thread, maintaining context
-    from previous interactions.
-    """
     try:
-        # Execute follow-up using workflow - now handles persistence internally
-        result = await workflow.execute_follow_up(
+        # Create continue DTO for workflow
+        continue_dto = SearchContinueDTO(
             search_id=search_id,
-            user_id=current_user.id,
+            user_id=user.id,
             follow_up_query=data.follow_up_query,
-            enterprise_id=data.enterprise_id,
+            enterprise_id=user.enterprise_id,
             thread_id=data.thread_id,
-            previous_messages=data.previous_messages
+            previous_messages=data.previous_messages,
+            search_params=data.search_params if hasattr(data, 'search_params') else {}
         )
         
-        # Get updated search data
-        updated_search_dto = await workflow.research_operations.get_search_by_id(search_id)
-        if not updated_search_dto:
-            raise HTTPException(status_code=404, detail="Search not found after update")
-        
-        # Convert DTO to API response model
-        return search_dto_to_response(updated_search_dto)
+        # Execute follow-up workflow
+        result = await workflow.execute_follow_up(continue_dto)
+        if not result or not result.get("search_id"):
+            raise HTTPException(status_code=500, detail="Failed to execute follow-up query")
+            
+        # Get updated search and return response
+        updated_search = await workflow.research_operations.get_search_by_id(
+            search_id,
+            execution_options={"no_parameters": True, "use_server_side_cursors": False}
+        )
+        if not updated_search:
+            raise HTTPException(status_code=404, detail="Updated search not found")
+            
+        return search_dto_to_response(updated_search)
         
     except QueryValidationError as e:
         raise HTTPException(status_code=400, detail=e.message)
@@ -393,43 +348,6 @@ async def get_search(
             status_code=500,
             detail="An unexpected error occurred. Please try again later."
         )
-
-@router.get("/{search_id}/messages", response_model=SearchMessageListResponse)
-async def get_search_messages(
-    search_id: UUID,
-    limit: int = Query(100, ge=1, le=500, description="Maximum number of messages"),
-    offset: int = Query(0, ge=0, description="Pagination offset"),
-    current_user: User = Depends(get_current_user),
-    user_permissions: List[str] = Depends(get_user_permissions),
-    operations: ResearchOperations = Depends(get_research_operations)
-):
-    """
-    Get all messages for a specific search with pagination.
-    
-    This endpoint provides a convenient way to access messages directly from the search context.
-    Returns messages in sequence order (oldest first).
-    """
-    # Verify user has access to the search
-    search_ops = ResearchOperations(operations.db_session)
-    search_dto = await search_ops.get_search_by_id(
-        search_id,
-        execution_options={"no_parameters": True, "use_server_side_cursors": False}
-    )
-    
-    if not search_dto or (str(search_dto.user_id) != str(current_user.id) and "admin" not in user_permissions):
-        raise HTTPException(status_code=403, detail="Not authorized to access this search")
-    
-    # Get messages with pagination
-    message_ops = SearchMessageOperations(operations.db_session)
-    message_list_dto = await message_ops.list_messages_by_search(
-        search_id, 
-        limit, 
-        offset,
-        execution_options={"no_parameters": True, "use_server_side_cursors": False}
-    )
-    
-    # Convert DTO to API response model
-    return search_message_list_dto_to_response(message_list_dto)
 
 @router.get("/", response_model=SearchListResponse)
 async def list_searches(
@@ -531,178 +449,6 @@ async def delete_search(
     )
     if not success:
         raise HTTPException(status_code=500, detail="Failed to delete search")
-
-@router.post("/{search_id}/messages", response_model=SearchMessageResponse)
-async def create_search_message(
-    search_id: UUID,
-    message: SearchMessageCreate,
-    current_user: User = Depends(get_current_user),
-    user_permissions: List[str] = Depends(get_user_permissions),
-    operations: ResearchOperations = Depends(get_research_operations)
-):
-    """
-    Create a new message for a search.
-    
-    This endpoint allows adding messages to an existing search conversation.
-    """
-    # Verify user has access to the search
-    search_dto = await operations.get_search_by_id(
-        search_id,
-        execution_options={"no_parameters": True, "use_server_side_cursors": False}
-    )
-    
-    if not search_dto or (str(search_dto.user_id) != str(current_user.id) and "admin" not in user_permissions):
-        raise HTTPException(status_code=403, detail="Not authorized to access this search")
-    
-    # Create message
-    message_ops = SearchMessageOperations(operations.db_session)
-    
-    # Create DTO from API model
-    message_dto = SearchMessageCreateDTO(
-        search_id=search_id,
-        role=message.role,
-        content=message.content,
-        sequence=message.sequence if hasattr(message, 'sequence') else None,
-        status=message.status if hasattr(message, 'status') else QueryStatus.PENDING
-    )
-    
-    # Create the message
-    created_message = await message_ops.create_message_with_commit(message_dto, execution_options={"no_parameters": True, "use_server_side_cursors": False})
-    
-    if not created_message:
-        raise HTTPException(status_code=500, detail="Failed to create message")
-    
-    # Return the created message
-    return search_message_dto_to_response(created_message)
-
-@router.get("/{search_id}/messages/{message_id}", response_model=SearchMessageResponse)
-async def get_search_message(
-    search_id: UUID,
-    message_id: UUID,
-    current_user: User = Depends(get_current_user),
-    user_permissions: List[str] = Depends(get_user_permissions),
-    operations: ResearchOperations = Depends(get_research_operations)
-):
-    """
-    Get a specific message from a search.
-    
-    This endpoint retrieves a single message by its ID within a search context.
-    """
-    # Verify user has access to the search
-    search_dto = await operations.get_search_by_id(
-        search_id,
-        execution_options={"no_parameters": True, "use_server_side_cursors": False}
-    )
-    
-    if not search_dto or (str(search_dto.user_id) != str(current_user.id) and "admin" not in user_permissions):
-        raise HTTPException(status_code=403, detail="Not authorized to access this search")
-    
-    # Get the message
-    message_ops = SearchMessageOperations(operations.db_session)
-    message_dto = await message_ops.get_message_by_id(
-        message_id,
-        execution_options={"no_parameters": True, "use_server_side_cursors": False}
-    )
-    
-    if not message_dto or str(message_dto.search_id) != str(search_id):
-        raise HTTPException(status_code=404, detail="Message not found")
-    
-    # Return the message
-    return search_message_dto_to_response(message_dto)
-
-@router.patch("/{search_id}/messages/{message_id}", response_model=SearchMessageResponse)
-async def update_search_message(
-    search_id: UUID,
-    message_id: UUID,
-    message_update: SearchMessageUpdate,
-    current_user: User = Depends(get_current_user),
-    user_permissions: List[str] = Depends(get_user_permissions),
-    operations: ResearchOperations = Depends(get_research_operations)
-):
-    """
-    Update a message in a search.
-    
-    This endpoint allows updating the content or status of a message.
-    """
-    # Verify user has access to the search
-    search_dto = await operations.get_search_by_id(
-        search_id,
-        execution_options={"no_parameters": True, "use_server_side_cursors": False}
-    )
-    
-    if not search_dto or (str(search_dto.user_id) != str(current_user.id) and "admin" not in user_permissions):
-        raise HTTPException(status_code=403, detail="Not authorized to access this search")
-    
-    # Get the message to verify it belongs to this search
-    message_ops = SearchMessageOperations(operations.db_session)
-    message_dto = await message_ops.get_message_by_id(
-        message_id,
-        execution_options={"no_parameters": True, "use_server_side_cursors": False}
-    )
-    
-    if not message_dto or str(message_dto.search_id) != str(search_id):
-        raise HTTPException(status_code=404, detail="Message not found")
-    
-    # Update the message
-    update_data = message_update.model_dump(exclude_unset=True)
-    
-    # Create update DTO
-    update_dto = SearchMessageUpdateDTO(**update_data)
-    
-    updated_message = await message_ops.update_message(
-        message_id, 
-        update_dto,
-        execution_options={"no_parameters": True, "use_server_side_cursors": False}
-    )
-    
-    if not updated_message:
-        raise HTTPException(status_code=500, detail="Failed to update message")
-    
-    # Return the updated message
-    return search_message_dto_to_response(updated_message)
-
-@router.delete("/{search_id}/messages/{message_id}")
-async def delete_search_message(
-    search_id: UUID,
-    message_id: UUID,
-    current_user: User = Depends(get_current_user),
-    user_permissions: List[str] = Depends(get_user_permissions),
-    operations: ResearchOperations = Depends(get_research_operations)
-):
-    """
-    Delete a message from a search.
-    
-    This endpoint permanently removes a message from a search conversation.
-    """
-    # Verify user has access to the search
-    search_dto = await operations.get_search_by_id(
-        search_id,
-        execution_options={"no_parameters": True, "use_server_side_cursors": False}
-    )
-    
-    if not search_dto or (str(search_dto.user_id) != str(current_user.id) and "admin" not in user_permissions):
-        raise HTTPException(status_code=403, detail="Not authorized to access this search")
-    
-    # Get the message to verify it belongs to this search
-    message_ops = SearchMessageOperations(operations.db_session)
-    message_dto = await message_ops.get_message_by_id(
-        message_id,
-        execution_options={"no_parameters": True, "use_server_side_cursors": False}
-    )
-    
-    if not message_dto or str(message_dto.search_id) != str(search_id):
-        raise HTTPException(status_code=404, detail="Message not found")
-    
-    # Delete the message
-    success = await message_ops.delete_message(
-        message_id,
-        execution_options={"no_parameters": True, "use_server_side_cursors": False}
-    )
-    
-    if not success:
-        raise HTTPException(status_code=500, detail="Failed to delete message")
-    
-    return {"message": "Message deleted successfully"}
 
 # Helper function to get user's enterprise ID
 async def get_user_enterprise(current_user: User, db: AsyncSession) -> Optional[UUID]:

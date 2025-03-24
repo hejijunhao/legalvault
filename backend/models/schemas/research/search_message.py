@@ -6,42 +6,87 @@ from uuid import UUID
 from pydantic import BaseModel, Field, validator
 
 
+class CitationResponse(BaseModel):
+    """Schema for citation responses"""
+    text: str = Field(..., description="Citation text", min_length=1)
+    url: str = Field(..., description="Source URL", regex=r'^https?://')
+    title: Optional[str] = Field(None, description="Source title")
+    source: Optional[str] = Field(None, description="Source name")
+    timestamp: Optional[datetime] = Field(None, description="Citation timestamp")
+
+    @validator('url')
+    def validate_url(cls, v):
+        if not v.startswith(('http://', 'https://')):
+            raise ValueError('URL must start with http:// or https://')
+        return v
+
+    model_config = {"from_attributes": True}
+
+
+class MessageContent(BaseModel):
+    """Schema for structured message content"""
+    text: str = Field(..., description="Message text", min_length=1)
+    citations: List[CitationResponse] = Field(
+        default_factory=list,
+        description="List of citations"
+    )
+    metadata: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Additional metadata"
+    )
+
+    @validator('metadata')
+    def validate_metadata(cls, v):
+        for key, value in v.items():
+            if not isinstance(key, str):
+                raise ValueError("Metadata keys must be strings")
+            try:
+                import json
+                json.dumps(value)
+            except TypeError:
+                raise ValueError(f"Metadata value for key '{key}' must be JSON-serializable")
+        return v
+
+
 class SearchMessageBase(BaseModel):
     """Base schema with common message fields"""
     role: Literal["user", "assistant"] = Field(
         ...,
         description="Role of the message sender (user/assistant)"
     )
-    content: Dict[str, Any] = Field(
+    content: MessageContent = Field(
         ...,
         description="Message content including text and metadata"
     )
-    
-    @validator('content')
-    def validate_content(cls, v):
-        if not isinstance(v, dict) or "text" not in v:
-            raise ValueError("Content must be a dictionary with a 'text' key")
-        return v
 
 
 class SearchMessageCreate(SearchMessageBase):
     """Schema for creating a new message"""
     search_id: UUID = Field(..., description="ID of the parent search")
-    sequence: int = Field(..., description="Sequence number for ordering")
+    sequence: int = Field(..., description="Sequence number for ordering", ge=0)
+    status: Optional[str] = Field(
+        None,
+        description="Initial message status",
+        regex=r'^(pending|processing|completed|failed)$'
+    )
 
 
 class SearchMessageUpdate(BaseModel):
     """Schema for updating a message"""
-    content: Optional[Dict[str, Any]] = Field(
+    content: Optional[MessageContent] = Field(
         None,
         description="Updated message content"
     )
-    
-    @validator('content')
-    def validate_content(cls, v):
-        if v is not None and (not isinstance(v, dict) or "text" not in v):
-            raise ValueError("Content must be a dictionary with a 'text' key")
-        return v
+    sequence: Optional[int] = Field(
+        None,
+        description="Updated sequence number",
+        ge=0
+    )
+    status: Optional[str] = Field(
+        None,
+        description="Updated message status",
+        regex=r'^(pending|processing|completed|failed)$'
+    )
 
 
 class SearchMessageResponse(SearchMessageBase):
@@ -49,10 +94,15 @@ class SearchMessageResponse(SearchMessageBase):
     id: UUID = Field(..., description="Unique message ID")
     search_id: UUID = Field(..., description="ID of the parent search")
     search_title: Optional[str] = Field(None, description="Title of the parent search")
-    sequence: int = Field(..., description="Sequence number for ordering")
+    sequence: int = Field(..., description="Sequence number for ordering", ge=0)
+    status: str = Field(
+        ...,
+        description="Message status",
+        regex=r'^(pending|processing|completed|failed)$'
+    )
     created_at: datetime = Field(..., description="Message creation timestamp")
     updated_at: Optional[datetime] = Field(None, description="Last update timestamp")
-    
+
     model_config = {"from_attributes": True}
 
 
@@ -62,12 +112,3 @@ class SearchMessageListResponse(BaseModel):
     total: int = Field(..., description="Total number of messages")
     offset: int = Field(..., description="Pagination offset")
     limit: int = Field(..., description="Pagination limit")
-
-
-class SearchMessageForwardRequest(BaseModel):
-    """Schema for forwarding a message"""
-    destination: str = Field(..., description="Destination identifier (email, user ID, etc.)")
-    destination_type: Literal["email", "user", "whatsapp", "slack"] = Field(
-        ...,
-        description="Type of destination"
-    )
