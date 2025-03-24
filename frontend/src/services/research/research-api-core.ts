@@ -4,11 +4,25 @@ import { supabase } from "@/lib/supabase";
 import { ApiError } from "./research-api-types";
 
 /**
- * Get the base URL for API requests
+ * Get the base URL for API requests with better environment handling
  */
 export function getApiBaseUrl(): string {
-  // Use environment variable if available, otherwise use current origin
-  return process.env.NEXT_PUBLIC_API_URL || window.location.origin;
+  // In development, default to localhost:8000 if no API URL is provided
+  if (process.env.NODE_ENV === 'development') {
+    return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+  }
+  
+  // In production, use the provided API URL or current origin
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+  if (apiUrl) {
+    // Ensure the URL doesn't have a trailing slash
+    return apiUrl.endsWith('/') ? apiUrl.slice(0, -1) : apiUrl;
+  }
+  
+  // Fallback to current origin (should only happen in production)
+  const origin = window.location.origin;
+  console.warn(`No NEXT_PUBLIC_API_URL provided, falling back to current origin: ${origin}`);
+  return origin;
 }
 
 /**
@@ -66,15 +80,58 @@ export async function fetchWithSelfSignedCert(
   url: string, 
   options: RequestInit = {}
 ): Promise<Response> {
+  // Normalize URL to prevent trailing slash issues
+  const normalizedUrl = url.endsWith('/') && !url.endsWith('//') ? url.slice(0, -1) : url;
+  
   // Ensure URL is absolute
-  if (!url.startsWith('http')) {
-    url = `${getApiBaseUrl()}${url}`;
+  let fullUrl = normalizedUrl;
+  if (!normalizedUrl.startsWith('http')) {
+    const baseUrl = getApiBaseUrl();
+    // Ensure we don't have double slashes when joining paths
+    const separator = baseUrl.endsWith('/') && normalizedUrl.startsWith('/') ? '' : 
+                     (!baseUrl.endsWith('/') && !normalizedUrl.startsWith('/')) ? '/' : '';
+    fullUrl = `${baseUrl}${separator}${normalizedUrl}`;
   }
   
-  return fetch(url, {
-    ...options,
-    // Add any special handling for self-signed certs if needed
-  });
+  // Ensure headers are properly initialized
+  const headers = new Headers(options.headers || {});
+  
+  // Set default headers if not already present
+  if (!headers.has('Accept')) {
+    headers.set('Accept', 'application/json');
+  }
+  
+  if (!headers.has('Content-Type') && options.method !== 'GET' && options.body) {
+    headers.set('Content-Type', 'application/json');
+  }
+  
+  // Log request (without sensitive data)
+  console.log(`API Request: ${options.method || 'GET'} ${fullUrl.replace(/token=([^&]+)/, 'token=***')}`);
+  
+  try {
+    const response = await fetch(fullUrl, {
+      ...options,
+      headers
+    });
+    
+    // Log response status
+    console.log(`API Response: ${response.status} ${response.statusText} for ${options.method || 'GET'} ${fullUrl.replace(/token=([^&]+)/, 'token=***')}`);
+    
+    // Handle redirects that might be caused by trailing slash issues
+    if (response.status === 307 || response.status === 308) {
+      console.warn(`Received redirect (${response.status}) for URL: ${fullUrl}`);
+      const redirectUrl = response.headers.get('Location');
+      if (redirectUrl) {
+        console.log(`Following redirect to: ${redirectUrl.replace(/token=([^&]+)/, 'token=***')}`);
+        return fetchWithSelfSignedCert(redirectUrl, options);
+      }
+    }
+    
+    return response;
+  } catch (error) {
+    console.error(`API Request failed for ${options.method || 'GET'} ${fullUrl.replace(/token=([^&]+)/, 'token=***')}:`, error);
+    throw error;
+  }
 }
 
 /**

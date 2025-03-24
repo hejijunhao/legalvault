@@ -114,7 +114,7 @@ interface ResearchContextType {
   error: ErrorType | null
   createSession: (query: string, searchParams?: SearchParams) => Promise<string>
   sendMessage: (sessionId: string, content: string) => Promise<void>
-  getSession: (sessionId: string) => Promise<void>
+  getSession: (sessionId: string) => Promise<ResearchSession | null>
   getSessions: (options?: {
     featuredOnly?: boolean
     status?: QueryStatus
@@ -444,36 +444,50 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
     }
   }, [authChecked, isAuthenticated, getSessions]);
 
-  const getSession = async (sessionId: string) => {
-    if (!sessionId) return
-    
-    // Check if we already have this session in our state
-    if (currentSession?.id === sessionId) {
-      return
+  // Fetch a session by ID with improved error handling and state management
+  const getSession = useCallback(async (sessionId: string): Promise<ResearchSession | null> => {
+    if (!sessionId?.trim()) {
+      setError({
+        message: "Invalid search ID",
+        details: "Search ID cannot be empty"
+      });
+      return null;
+    }
+
+    // Don't attempt to fetch if we're already loading this session
+    if (loadingStates.fetchingSession && currentSession?.id === sessionId) {
+      console.log('Already fetching this session, skipping duplicate request');
+      return currentSession;
     }
     
-    // Check cache before making API call
-    const cachedSession = cache.getSession(sessionId);
-    if (cachedSession) {
-      setCurrentSession(cachedSession);
-      return;
-    }
-    
-    setLoadingStates(prev => ({ ...prev, fetchingSession: true }))
-    setIsLoading(true)
-    setError(null)
+    setLoadingStates(prev => ({ ...prev, fetchingSession: true }));
+    setIsLoading(true);
+    setError(null);
     
     try {
-      const session = await fetchSession(sessionId)
-      setCurrentSession(session)
-      updateSessionInList(session)
+      // Check cache before making API call
+      const cachedSession = cache.getSession(sessionId);
+      if (cachedSession) {
+        setCurrentSession(cachedSession);
+        // Still fetch from API to ensure data is fresh, but don't block UI
+      }
+      
+      const session = await fetchSession(sessionId);
+      setCurrentSession(session);
+      
+      // Update the session in the list if it exists
+      updateSessionInList(session);
+      
+      return session;
     } catch (err) {
-      setError(handleApiError(err, "Failed to fetch research search"))
+      console.error('Failed to fetch research search:', err);
+      setError(handleApiError(err, 'Failed to fetch research search'));
+      return null;
     } finally {
-      setLoadingStates(prev => ({ ...prev, fetchingSession: false }))
-      setIsLoading(false)
+      setLoadingStates(prev => ({ ...prev, fetchingSession: false }));
+      setIsLoading(false);
     }
-  }
+  }, [updateSessionInList, handleApiError, currentSession, loadingStates.fetchingSession]);
 
   const createSession = async (query: string, searchParams?: SearchParams): Promise<string> => {
     const trimmedQuery = query.trim()
