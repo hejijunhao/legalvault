@@ -43,8 +43,6 @@ class SearchUpdate(BaseModel):
     description: Optional[str] = Field(None, description="Updated description")
     is_featured: Optional[bool] = Field(None, description="Updated featured status")
     tags: Optional[List[str]] = Field(None, description="Updated tags")
-    category: Optional[QueryCategory] = Field(None, description="Updated query category")
-    query_type: Optional[QueryType] = Field(None, description="Updated query type")
 
 
 class SearchContinue(BaseModel):

@@ -54,10 +54,10 @@ class SearchDTO(BaseModel, TupleConverterMixin):
             user_id=db_search.user_id,
             enterprise_id=db_search.enterprise_id,
             is_featured=db_search.is_featured,
-            tags=db_search.tags,
-            search_params=db_search.search_params,
-            category=db_search.category,
-            query_type=db_search.query_type,
+            tags=db_search.tags or [],
+            search_params=db_search.search_params or {},
+            category=None,  # Not persisted in DB, set to None
+            query_type=None,  # Not persisted in DB, set to None
             created_at=db_search.created_at,
             updated_at=db_search.updated_at
         )
@@ -83,8 +83,6 @@ class SearchUpdateDTO(BaseModel):
     description: Optional[str] = None
     is_featured: Optional[bool] = None
     tags: Optional[List[str]] = None
-    category: Optional[QueryCategory] = None
-    query_type: Optional[QueryType] = None
 
     class Config:
         from_attributes = True
