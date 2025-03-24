@@ -160,6 +160,59 @@ export async function sendSessionMessage(
 }
 
 /**
+ * Continue a research session with a follow-up query
+ * @param sessionId The ID of the session to continue
+ * @param followUpQuery The follow-up query
+ * @param options Additional options for the continuation
+ * @returns The updated research session
+ */
+export async function continueSession(
+  sessionId: string,
+  followUpQuery: string,
+  options?: {
+    threadId?: string;
+    previousMessages?: Array<{ role: string; content: any }>;
+    searchParams?: SearchParams;
+  }
+): Promise<ResearchSession> {
+  const headers = await getAuthHeader();
+  const response = await withRetry(
+    () => fetchWithSelfSignedCert(`/api/research/searches/${sessionId}/continue`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        follow_up_query: followUpQuery,
+        thread_id: options?.threadId,
+        previous_messages: options?.previousMessages,
+        search_params: options?.searchParams
+      })
+    }),
+    3,
+    (error, retryCount) => {
+      // Retry on rate limit errors
+      if (error && 
+          ((error as { status: number }).status === 429 || 
+           (error as { code: string }).code === 'PERPLEXITY_RATE_LIMITED' || 
+           (error as { code: string }).code === 'RATE_LIMITED')) {
+        return true;
+      }
+      return false;
+    }
+  );
+
+  if (!response.ok) return handleApiError(response);
+  const data = await response.json();
+
+  // Cache the updated session
+  researchCache.setSession(data);
+
+  // Invalidate message lists for this session as they're now outdated
+  researchCache.invalidateSearch(sessionId);
+
+  return data;
+}
+
+/**
  * Update the metadata of a research session
  * @param sessionId The ID of the session to update
  * @param updates The updates to apply
