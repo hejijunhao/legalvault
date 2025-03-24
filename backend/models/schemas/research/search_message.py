@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field, validator
 class CitationResponse(BaseModel):
     """Schema for citation responses"""
     text: str = Field(..., description="Citation text", min_length=1)
-    url: str = Field(..., description="Source URL", regex=r'^https?://')
+    url: str = Field(..., description="Source URL", pattern=r'^https?://')
     title: Optional[str] = Field(None, description="Source title")
     source: Optional[str] = Field(None, description="Source name")
     timestamp: Optional[datetime] = Field(None, description="Citation timestamp")
@@ -67,7 +67,7 @@ class SearchMessageCreate(SearchMessageBase):
     status: Optional[str] = Field(
         None,
         description="Initial message status",
-        regex=r'^(pending|processing|completed|failed)$'
+        pattern=r'^(pending|processing|completed|failed)$'
     )
 
 
@@ -85,7 +85,7 @@ class SearchMessageUpdate(BaseModel):
     status: Optional[str] = Field(
         None,
         description="Updated message status",
-        regex=r'^(pending|processing|completed|failed)$'
+        pattern=r'^(pending|processing|completed|failed)$'
     )
 
 
@@ -98,7 +98,7 @@ class SearchMessageResponse(SearchMessageBase):
     status: str = Field(
         ...,
         description="Message status",
-        regex=r'^(pending|processing|completed|failed)$'
+        pattern=r'^(pending|processing|completed|failed)$'
     )
     created_at: datetime = Field(..., description="Message creation timestamp")
     updated_at: Optional[datetime] = Field(None, description="Last update timestamp")

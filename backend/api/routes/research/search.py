@@ -2,7 +2,7 @@
 
 from typing import List, Optional, Union
 from uuid import UUID, uuid4
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 import logging
 from datetime import datetime
 
@@ -30,12 +30,11 @@ from models.schemas.research.search_message import SearchMessageResponse
 
 # Import DTOs
 from models.dtos.research.search_dto import (
-    SearchDTO, SearchListDTO, SearchCreateDTO, SearchUpdateDTO
+    SearchDTO, SearchListDTO, SearchCreateDTO, SearchUpdateDTO, SearchContinueDTO
 )
 from models.dtos.research.search_message_dto import (
     SearchMessageDTO, SearchMessageListDTO
 )
-from models.dtos.research.search_continue_dto import SearchContinueDTO
 
 # Import custom exceptions
 from services.workflow.research.search_workflow import (
