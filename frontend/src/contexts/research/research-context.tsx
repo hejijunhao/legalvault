@@ -161,6 +161,7 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
   const [wsConnection, setWsConnection] = useState<WebSocketConnection | null>(null)
   const [reconnectionAttempts, setReconnectionAttempts] = useState(0)
   const [lastHeartbeat, setLastHeartbeat] = useState<number | null>(null)
+  const [isConnecting, setIsConnecting] = useState(false);
 
   // Add auth state tracking
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -794,15 +795,20 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
   
   // Auto-connect to WebSocket when current session changes
   useEffect(() => {
-    if (currentSession?.id && !wsConnection) {
-      connectToWebSocket(currentSession.id);
+    // Only connect if we have a session ID and we're not already connected or connecting
+    if (currentSession?.id && !wsConnection && !isConnecting) {
+      setIsConnecting(true); // Set connecting flag to prevent multiple connection attempts
+      connectToWebSocket(currentSession.id)
+        .finally(() => {
+          setIsConnecting(false); // Reset flag when connection attempt completes
+        });
     }
     
     // Cleanup on unmount
     return () => {
       disconnectWebSocket();
     };
-  }, [currentSession?.id, wsConnection]);
+  }, [currentSession?.id]); // Remove wsConnection from dependencies
 
   // Set up auth event listener
   useEffect(() => {
