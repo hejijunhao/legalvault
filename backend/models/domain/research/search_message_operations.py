@@ -30,12 +30,13 @@ class SearchMessageOperations:
             "use_server_side_cursors": False
         }
     
-    async def _execute_query(self, query):
+    async def _execute_query(self, query, execution_options: Optional[Dict[str, Any]] = None):
         """Execute a query with pgBouncer compatibility settings."""
         try:
             # Apply pgBouncer compatibility options
+            _execution_options = execution_options or self.execution_options
             result = await self.db.execute(
-                query.execution_options(**self.execution_options)
+                query.execution_options(**_execution_options)
             )
             return result
         except Exception as e:
@@ -51,7 +52,7 @@ class SearchMessageOperations:
                 self.db = AsyncSession(bind=self.db.bind)
                 try:
                     result = await self.db.execute(
-                        query.execution_options(**self.execution_options)
+                        query.execution_options(**_execution_options)
                     )
                     return result
                 except Exception as retry_error:
@@ -105,16 +106,17 @@ class SearchMessageOperations:
                 sequence=0
             )
 
-    async def get_next_sequence(self, search_id: UUID) -> int:
+    async def get_next_sequence(self, search_id: UUID, execution_options: Optional[Dict[str, Any]] = None) -> int:
         """Get the next sequence number for a message in a search."""
         query = select(func.max(PublicSearchMessage.sequence)).where(
             PublicSearchMessage.search_id == search_id
         )
-        result = await self._execute_query(query)
+        result = await self._execute_query(query, execution_options)
         max_sequence = result.scalar() or 0
         return max_sequence + 1
 
-    def create_message(self, search_id: UUID, role: str, content: Dict[str, Any], sequence: int, status: QueryStatus = QueryStatus.PENDING) -> PublicSearchMessage:
+    async def create_message(self, search_id: UUID, role: str, content: Dict[str, Any], sequence: int, 
+                           status: QueryStatus = QueryStatus.PENDING, execution_options: Optional[Dict[str, Any]] = None) -> PublicSearchMessage:
         """Create a new message and add it to the session without committing."""
         message = ResearchMessage(content=content, role=role, sequence=sequence)
         db_message = PublicSearchMessage(
@@ -127,10 +129,10 @@ class SearchMessageOperations:
         self.db.add(db_message)
         return db_message
 
-    async def get_message_by_id(self, message_id: UUID) -> Optional[SearchMessageDTO]:
+    async def get_message_by_id(self, message_id: UUID, execution_options: Optional[Dict[str, Any]] = None) -> Optional[SearchMessageDTO]:
         """Retrieve a message by its ID."""
         query = select(PublicSearchMessage).where(PublicSearchMessage.id == message_id)
-        result = await self._execute_query(query)
+        result = await self._execute_query(query, execution_options)
         db_message = result.scalars().first()
         
         if not db_message:
@@ -144,10 +146,10 @@ class SearchMessageOperations:
             # Convert to DTO using the conversion function for ORM objects
             return to_search_message_dto(db_message)
 
-    async def update_message(self, message_id: UUID, updates: SearchMessageUpdateDTO) -> Optional[SearchMessageDTO]:
+    async def update_message(self, message_id: UUID, updates: SearchMessageUpdateDTO, execution_options: Optional[Dict[str, Any]] = None) -> Optional[SearchMessageDTO]:
         """Update a message's content or other attributes."""
         query = select(PublicSearchMessage).where(PublicSearchMessage.id == message_id)
-        result = await self._execute_query(query)
+        result = await self._execute_query(query, execution_options)
         db_message = result.scalars().first()
         if not db_message:
             return None
@@ -159,7 +161,7 @@ class SearchMessageOperations:
             try:
                 # Create a new query with different execution options
                 retry_query = select(PublicSearchMessage).where(PublicSearchMessage.id == message_id)
-                retry_result = await self._execute_query(retry_query)
+                retry_result = await self._execute_query(retry_query, execution_options)
                 db_message = retry_result.scalars().first()
                 if not db_message or isinstance(db_message, tuple):
                     logger.error("Failed to get ORM object for update operation")
@@ -194,10 +196,10 @@ class SearchMessageOperations:
                 original_error=e
             )
 
-    async def update_message_status(self, message_id: UUID, status: QueryStatus) -> Optional[SearchMessageDTO]:
+    async def update_message_status(self, message_id: UUID, status: QueryStatus, execution_options: Optional[Dict[str, Any]] = None) -> Optional[SearchMessageDTO]:
         """Update a message's status."""
         query = select(PublicSearchMessage).where(PublicSearchMessage.id == message_id)
-        result = await self._execute_query(query)
+        result = await self._execute_query(query, execution_options)
         db_message = result.scalars().first()
         if not db_message:
             return None
@@ -209,7 +211,7 @@ class SearchMessageOperations:
             try:
                 # Create a new query with different execution options
                 retry_query = select(PublicSearchMessage).where(PublicSearchMessage.id == message_id)
-                retry_result = await self._execute_query(retry_query)
+                retry_result = await self._execute_query(retry_query, execution_options)
                 db_message = retry_result.scalars().first()
                 if not db_message or isinstance(db_message, tuple):
                     logger.error("Failed to get ORM object for update operation")
@@ -239,10 +241,10 @@ class SearchMessageOperations:
                 original_error=e
             )
 
-    async def delete_message(self, message_id: UUID) -> bool:
+    async def delete_message(self, message_id: UUID, execution_options: Optional[Dict[str, Any]] = None) -> bool:
         """Delete a message from the database."""
         query = delete(PublicSearchMessage).where(PublicSearchMessage.id == message_id)
-        result = await self._execute_query(query)
+        result = await self._execute_query(query, execution_options)
         await self.db.commit()
         return result.rowcount > 0
 
@@ -294,11 +296,11 @@ class SearchMessageOperations:
             search_id=search_id
         )
 
-    async def list_messages_by_status(self, status: QueryStatus, limit: int = 100, offset: int = 0) -> List[SearchMessageDTO]:
+    async def list_messages_by_status(self, status: QueryStatus, limit: int = 100, offset: int = 0, execution_options: Optional[Dict[str, Any]] = None) -> List[SearchMessageDTO]:
         """List messages by status with pagination."""
         query = select(PublicSearchMessage).where(PublicSearchMessage.status == status)\
             .order_by(PublicSearchMessage.created_at).offset(offset).limit(limit)
-        result = await self._execute_query(query)
+        result = await self._execute_query(query, execution_options)
         messages = result.scalars().all()
         
         # Check if we got tuples instead of ORM objects
@@ -313,7 +315,7 @@ class SearchMessageOperations:
         
         return message_dtos
 
-    async def create_message_with_commit(self, message_create_dto: SearchMessageCreateDTO) -> SearchMessageDTO:
+    async def create_message_with_commit(self, message_create_dto: SearchMessageCreateDTO, execution_options: Optional[Dict[str, Any]] = None) -> SearchMessageDTO:
         """Create a new message and commit it to the database."""
         try:
             # Create domain model for validation
@@ -325,7 +327,7 @@ class SearchMessageOperations:
             
             # If sequence not provided, get the next sequence number
             if message_create_dto.sequence is None:
-                message.sequence = await self.get_next_sequence(message_create_dto.search_id)
+                message.sequence = await self.get_next_sequence(message_create_dto.search_id, execution_options)
             
             # Create database record
             db_message = PublicSearchMessage(
@@ -362,7 +364,7 @@ class SearchMessageOperations:
                         # Create a new instance with the fresh session
                         fresh_ops = SearchMessageOperations(fresh_session)
                         # Retry the operation
-                        return await fresh_ops.create_message_with_commit(message_create_dto)
+                        return await fresh_ops.create_message_with_commit(message_create_dto, execution_options)
                 except Exception as retry_error:
                     logger.error(f"Error in retry attempt after pgBouncer error: {str(retry_error)}")
                     raise DatabaseError(

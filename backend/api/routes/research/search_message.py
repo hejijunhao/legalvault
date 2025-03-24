@@ -12,6 +12,7 @@ from core.auth import get_current_user, get_user_permissions
 from models.domain.research.search_operations import ResearchOperations
 from models.domain.research.search_message_operations import SearchMessageOperations
 from models.domain.user_operations import UserOperations
+from models.domain.research.research_errors import ValidationError, DatabaseError
 from models.schemas.research.search_message import (
     SearchMessageResponse,
     SearchMessageUpdate,

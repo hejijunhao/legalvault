@@ -15,6 +15,9 @@ from models.database.research.public_searches import PublicSearch
 from models.database.research.public_search_messages import PublicSearchMessage
 from models.domain.research.search_message_operations import SearchMessageOperations
 
+# Import error classes
+from models.domain.research.research_errors import ValidationError, DatabaseError
+
 # Import DTOs and conversion functions
 from models.dtos.research.search_dto import (
     SearchDTO, SearchListDTO, SearchCreateDTO, SearchUpdateDTO,
@@ -46,12 +49,13 @@ class ResearchOperations:
             "use_server_side_cursors": False
         }
     
-    async def _execute_query(self, query):
+    async def _execute_query(self, query, execution_options: Optional[Dict[str, Any]] = None):
         """
         Execute a query with pgBouncer compatibility settings.
         
         Args:
             query: SQLAlchemy query to execute
+            execution_options: Optional execution options for pgBouncer compatibility
             
         Returns:
             Query result
@@ -61,8 +65,9 @@ class ResearchOperations:
         """
         try:
             # Apply pgBouncer compatibility options
+            _execution_options = execution_options or self.execution_options
             result = await self.db_session.execute(
-                query.execution_options(**self.execution_options)
+                query.execution_options(**_execution_options)
             )
             return result
             
@@ -109,7 +114,8 @@ class ResearchOperations:
             query: str,
             enterprise_id: Optional[UUID] = None,
             search_params: Optional[Dict] = None,
-            response: Optional[Dict] = None
+            response: Optional[Dict] = None,
+            execution_options: Optional[Dict[str, Any]] = None
         ) -> SearchDTO:
         """
         Create a new search record in the database.
@@ -121,6 +127,7 @@ class ResearchOperations:
             enterprise_id: Optional UUID of the user's enterprise
             search_params: Optional parameters for the search
             response: Optional response data from the search execution
+            execution_options: Optional execution options for pgBouncer compatibility
             
         Returns:
             SearchDTO with created search data
@@ -151,10 +158,13 @@ class ResearchOperations:
             )
             
             try:
-                # Add and commit the search
+                # Apply execution options if provided, otherwise use default
+                _execution_options = execution_options or self.execution_options
+                
+                # Add and commit the search with pgBouncer compatibility settings
                 self.db_session.add(db_search)
-                await self.db_session.commit()
-                await self.db_session.refresh(db_search)
+                await self.db_session.commit(execution_options=_execution_options)
+                await self.db_session.refresh(db_search, execution_options=_execution_options)
                 
                 # If response provided, add initial messages
                 if response:
@@ -167,7 +177,8 @@ class ResearchOperations:
                             search_id=search_id,
                             content={"text": query},
                             role="user",
-                            sequence=1
+                            sequence=1,
+                            execution_options=_execution_options
                         )
                         
                         # Add assistant response message
@@ -175,11 +186,12 @@ class ResearchOperations:
                             search_id=search_id,
                             content=response,
                             role="assistant",
-                            sequence=2
+                            sequence=2,
+                            execution_options=_execution_options
                         )
                         
                         # Refresh search to get messages
-                        await self.db_session.refresh(db_search)
+                        await self.db_session.refresh(db_search, execution_options=_execution_options)
                         
                     except Exception as msg_error:
                         logger.error(f"Error creating initial messages: {str(msg_error)}")
@@ -213,7 +225,7 @@ class ResearchOperations:
                 original_error=e
             )
 
-    async def add_search_messages(self, search_id: UUID, user_query: str, response: Dict[str, Any]) -> bool:
+    async def add_search_messages(self, search_id: UUID, user_query: str, response: Dict[str, Any], execution_options: Optional[Dict[str, Any]] = None) -> bool:
         """
         Add user query and assistant response messages to an existing search.
         
@@ -221,6 +233,7 @@ class ResearchOperations:
             search_id: UUID of the existing search
             user_query: Follow-up query from the user
             response: Response data from the search execution
+            execution_options: Optional execution options for pgBouncer compatibility
             
         Returns:
             True if messages were added successfully
@@ -232,7 +245,7 @@ class ResearchOperations:
         try:
             # First validate the search exists
             query = select(PublicSearch).where(PublicSearch.id == search_id)
-            result = await self._execute_query(query)
+            result = await self._execute_query(query, execution_options)
             search = result.scalars().first()
             
             if not search:
@@ -257,22 +270,24 @@ class ResearchOperations:
                 msg_ops = SearchMessageOperations(self.db_session)
                 
                 # Add user query message
-                next_sequence = await msg_ops.get_next_sequence(search_id)
+                next_sequence = await msg_ops.get_next_sequence(search_id, execution_options)
                 await msg_ops.create_message(
                     search_id=search_id,
                     role="user",
                     content={"text": user_query},
-                    sequence=next_sequence
+                    sequence=next_sequence,
+                    execution_options=execution_options
                 )
                 
                 # Add assistant response if valid
                 if "text" in response and "citations" in response:
-                    assistant_seq = await msg_ops.get_next_sequence(search_id)
+                    assistant_seq = await msg_ops.get_next_sequence(search_id, execution_options)
                     await msg_ops.create_message(
                         search_id=search_id,
                         role="assistant",
                         content=response,
-                        sequence=assistant_seq
+                        sequence=assistant_seq,
+                        execution_options=execution_options
                     )
                 else:
                     raise ValidationError(
@@ -283,7 +298,7 @@ class ResearchOperations:
                         }
                     )
                 
-                await self.db_session.commit()
+                await self.db_session.commit(execution_options=execution_options)
                 return True
                 
             except Exception as e:
@@ -545,8 +560,8 @@ class ResearchOperations:
                 for field, value in updates.dict(exclude_unset=True).items():
                     setattr(db_search, field, value)
                 
-                await self.db_session.commit()
-                await self.db_session.refresh(db_search)
+                await self.db_session.commit(execution_options=execution_options)
+                await self.db_session.refresh(db_search, execution_options=execution_options)
                 
                 return to_search_dto(db_search)
                 
@@ -628,7 +643,7 @@ class ResearchOperations:
                 else:
                     await self._execute_query(search_query)
                 
-                await self.db_session.commit()
+                await self.db_session.commit(execution_options=execution_options)
                 return True
                 
             except Exception as e:
