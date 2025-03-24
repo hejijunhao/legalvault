@@ -63,49 +63,86 @@ class ResearchOperations:
         Raises:
             DatabaseError: If query execution fails
         """
-        try:
-            # Apply pgBouncer compatibility options
-            _execution_options = execution_options or self.execution_options
-            result = await self.db_session.execute(
-                query.execution_options(**_execution_options)
-            )
-            return result
-            
-        except Exception as e:
-            error_message = str(e).lower()
-            await self.db_session.rollback()
-            
-            # Handle pgBouncer prepared statement errors
-            if ("prepared statement" in error_message or 
-                "duplicatepreparedstatementerror" in error_message or 
-                "invalidsqlstatementnameerror" in error_message):
-                logger.warning(f"pgBouncer prepared statement error encountered: {str(e)}")
-                try:
-                    # Try to create a fresh session and retry
-                    from sqlalchemy.ext.asyncio import AsyncSession
-                    from core.database import async_engine
+        # Maximum number of retry attempts for pgBouncer errors
+        max_retries = 2
+        retry_count = 0
+        last_error = None
+        
+        while retry_count <= max_retries:
+            try:
+                # Apply pgBouncer compatibility options
+                _execution_options = execution_options or self.execution_options
+                
+                # Log the query execution attempt
+                if retry_count > 0:
+                    logger.info(f"Retry attempt {retry_count}/{max_retries} for query execution")
+                
+                result = await self.db_session.execute(
+                    query.execution_options(**_execution_options)
+                )
+                return result
+                
+            except Exception as e:
+                last_error = e
+                error_message = str(e).lower()
+                await self.db_session.rollback()
+                
+                # Check if this is a pgBouncer prepared statement error
+                is_pgbouncer_error = any(err_type in error_message for err_type in [
+                    "prepared statement", 
+                    "duplicatepreparedstatementerror",
+                    "invalidsqlstatementnameerror",
+                    "stmtcacheerror"
+                ])
+                
+                if is_pgbouncer_error and retry_count < max_retries:
+                    logger.warning(f"pgBouncer prepared statement error encountered (attempt {retry_count+1}/{max_retries+1}): {str(e)}")
+                    retry_count += 1
                     
-                    logger.info("Creating fresh session to retry operation after pgBouncer error")
-                    async with AsyncSession(async_engine) as fresh_session:
-                        result = await fresh_session.execute(
-                            query.execution_options(**self.execution_options)
-                        )
-                        return result
+                    # Use a fresh session for the retry
+                    try:
+                        from sqlalchemy.ext.asyncio import AsyncSession
+                        from core.database import async_engine
                         
-                except Exception as retry_error:
-                    logger.error(f"Error in retry attempt after pgBouncer error: {str(retry_error)}")
-                    raise DatabaseError(
-                        "Database connection error",
-                        details={"original_error": str(retry_error)},
-                        original_error=retry_error
-                    )
+                        # Close the current session
+                        await self.db_session.close()
+                        
+                        # Create a fresh session with enhanced pgBouncer compatibility
+                        logger.info("Creating fresh session for retry after pgBouncer error")
+                        self.db_session = AsyncSession(async_engine)
+                        
+                        # Add a small delay before retry to allow connection pool to stabilize
+                        import asyncio
+                        await asyncio.sleep(0.1 * (2 ** retry_count))  # Exponential backoff
+                        
+                        continue  # Try again with the new session
+                    except Exception as session_error:
+                        logger.error(f"Error creating fresh session: {str(session_error)}")
+                        # Fall through to the general error handling
+                else:
+                    # Not a pgBouncer error or we've exhausted retries
+                    break
+        
+        # If we get here, all retries failed or it wasn't a pgBouncer error
+        if last_error:
+            logger.error(f"Query execution failed after {retry_count} retries: {str(last_error)}")
             
-            logger.error(f"Error executing query: {str(e)}")
-            raise DatabaseError(
-                "Query execution failed",
-                details={"error": str(e)},
-                original_error=e
-            )
+            # Provide a more specific error message for pgBouncer issues
+            if "prepared statement" in str(last_error).lower():
+                raise DatabaseError(
+                    "Database connection pool error",
+                    details={
+                        "error": str(last_error),
+                        "suggestion": "The application is experiencing issues with the database connection pool. This is typically a transient error that resolves automatically."
+                    },
+                    original_error=last_error
+                )
+            else:
+                raise DatabaseError(
+                    "Query execution failed",
+                    details={"error": str(last_error)},
+                    original_error=last_error
+                )
 
     async def create_search_record(
             self,

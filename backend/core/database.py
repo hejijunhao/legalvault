@@ -67,13 +67,26 @@ async_engine = create_async_engine(
             "client_encoding": "utf8"
         }
     },
+    # Ensure consistent pgBouncer compatibility settings for all operations
     execution_options={
         "isolation_level": "AUTOCOMMIT",  # Move inside execution_options for better propagation
         "compiled_cache": None,
         "no_parameters": True,  # Required for pgBouncer
-        "use_server_side_cursors": False  # Disable server-side cursors for pgBouncer
+        "use_server_side_cursors": False,  # Disable server-side cursors for pgBouncer
+        "future": True,  # Use SQLAlchemy 2.0 style execution
+        "logging_token": "legalvault-db"  # Add token for easier log filtering
     },
 )
+
+# Log database connection configuration
+logger.info("Database engine configured with pgBouncer compatibility settings:")
+logger.info(f"  - Connection pooling: Using SQLAlchemy NullPool with pgBouncer")
+logger.info(f"  - Statement cache disabled: statement_cache_size=0")
+logger.info(f"  - Prepared statement cache disabled: prepared_statement_cache_size=0")
+logger.info(f"  - Server-side cursors disabled: use_server_side_cursors=False")
+logger.info(f"  - Parameter binding disabled: no_parameters=True")
+logger.info(f"  - Using SQLAlchemy 2.0 style execution: future=True")
+logger.info(f"  - Statement timeout set to: 60 seconds")
 
 # Create session factory with pgBouncer-compatible options
 async_session_factory = sessionmaker(
