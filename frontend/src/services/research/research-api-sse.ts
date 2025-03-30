@@ -57,7 +57,7 @@ export async function connectToSSE(
 
   // Create SSE connection URL
   const baseUrl = getApiBaseUrl();
-  const sseUrl = new URL(`${baseUrl}/research/messages/sse/${searchId}`);
+  const sseUrl = new URL(`${baseUrl}/api/research/messages/sse/${searchId}`);
   sseUrl.searchParams.append('token', token);
 
   // Create EventSource with connection state tracking
