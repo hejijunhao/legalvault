@@ -390,38 +390,22 @@ class ResearchOperations:
             else:
                 query = select(PublicSearch).where(PublicSearch.id == search_id)
                 
-            # Execute query with options
-            try:
-                if execution_options:
-                    result = await self.db_session.execute(
-                        query.execution_options(**execution_options)
-                    )
-                else:
-                    result = await self._execute_query(query)
+            # Execute query using helper method that handles pgBouncer errors
+            result = await self._execute_query(query, execution_options)
                     
-                search = result.scalars().first()
-                if not search:
-                    raise ValidationError(
-                        "Search not found",
-                        details={"search_id": str(search_id)}
-                    )
-                
-                # Convert to DTO based on whether messages were included
-                if include_messages:
-                    return to_search_dto(search)
-                else:
-                    return to_search_dto_without_messages(search)
-                    
-            except Exception as e:
-                raise DatabaseError(
-                    "Failed to retrieve search",
-                    details={
-                        "search_id": str(search_id),
-                        "include_messages": include_messages
-                    },
-                    original_error=e
+            search = result.scalars().first()
+            if not search:
+                raise ValidationError(
+                    "Search not found",
+                    details={"search_id": str(search_id)}
                 )
-                
+            
+            # Convert to DTO based on whether messages were included
+            if include_messages:
+                return to_search_dto(search)
+            else:
+                return to_search_dto_without_messages(search)
+                    
         except ValidationError:
             raise
         except DatabaseError:
