@@ -3,7 +3,7 @@
 from typing import List, Dict, Any, Optional, Union
 from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, delete, update, func
+from sqlalchemy import select, delete, update, func, text
 import logging
 
 from models.database.research.public_search_messages import PublicSearchMessage
@@ -35,21 +35,47 @@ class SearchMessageOperations:
         try:
             # Apply pgBouncer compatibility options
             _execution_options = execution_options or self.execution_options
+            
+            # Try to deallocate any prepared statements first
+            try:
+                await self.db.execute(
+                    text("DEALLOCATE ALL").execution_options(
+                        no_parameters=True,
+                        use_server_side_cursors=False
+                    )
+                )
+            except Exception as deallocate_error:
+                # Ignore errors from DEALLOCATE ALL
+                logger.debug(f"DEALLOCATE ALL failed (usually harmless): {str(deallocate_error)}")
+            
             result = await self.db.execute(
                 query.execution_options(**_execution_options)
             )
             return result
         except Exception as e:
-            if any(err_type in str(e) for err_type in [
-                "DuplicatePreparedStatementError",
+            error_message = str(e).lower()
+            if any(err_type in error_message for err_type in [
+                "duplicatepreparedstatementerror",
                 "prepared statement",
-                "InvalidSQLStatementNameError"
+                "invalidsqlstatementnameerror"
             ]):
-                logger.warning("pgBouncer prepared statement error encountered: %s", str(e))
+                logger.warning(f"pgBouncer prepared statement error encountered: {str(e)}")
                 logger.info("Creating fresh session to retry operation after pgBouncer error")
                 # Create a fresh session and retry
                 await self.db.close()
                 self.db = AsyncSession(bind=self.db.bind)
+                
+                # Try to deallocate prepared statements in the new session
+                try:
+                    await self.db.execute(
+                        text("DEALLOCATE ALL").execution_options(
+                            no_parameters=True,
+                            use_server_side_cursors=False
+                        )
+                    )
+                except Exception:
+                    pass  # Ignore errors from DEALLOCATE ALL
+                
                 try:
                     result = await self.db.execute(
                         query.execution_options(**_execution_options)
@@ -401,3 +427,88 @@ class SearchMessageOperations:
             messages_list.limit = limit
             
         return messages_list
+
+    async def get_messages_for_search(
+        self, 
+        search_id: UUID, 
+        user_id: UUID, 
+        user_permissions: List[str],
+        execution_options: Optional[Dict[str, Any]] = None
+    ) -> List[SearchMessageDTO]:
+        """
+        Get new messages for a search that haven't been delivered yet.
+        
+        This method is specifically designed for the SSE endpoint to retrieve
+        new messages that should be sent to the client in real-time.
+        
+        Args:
+            search_id: The UUID of the search to get messages for
+            user_id: The UUID of the user requesting the messages
+            user_permissions: List of permission strings for the user
+            execution_options: Optional SQLAlchemy execution options for pgBouncer compatibility
+            
+        Returns:
+            A list of SearchMessageDTO objects representing new messages
+        """
+        try:
+            # Query for new messages with completed status
+            # In a real implementation, you might want to track which messages have been delivered
+            # For now, we'll just get the most recent messages (last 5 seconds)
+            from datetime import datetime, timedelta
+            recent_time = datetime.utcnow() - timedelta(seconds=5)
+            
+            query = select(PublicSearchMessage).where(
+                PublicSearchMessage.search_id == search_id,
+                PublicSearchMessage.status == QueryStatus.COMPLETED,
+                PublicSearchMessage.updated_at >= recent_time
+            ).order_by(PublicSearchMessage.sequence)
+            
+            # Execute with pgBouncer compatibility options
+            result = await self._execute_query(query, execution_options)
+            messages = result.scalars().all()
+            
+            # Convert messages to DTOs, handling both tuple and ORM cases
+            message_dtos = []
+            if messages:
+                for message in messages:
+                    if isinstance(message, tuple):
+                        logger.info("Received tuple instead of ORM object in get_messages_for_search")
+                        message_dtos.append(self._tuple_to_message_dto(message))
+                    else:
+                        message_dtos.append(to_search_message_dto(message))
+            
+            return message_dtos
+            
+        except Exception as e:
+            # Check if this is a pgBouncer prepared statement error
+            error_message = str(e).lower()
+            if ("prepared statement" in error_message or 
+                "duplicatepreparedstatementerror" in error_message or 
+                "invalidsqlstatementnameerror" in error_message):
+                
+                logger.warning(f"pgBouncer prepared statement error in get_messages_for_search: {str(e)}")
+                try:
+                    # Try to create a fresh session and retry
+                    from sqlalchemy.ext.asyncio import AsyncSession
+                    from core.database import async_engine
+                    
+                    logger.info("Creating fresh session to retry get_messages_for_search after pgBouncer error")
+                    async with AsyncSession(async_engine) as fresh_session:
+                        # Create a new instance with the fresh session
+                        fresh_ops = SearchMessageOperations(fresh_session)
+                        # Retry the operation
+                        return await fresh_ops.get_messages_for_search(
+                            search_id=search_id,
+                            user_id=user_id,
+                            user_permissions=user_permissions,
+                            execution_options=execution_options
+                        )
+                except Exception as retry_error:
+                    logger.error(f"Error in retry attempt after pgBouncer error: {str(retry_error)}")
+                    # Return empty list instead of raising error for SSE
+                    return []
+            
+            logger.error(f"Error fetching messages for SSE: {str(e)}")
+            # For SSE, it's better to return an empty list than to raise an exception
+            # This allows the connection to stay open and retry on the next cycle
+            return []

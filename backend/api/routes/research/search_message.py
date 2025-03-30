@@ -18,7 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSock
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime
 
-from core.database import get_db
+from core.database import get_db, get_session_db
 from core.auth import get_current_user
 from models.domain.research.search_operations import ResearchOperations
 from models.domain.research.search_message_operations import SearchMessageOperations
@@ -320,7 +320,7 @@ async def sse_endpoint(
     request: Request,
     search_id: UUID,
     token: str = Query(..., description="Authentication token"),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_session_db)
 ):
     """
     Server-Sent Events (SSE) endpoint for real-time message updates.

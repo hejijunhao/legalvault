@@ -51,6 +51,13 @@ async_url_obj = parsed_url.set(
     query={k: v for k, v in query_params.items() if k not in ('sslmode', 'gssencmode')}
 )
 
+# Add pgBouncer-specific options directly to the connection URL
+# These are more reliable than connect_args for some settings
+async_url_obj = async_url_obj.update_query_dict({
+    "prepared_statement_cache_size": "0",
+    "statement_cache_size": "0"
+})
+
 async_engine = create_async_engine(
     async_url_obj,
     echo=False,
@@ -104,6 +111,17 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
         session = async_session_factory()
         logger.info("Session created successfully")
         
+        # Explicitly deallocate any prepared statements at the start of each session
+        try:
+            logger.info("Executing DEALLOCATE ALL to clear prepared statements")
+            await session.execute(text("DEALLOCATE ALL").execution_options(
+                no_parameters=True,
+                use_server_side_cursors=False
+            ))
+        except Exception as deallocate_error:
+            # Ignore errors from DEALLOCATE ALL as it might not be supported in all contexts
+            logger.warning(f"DEALLOCATE ALL failed (this is usually harmless): {str(deallocate_error)}")
+        
         logger.info("Executing test query: SELECT 1")
         # Use text() with execution_options to ensure no prepared statements
         test_query = text("SELECT 1").execution_options(
@@ -120,18 +138,32 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             await session.rollback()
         
         # Handle pgBouncer prepared statement errors
-        if any(err_type in str(e) for err_type in [
-            "DuplicatePreparedStatementError", 
+        if any(err_type in str(e).lower() for err_type in [
+            "duplicatepreparedstatementerror", 
             "prepared statement",
-            "InvalidSQLStatementNameError"
+            "invalidsqlstatementnameerror"
         ]):
             logger.warning(f"pgBouncer prepared statement warning: {str(e)[:100]}...")
             # Create a fresh session instead of reusing the problematic one
             try:
                 await session.close()
                 session = async_session_factory()
-                # Test the new session
-                await session.execute(text("SELECT 1").execution_options(no_parameters=True))
+                
+                # Try to deallocate all prepared statements in the new session
+                try:
+                    await session.execute(text("DEALLOCATE ALL").execution_options(
+                        no_parameters=True,
+                        use_server_side_cursors=False
+                    ))
+                except Exception:
+                    pass  # Ignore errors from DEALLOCATE ALL
+                
+                # Test the new session with a simple query that avoids prepared statements
+                await session.execute(text("SELECT 1").execution_options(
+                    no_parameters=True,
+                    use_server_side_cursors=False
+                ))
+                
                 yield session
                 return
             except Exception as inner_e:
@@ -152,6 +184,76 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             await session.close()
             logger.info("Session closed")
 
+# Create a separate session factory for long-lived connections (SSE, WebSockets)
+async_session_pooled_factory = sessionmaker(
+    bind=async_engine,
+    class_=AsyncSession,
+    expire_on_commit=False
+)
+
+# Dependency for SSE and WebSocket endpoints
+async def get_session_db() -> AsyncGenerator[AsyncSession, None]:
+    """Get a database session optimized for long-lived connections like SSE and WebSockets.
+    
+    This session is configured with additional pgBouncer compatibility settings.
+    """
+    logger.info("Entering get_session_db for long-lived connection")
+    session = None
+    try:
+        logger.info("Creating session for long-lived connection")
+        session = async_session_pooled_factory()
+        
+        # Explicitly deallocate any prepared statements
+        try:
+            await session.execute(text("DEALLOCATE ALL").execution_options(
+                no_parameters=True,
+                use_server_side_cursors=False
+            ))
+        except Exception:
+            pass  # Ignore errors from DEALLOCATE ALL
+        
+        # Test connection with a simple query
+        await session.execute(text("SELECT 1").execution_options(
+            no_parameters=True,
+            use_server_side_cursors=False
+        ))
+        
+        logger.info("Long-lived session created successfully")
+        yield session
+    except Exception as e:
+        logger.error(f"Error creating long-lived session: {str(e)}")
+        if session:
+            await session.rollback()
+        
+        # Special handling for pgBouncer errors in long-lived connections
+        if "prepared statement" in str(e).lower():
+            logger.warning("pgBouncer prepared statement error in long-lived connection")
+            try:
+                # Try with a fresh session
+                await session.close()
+                session = async_session_pooled_factory()
+                
+                # Explicitly disable prepared statements again
+                await session.execute(text("SELECT 1").execution_options(
+                    no_parameters=True,
+                    use_server_side_cursors=False
+                ))
+                
+                yield session
+                return
+            except Exception as retry_error:
+                logger.error(f"Failed to create replacement long-lived session: {str(retry_error)}")
+        
+        # Raise HTTP exception for API endpoints
+        raise HTTPException(
+            status_code=503,
+            detail="Database connection failed for long-lived connection."
+        )
+    finally:
+        if session:
+            await session.close()
+            logger.info("Long-lived session closed")
+
 # Database initialization function
 async def init_db() -> bool:
     """Initialize the database by creating schemas and tables.
@@ -171,6 +273,14 @@ async def init_db() -> bool:
                 no_parameters=True
             )
             await conn.execute(test_query)
+            
+            # Try to deallocate all prepared statements
+            try:
+                await conn.execute(text("DEALLOCATE ALL").execution_options(
+                    no_parameters=True
+                ))
+            except Exception as deallocate_error:
+                logger.warning(f"DEALLOCATE ALL failed during initialization: {str(deallocate_error)}")
             
             # Create schemas if they don't exist
             await conn.execute(
@@ -196,10 +306,10 @@ async def init_db() -> bool:
         logger.error(f"Error type: {type(e).__name__}")
         
         # Handle pgBouncer prepared statement errors more comprehensively
-        if any(err_type in str(e) for err_type in [
-            "DuplicatePreparedStatementError", 
+        if any(err_type in str(e).lower() for err_type in [
+            "duplicatepreparedstatementerror", 
             "prepared statement",
-            "InvalidSQLStatementNameError"
+            "invalidsqlstatementnameerror"
         ]):
             logger.warning("Detected pgBouncer prepared statement issue - this is expected during reloads")
             return True  # Continue despite pgBouncer errors
