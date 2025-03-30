@@ -3,6 +3,17 @@
 from typing import List, Optional, Union
 from uuid import UUID
 import asyncio
+from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect, status, Request
+from fastapi.responses import StreamingResponse
+from sqlalchemy.ext.asyncio import AsyncSession
+from datetime import datetime
+import json
+import asyncio
+from contextlib import asynccontextmanager
+
+from typing import List, Optional, Union
+from uuid import UUID
+import asyncio
 from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime
@@ -302,6 +313,165 @@ async def delete_message(
     
     return None
 
+
+# SSE endpoint for real-time message updates
+@router.get("/sse/{search_id}")
+async def sse_endpoint(
+    request: Request,
+    search_id: UUID,
+    token: str = Query(..., description="Authentication token"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Server-Sent Events (SSE) endpoint for real-time message updates.
+    
+    Allows clients to receive updates when new messages are added to a search.
+    Authentication is handled via token in the query parameters.
+    
+    Features:
+    - Heartbeat mechanism to detect stale connections
+    - Real-time message streaming
+    - Authentication via token
+    - Automatic reconnection handling
+    """
+    
+    async def event_generator():
+        try:
+            # Define pgBouncer compatibility options
+            execution_options = {"no_parameters": True, "use_server_side_cursors": False}
+            
+            # Authenticate user from token
+            try:
+                user_ops = UserOperations(db)
+                token_data = await user_ops.decode_token(token)
+                if not token_data:
+                    print("SSE authentication failed: Invalid token")
+                    yield "event: error\ndata: " + json.dumps({
+                        "message": "Authentication failed: Invalid or expired token"
+                    }) + "\n\n"
+                    return
+                user_id = token_data.user_id
+                
+                # Get user permissions
+                try:
+                    user_permissions = await user_ops.get_user_permissions(
+                        user_id, 
+                        execution_options=execution_options
+                    )
+                    print(f"SSE authenticated for user {user_id} with permissions {user_permissions}")
+                except Exception as e:
+                    print(f"Error getting user permissions: {str(e)}")
+                    user_permissions = []
+                
+            except Exception as e:
+                print(f"SSE authentication error: {str(e)}")
+                yield "event: error\ndata: " + json.dumps({
+                    "message": "Authentication error"
+                }) + "\n\n"
+                return
+            
+            # Verify user has access to the search
+            search_ops = ResearchOperations(db)
+            try:
+                has_access = await search_ops.check_user_access(
+                    search_id=search_id,
+                    user_id=user_id,
+                    user_permissions=user_permissions,
+                    execution_options=execution_options
+                )
+                
+                if not has_access:
+                    print(f"SSE access denied: User {user_id} does not have access to search {search_id}")
+                    yield "event: error\ndata: " + json.dumps({
+                        "message": "Access denied: You do not have permission to access this search"
+                    }) + "\n\n"
+                    return
+                
+                print(f"SSE access granted: User {user_id} has access to search {search_id}")
+            except Exception as e:
+                print(f"SSE error verifying search access: {e}")
+                yield "event: error\ndata: " + json.dumps({
+                    "message": "Error verifying search access"
+                }) + "\n\n"
+                return
+            
+            # Send initial connection established event
+            yield "event: connection_established\ndata: " + json.dumps({
+                "message": "Connected successfully"
+            }) + "\n\n"
+            
+            # Initialize message operations
+            message_ops = SearchMessageOperations(db)
+            
+            # Set up heartbeat
+            heartbeat_interval = 15  # seconds
+            last_message_time = asyncio.get_event_loop().time()
+            
+            while True:
+                if await request.is_disconnected():
+                    print(f"SSE client disconnected for search {search_id}")
+                    break
+                
+                current_time = asyncio.get_event_loop().time()
+                
+                # Send heartbeat if no messages sent recently
+                if current_time - last_message_time >= heartbeat_interval:
+                    yield "event: heartbeat\ndata: " + json.dumps({
+                        "timestamp": datetime.utcnow().isoformat()
+                    }) + "\n\n"
+                    last_message_time = current_time
+                    continue
+                
+                # Get new messages
+                try:
+                    messages = await message_ops.get_messages_for_search(
+                        search_id=search_id,
+                        user_id=user_id,
+                        user_permissions=user_permissions,
+                        execution_options=execution_options
+                    )
+                    
+                    if messages:
+                        # Convert messages to response format
+                        message_responses = [
+                            await search_message_dto_to_response(msg, db)
+                            for msg in messages
+                        ]
+                        
+                        # Send messages event
+                        yield "event: messages\ndata: " + json.dumps({
+                            "messages": [msg.dict() for msg in message_responses]
+                        }) + "\n\n"
+                        
+                        last_message_time = current_time
+                
+                except Exception as e:
+                    print(f"Error fetching messages: {str(e)}")
+                    yield "event: error\ndata: " + json.dumps({
+                        "message": "Error fetching messages"
+                    }) + "\n\n"
+                
+                # Small delay to prevent tight loop
+                await asyncio.sleep(0.1)
+        
+        except Exception as e:
+            print(f"SSE general error: {str(e)}")
+            yield "event: error\ndata: " + json.dumps({
+                "message": "Internal server error"
+            }) + "\n\n"
+        
+        finally:
+            print(f"SSE connection closed for search {search_id}")
+    
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"  # Disable proxy buffering
+        }
+    )
 
 # WebSocket for real-time message updates
 @router.websocket("/ws/{search_id}")
