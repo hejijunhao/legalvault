@@ -24,8 +24,8 @@ export default function ResearchPage() {
     error, 
     sendMessage, 
     clearError, 
-    connectToWebSocket, 
-    disconnectWebSocket
+    connectToStream,
+    disconnectStream
   } = useResearch()
   const [isMounted, setIsMounted] = useState(true)
 
@@ -49,9 +49,9 @@ export default function ResearchPage() {
     }
     
     if (currentSession?.id === searchId) {
-      console.log('Session already loaded, connecting to WebSocket')
-      connectToWebSocket(searchId)
-        .catch(err => console.error('Failed to connect to WebSocket:', err))
+      console.log('Session already loaded, connecting to SSE stream')
+      connectToStream(searchId)
+        .catch(err => console.error('Failed to connect to SSE stream:', err))
       return
     }
     
@@ -63,9 +63,9 @@ export default function ResearchPage() {
         
         if (session) {
           console.log('Session data fetched successfully')
-          // Connect to WebSocket after session is loaded
-          connectToWebSocket(searchId)
-            .catch(err => console.error('Failed to connect to WebSocket:', err))
+          // Connect to SSE after session is loaded
+          connectToStream(searchId)
+            .catch(err => console.error('Failed to connect to SSE stream:', err))
         } else {
           console.error('No session data returned')
           router.push('/research')
@@ -76,15 +76,15 @@ export default function ResearchPage() {
         console.error('Error fetching session:', err)
         router.push('/research')
       })
-  }, [searchId, getSession, currentSession, isLoading, connectToWebSocket, router, isMounted])
+  }, [searchId, getSession, currentSession, isLoading, connectToStream, router, isMounted])
 
-  // Cleanup WebSocket connection when component unmounts
+  // Cleanup SSE connection when component unmounts
   useEffect(() => {
     return () => {
-      console.log('ResearchPage unmounting, disconnecting WebSocket')
-      disconnectWebSocket()
+      console.log('ResearchPage unmounting, disconnecting SSE stream')
+      disconnectStream()
     }
-  }, [disconnectWebSocket])
+  }, [disconnectStream])
 
   const handleSendMessage = async (content: string) => {
     if (!searchId || !content.trim()) return

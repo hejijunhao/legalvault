@@ -9,12 +9,11 @@ import {
   createNewSession, 
   updateSessionMetadata as updateSessionApi, 
   deleteSession as deleteSessionApi, 
-  sendSessionMessage as sendMessageApi, 
-  connectToMessageUpdates, 
-  WebSocketConnection,
-  WebSocketMessage,
-  requestLatestMessages,
-  sendTypingNotification,
+  sendSessionMessage as sendMessageApi,
+  connectToSSE,
+  SSEConnection,
+  SSEMessage,
+  SSEEventType,
   formatApiError,
   cache,
   ApiError
@@ -136,8 +135,8 @@ interface ResearchContextType {
   clearError: () => void
   totalSessions: number
   isConnected: boolean
-  connectToWebSocket: (sessionId: string) => Promise<void>
-  disconnectWebSocket: () => void
+  connectToStream: (sessionId: string) => Promise<void>
+  disconnectStream: () => void
   clearCache: () => void
 }
 
@@ -158,14 +157,12 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<ErrorType | null>(null)
   const [totalSessions, setTotalSessions] = useState(0)
   const [isConnected, setIsConnected] = useState(false)
-  const [wsConnection, setWsConnection] = useState<WebSocketConnection | null>(null)
-  const [reconnectionAttempts, setReconnectionAttempts] = useState(0)
+  const [sseConnection, setSseConnection] = useState<SSEConnection | null>(null)
   const [lastHeartbeat, setLastHeartbeat] = useState<number | null>(null)
-  const [isConnecting, setIsConnecting] = useState(false);
 
   // Add auth state tracking
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [authChecked, setAuthChecked] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [authChecked, setAuthChecked] = useState(false)
 
   // Use useCallback to memoize the clearError function to prevent infinite loops
   const clearError = useCallback(() => setError(null), [setError])
@@ -701,128 +698,143 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  const connectToWebSocket = async (sessionId: string) => {
+  const connectToStream = async (sessionId: string) => {
     if (!sessionId) return;
     
     // Disconnect any existing connection
-    disconnectWebSocket();
-    
-    // Reset reconnection attempts counter
-    setReconnectionAttempts(0);
+    disconnectStream();
     
     try {
-      const connection = await connectToMessageUpdates(
+      const connection = await connectToSSE(
         sessionId,
-        (message: WebSocketMessage) => {
-          // Handle incoming WebSocket messages
-          console.log('Received WebSocket message:', message);
-          
-          // Track heartbeats for connection health monitoring
-          if (message.type === 'heartbeat' || message.type === 'pong') {
-            setLastHeartbeat(Date.now());
-            return; // Don't process heartbeats further
-          }
-          
-          if (message.type === 'messages' && message.data) {
-            // Update the current session with new messages
-            setCurrentSession(prev => {
-              if (!prev || prev.id !== sessionId) return prev;
-              
-              // Ensure all messages have valid IDs to prevent React key warnings
-              const processedMessages = message.data.map((m: Message) => {
-                if (!m.id) {
-                  // Generate a random ID for messages without one
+        {
+          onMessage: (message: SSEMessage) => {
+            console.log('Received SSE message:', message);
+            
+            if (message.type === SSEEventType.HEARTBEAT) {
+              setLastHeartbeat(Date.now());
+              return;
+            }
+            
+            if (message.type === SSEEventType.MESSAGES && message.data) {
+              setCurrentSession(prev => {
+                if (!prev || prev.id !== sessionId) return prev;
+                
+                const processedMessages = message.data.map((m: Message) => ({
+                  ...m,
+                  id: m.id || `generated-${Math.random().toString(36).substring(2, 11)}`
+                }));
+                
+                const existingMessageIds = new Set(prev.messages?.map((m: Message) => m.id) ?? []);
+                const newMessages = processedMessages.filter((m: Message) => !existingMessageIds.has(m.id));
+                
+                if (newMessages.length === 0) return prev;
+                
+                return {
+                  ...prev,
+                  messages: [...(prev.messages ?? []), ...newMessages].sort((a: Message, b: Message) => a.sequence - b.sequence)
+                };
+              });
+            } else if (message.type === SSEEventType.CONNECTION_ESTABLISHED) {
+              console.log('SSE connection established with server');
+            } else if (message.type === SSEEventType.ASSISTANT_CHUNK) {
+              // Handle streaming chunks from the assistant
+              setCurrentSession(prev => {
+                if (!prev || prev.id !== sessionId) return prev;
+                
+                const messages = prev.messages ?? [];
+                const lastMessage = messages[messages.length - 1];
+                
+                // If the last message is from the assistant and is incomplete, update it
+                if (lastMessage?.role === 'assistant' && !lastMessage.content.text.endsWith('\n')) {
+                  const updatedMessages = [...messages.slice(0, -1), {
+                    ...lastMessage,
+                    content: {
+                      ...lastMessage.content,
+                      text: lastMessage.content.text + message.data.text
+                    }
+                  }];
+                  
                   return {
-                    ...m,
-                    id: `generated-${Math.random().toString(36).substring(2, 11)}`
+                    ...prev,
+                    messages: updatedMessages
                   };
                 }
-                return m;
+                
+                // Otherwise, create a new message
+                return {
+                  ...prev,
+                  messages: [...messages, {
+                    id: `chunk-${Date.now()}`,
+                    role: 'assistant',
+                    content: { text: message.data.text },
+                    sequence: (lastMessage?.sequence ?? 0) + 1
+                  }]
+                };
               });
-              
-              // Merge new messages with existing ones, avoiding duplicates
-              const existingMessageIds = new Set(prev.messages?.map(m => m.id) ?? [])
-              const newMessages = processedMessages.filter((m: Message) => !existingMessageIds.has(m.id));
-              
-              if (newMessages.length === 0) return prev;
-              
-              return {
-                ...prev,
-                messages: [...(prev.messages ?? []), ...newMessages].sort((a, b) => a.sequence - b.sequence)
-              };
-            });
-          } else if (message.type === 'connection_established') {
-            console.log('WebSocket connection established with server');
-            // Request the latest messages
-            if (connection) {
-              requestLatestMessages(connection);
             }
-          }
-        },
-        (error) => {
-          console.error('WebSocket error:', error);
-          setError({
-            message: 'Error in real-time connection',
-            details: error.message || 'Unknown error'
-          });
-          
-          // Track reconnection attempts for monitoring connection stability
-          setReconnectionAttempts(prev => prev + 1);
-          
-          // If we've had too many reconnection attempts, show a more specific error
-          if (reconnectionAttempts > 3) {
+          },
+          onError: (error) => {
+            console.error('SSE error:', error);
             setError({
-              message: 'Unstable connection to research service',
-              details: `Connection has been lost ${reconnectionAttempts} times. There may be network issues.`
+              message: 'Error in real-time connection',
+              details: error.message || 'Unknown error'
             });
-          }
-        },
-        (connected) => {
-          // Handle connection state changes
-          console.log(`WebSocket connection state changed: ${connected ? 'connected' : 'disconnected'}`);
-          setIsConnected(connected);
-          
-          if (!connected) {
-            setWsConnection(null);
+          },
+          onConnectionChange: (connected) => {
+            console.log(`SSE connection state changed: ${connected ? 'connected' : 'disconnected'}`);
+            setIsConnected(connected);
+            
+            if (!connected) {
+              setSseConnection(null);
+            }
           }
         }
       );
       
-      setWsConnection(connection);
-      setLastHeartbeat(Date.now()); // Initialize heartbeat timestamp
+      setSseConnection(connection);
+      setLastHeartbeat(Date.now());
       
     } catch (error) {
-      console.error('Failed to connect to WebSocket:', error);
+      console.error('Failed to connect to SSE:', error);
       setError(handleApiError(error, 'Failed to establish real-time connection'));
-      setReconnectionAttempts(prev => prev + 1);
       setIsConnected(false);
     }
   };
 
-  const disconnectWebSocket = () => {
-    if (wsConnection) {
-      wsConnection.disconnect();
-      setWsConnection(null);
+  const disconnectStream = useCallback(() => {
+    if (sseConnection) {
+      sseConnection.disconnect();
+      setSseConnection(null);
       setIsConnected(false);
+      setLastHeartbeat(null);
     }
-  };
-  
-  // Auto-connect to WebSocket when current session changes
+  }, [sseConnection]);
+
+  // Monitor connection health
   useEffect(() => {
-    // Only connect if we have a session ID and we're not already connected or connecting
-    if (currentSession?.id && !wsConnection && !isConnecting) {
-      setIsConnecting(true); // Set connecting flag to prevent multiple connection attempts
-      connectToWebSocket(currentSession.id)
-        .finally(() => {
-          setIsConnecting(false); // Reset flag when connection attempt completes
+    if (!isConnected || !lastHeartbeat) return;
+
+    const healthCheck = setInterval(() => {
+      const now = Date.now();
+      if (now - lastHeartbeat > 30000) { // 30 seconds without heartbeat
+        setError({
+          message: 'Connection stale',
+          details: 'No heartbeat received from server'
         });
-    }
-    
-    // Cleanup on unmount
+        disconnectStream();
+      }
+    }, 5000); // Check every 5 seconds
+
+    return () => clearInterval(healthCheck);
+  }, [isConnected, lastHeartbeat, disconnectStream]);
+
+  // Clean up connection on unmount
+  useEffect(() => {
     return () => {
-      disconnectWebSocket();
+      disconnectStream();
     };
-  }, [currentSession?.id]); // Remove wsConnection from dependencies
+  }, [disconnectStream]);
 
   // Set up auth event listener
   useEffect(() => {
@@ -838,10 +850,10 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
         setCurrentSession(null);
         setTotalSessions(0);
         
-        // Close WebSocket connection if open
-        if (wsConnection) {
-          wsConnection.disconnect();
-          setWsConnection(null);
+        // Close SSE connection if open
+        if (sseConnection) {
+          sseConnection.disconnect();
+          setSseConnection(null);
           setIsConnected(false);
         }
       }
@@ -851,34 +863,51 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
     return () => {
       removeListener();
     };
-  }, [wsConnection]);
+  }, [sseConnection]);
 
   const clearCache = () => {
     cache.clear();
   }
 
+  const value = useMemo(() => ({
+    sessions,
+    currentSession,
+    isLoading,
+    loadingStates,
+    error,
+    createSession,
+    sendMessage,
+    getSession,
+    getSessions,
+    updateSession,
+    deleteSession: deleteResearchSession,
+    clearError,
+    totalSessions,
+    isConnected,
+    connectToStream,
+    disconnectStream,
+    clearCache: cache.clear
+  }), [
+    sessions,
+    currentSession,
+    isLoading,
+    loadingStates,
+    error,
+    createSession,
+    sendMessage,
+    getSession,
+    getSessions,
+    updateSession,
+    deleteResearchSession,
+    clearError,
+    totalSessions,
+    isConnected,
+    connectToStream,
+    disconnectStream
+  ]);
+
   return (
-    <ResearchContext.Provider
-      value={{
-        sessions,
-        currentSession,
-        isLoading,
-        loadingStates,
-        error,
-        createSession,
-        sendMessage,
-        getSession,
-        getSessions,
-        updateSession,
-        deleteSession: deleteResearchSession,
-        clearError,
-        totalSessions,
-        isConnected,
-        connectToWebSocket,
-        disconnectWebSocket,
-        clearCache
-      }}
-    >
+    <ResearchContext.Provider value={value}>
       {children}
     </ResearchContext.Provider>
   )

@@ -33,12 +33,30 @@ export {
   forwardMessage
 } from './research-api-messages';
 
-// Re-export WebSocket-related functions
-export {
-  connectToMessageUpdates,
-  requestLatestMessages,
-  sendTypingNotification
-} from './research-api-websocket';
+// Re-export SSE-related functions
+export { connectToSSE } from './research-api-sse';
+
+// Re-export WebSocket-related functions (deprecated)
+/** @deprecated Use SSE-based connectToSSE instead */
+export const connectToMessageUpdates = (...args: any[]) => {
+  console.warn('connectToMessageUpdates is deprecated. Please use connectToSSE instead.');
+  const { connectToMessageUpdates: wsConnect } = require('./research-api-websocket');
+  return wsConnect(...args);
+};
+
+/** @deprecated WebSocket functionality is being removed */
+export const requestLatestMessages = (...args: any[]) => {
+  console.warn('requestLatestMessages is deprecated. Messages are now automatically streamed via SSE.');
+  const { requestLatestMessages: wsRequest } = require('./research-api-websocket');
+  return wsRequest(...args);
+};
+
+/** @deprecated WebSocket functionality is being removed */
+export const sendTypingNotification = (...args: any[]) => {
+  console.warn('sendTypingNotification is deprecated and will be removed.');
+  const { sendTypingNotification: wsNotify } = require('./research-api-websocket');
+  return wsNotify(...args);
+};
 
 // Export cache interface
 import { researchCache } from './research-cache';

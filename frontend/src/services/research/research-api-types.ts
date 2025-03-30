@@ -85,7 +85,36 @@ export interface ResearchSession {
   enterprise_id?: string;
 }
 
-// WebSocket types
+// SSE types
+export enum SSEEventType {
+  CONNECTION_ESTABLISHED = 'connection_established',
+  MESSAGES = 'messages',
+  USER_MESSAGE = 'user_message',
+  ASSISTANT_CHUNK = 'assistant_chunk',
+  ASSISTANT_MESSAGE_COMPLETE = 'assistant_message_complete',
+  HEARTBEAT = 'heartbeat',
+  ERROR = 'error'
+}
+
+export interface SSEMessage {
+  type: SSEEventType;
+  data: any;
+}
+
+export interface SSEConnection {
+  disconnect: () => void;
+  readonly isConnected: boolean;
+}
+
+export interface SSEOptions {
+  onMessage: (message: SSEMessage) => void;
+  onError: (error: ApiError) => void;
+  onConnectionChange: (connected: boolean) => void;
+  retryAttempts?: number;
+  retryDelay?: number;
+}
+
+// WebSocket types (to be removed after migration)
 export interface WebSocketMessage {
   type: string;
   data?: any;

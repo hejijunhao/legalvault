@@ -21,7 +21,7 @@ export function SearchActions({ sessionId }: SearchActionsProps) {
     currentSession?.status === QueryStatus.NEEDS_CLARIFICATION
 
   const handleRetry = async () => {
-    if (!currentSession) return
+    if (!currentSession || !currentSession.messages) return
     
     try {
       // Get the last user message to retry
@@ -42,7 +42,7 @@ export function SearchActions({ sessionId }: SearchActionsProps) {
 
   // Get citations from the current session if available
   const citations = currentSession?.messages
-    .filter(m => m.role === "assistant" && Array.isArray(m.content.citations) && m.content.citations.length > 0)
+    ?.filter(m => m.role === "assistant" && Array.isArray(m.content.citations) && m.content.citations.length > 0)
     .flatMap(m => m.content.citations || [])
     .map((citation, index) => ({
       id: String(index),
