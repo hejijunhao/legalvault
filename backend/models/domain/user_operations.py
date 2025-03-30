@@ -1,7 +1,7 @@
 # models/domain/user_operations.py
 
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from uuid import UUID
 from sqlalchemy import select, delete, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -306,35 +306,44 @@ class UserOperations:
             traceback.print_exc()
             return None
 
-    async def get_user_by_id(self, user_id: UUID) -> Optional[Dict[str, Any]]:
-        """Get a user by ID"""
-        query = text("""
-            SELECT id, auth_user_id, first_name, last_name, name, role, email, virtual_paralegal_id, enterprise_id, created_at, updated_at
-            FROM public.users WHERE id = :user_id
-        """).execution_options(
-            no_parameters=True,  # Required for pgBouncer compatibility
-            use_server_side_cursors=False  # Disable server-side cursors
-        )
-        result = await self.db.execute(query, {"user_id": user_id})
-        user_data = result.fetchone()
-
-        if not user_data:
-            return None
+    async def get_user_by_id(self, user_id: UUID, execution_options: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
+        """Get user by ID."""
+        try:
+            # Use provided execution options or default pgBouncer-compatible options
+            options = execution_options or {
+                "no_parameters": True,
+                "use_server_side_cursors": False
+            }
             
-        # Return as a dictionary for easier access
-        return {
-            "id": user_data[0],
-            "auth_user_id": user_data[1],
-            "first_name": user_data[2],
-            "last_name": user_data[3],
-            "name": user_data[4],
-            "role": user_data[5],
-            "email": user_data[6],
-            "virtual_paralegal_id": user_data[7],
-            "enterprise_id": user_data[8],
-            "created_at": user_data[9],
-            "updated_at": user_data[10]
-        }
+            query = text("""
+                SELECT id, auth_user_id, first_name, last_name, name, role, email, virtual_paralegal_id, enterprise_id, created_at, updated_at
+                FROM public.users WHERE id = :user_id
+            """)
+            
+            result = await self.db.execute(query, {"user_id": user_id}, execution_options=options)
+            user_data = result.fetchone()
+
+            if not user_data:
+                print(f"User not found with ID: {user_id}")
+                return None
+                
+            # Return as a dictionary for easier access
+            return {
+                "id": user_data[0],
+                "auth_user_id": user_data[1],
+                "first_name": user_data[2],
+                "last_name": user_data[3],
+                "name": user_data[4],
+                "role": user_data[5],
+                "email": user_data[6],
+                "virtual_paralegal_id": user_data[7],
+                "enterprise_id": user_data[8],
+                "created_at": user_data[9],
+                "updated_at": user_data[10]
+            }
+        except Exception as e:
+            print(f"Error getting user by ID: {str(e)}")
+            return None
 
     async def get_user_by_email(self, email: str) -> Optional[Dict[str, Any]]:
         """Get a user by email (via auth user)"""
@@ -379,6 +388,57 @@ class UserOperations:
             print(f"Error getting user by email: {str(e)}")
             return None
 
+    async def get_user_by_auth_id(self, auth_user_id: UUID, execution_options: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
+        """Get user by Supabase auth_user_id.
+        
+        Args:
+            auth_user_id: The Supabase auth_user_id (from token sub claim)
+            execution_options: Optional execution options for pgBouncer compatibility
+            
+        Returns:
+            User data as a dictionary or None if not found
+        """
+        try:
+            # Set default execution options if none provided
+            if execution_options is None:
+                execution_options = {"no_parameters": True, "use_server_side_cursors": False}
+                
+            query = text("""
+                SELECT id, auth_user_id, first_name, last_name, name, role, email, 
+                       virtual_paralegal_id, enterprise_id, created_at, updated_at
+                FROM public.users WHERE auth_user_id = :auth_user_id
+            """)
+            
+            result = await self.db.execute(
+                query, 
+                {"auth_user_id": str(auth_user_id)},
+                execution_options=execution_options
+            )
+            user_data = result.fetchone()
+            
+            if not user_data:
+                logger.warning(f"User not found with auth_user_id: {auth_user_id}")
+                return None
+                
+            # Return as a dictionary for easier access
+            return {
+                "id": user_data[0],
+                "auth_user_id": user_data[1],
+                "first_name": user_data[2],
+                "last_name": user_data[3],
+                "name": user_data[4],
+                "role": user_data[5],
+                "email": user_data[6],
+                "virtual_paralegal_id": user_data[7],
+                "enterprise_id": user_data[8],
+                "created_at": user_data[9],
+                "updated_at": user_data[10]
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting user by auth_user_id: {str(e)}", exc_info=True)
+            return None
+
     async def get_user_profile(self, user_id: UUID) -> Optional[UserProfile]:
         """Get user profile information including email from public.users table.
         
@@ -388,18 +448,23 @@ class UserOperations:
         Returns:
             UserProfile object with complete user information or None if user not found
         """
-        # Use direct SQL to get the user to avoid relationship loading issues
-        query = text("""
-            SELECT id, auth_user_id, first_name, last_name, name, role, email, virtual_paralegal_id, enterprise_id, created_at, updated_at
-            FROM public.users WHERE id = :user_id
-        """).execution_options(
-            no_parameters=True,  # Required for pgBouncer compatibility
-            use_server_side_cursors=False  # Disable server-side cursors
-        )
-        
         try:
-            logger.debug(f"Retrieving user profile for user_id: {user_id}")
-            result = await self.db.execute(query, {"user_id": user_id})
+            # Use text() query with pgBouncer compatibility options
+            query = text("""
+                SELECT id, auth_user_id, first_name, last_name, name, role, email, 
+                       virtual_paralegal_id, enterprise_id, created_at, updated_at
+                FROM public.users WHERE id = :user_id
+            """)
+            
+            # Execute with pgBouncer compatibility options
+            result = await self.db.execute(
+                query, 
+                {"user_id": user_id},
+                execution_options={
+                    "no_parameters": True,
+                    "use_server_side_cursors": False
+                }
+            )
             user_data = result.fetchone()
             
             if not user_data:
@@ -417,11 +482,10 @@ class UserOperations:
                 auth_user = supabase.auth.admin.get_user_by_id(auth_user_id)
                 
                 # Access metadata from the response
-                if hasattr(auth_user, 'user'):
-                    user_metadata = auth_user.user
-                    last_login = user_metadata.get('last_sign_in_at')
-                elif isinstance(auth_user, dict):
+                if auth_user and isinstance(auth_user, dict):
                     last_login = auth_user.get('last_sign_in_at')
+                elif hasattr(auth_user, 'user') and hasattr(auth_user.user, 'last_sign_in_at'):
+                    last_login = auth_user.user.last_sign_in_at
                 
                 if not last_login:
                     logger.warning(f"No last_sign_in_at found for user {auth_user_id}")
@@ -430,7 +494,7 @@ class UserOperations:
                 last_login = None
             
             # Use email from public.users table
-            email = user_data[6]  # email is now at index 6
+            email = user_data[6]  # email is at index 6
             
             # If email is not set in the database, use a fallback
             if not email:
@@ -449,9 +513,45 @@ class UserOperations:
                 created_at=user_data[9],
                 last_login=last_login
             )
+            
         except Exception as e:
             logger.error(f"Error getting user profile: {str(e)}", exc_info=True)
             return None
+
+    async def get_user_permissions(self, user_id: UUID) -> List[str]:
+        """Get user permissions based on role.
+        
+        Args:
+            user_id: The Supabase auth_user_id (from token sub claim)
+            
+        Returns:
+            List of permission strings
+        """
+        try:
+            # Get user with pgBouncer compatibility using auth_user_id
+            user = await self.get_user_by_auth_id(
+                auth_user_id=user_id,
+                execution_options={"no_parameters": True, "use_server_side_cursors": False}
+            )
+            
+            if not user:
+                return []
+            
+            # Base permissions that all users have
+            permissions = ["user"]
+            
+            # Add role-based permissions
+            if user["role"] == "admin":
+                permissions.extend(["admin", "manage_users", "manage_enterprises"])
+            elif user["role"] == "enterprise_admin":
+                permissions.extend(["enterprise_admin", "manage_enterprise_users"])
+            
+            logger.info(f"Retrieved permissions for user {user_id}: {permissions}")
+            return permissions
+            
+        except Exception as e:
+            logger.error(f"Error getting user permissions: {str(e)}", exc_info=True)
+            return []
 
     async def decode_token(self, token: str) -> Optional[TokenData]:
         """Decode and validate a JWT token"""

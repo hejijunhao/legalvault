@@ -685,7 +685,58 @@ class ResearchOperations:
                 details={"search_id": str(search_id)},
                 original_error=e
             )
-    
+
+    async def check_user_access(
+        self,
+        search_id: UUID,
+        user_id: UUID,
+        user_permissions: List[str],
+        execution_options: Optional[Dict[str, Any]] = None
+    ) -> bool:
+        """
+        Check if a user has access to a search.
+        Access is granted if any of these conditions are met:
+        1. User owns the search
+        2. User has admin permissions
+        3. User is in the same enterprise as the search (if enterprise_id is set)
+        
+        Args:
+            search_id: UUID of the search to check
+            user_id: UUID of the user requesting access
+            user_permissions: List of permission strings for the user
+            execution_options: Optional execution options for pgBouncer compatibility
+            
+        Returns:
+            bool: True if user has access, False otherwise
+            
+        Raises:
+            DatabaseError: If database operation fails
+        """
+        try:
+            # Get the search
+            search = await self.get_search_by_id(
+                search_id,
+                include_messages=False,  # No need to load messages for permission check
+                execution_options=execution_options or self.execution_options
+            )
+            
+            if not search:
+                return False
+                
+            # Check conditions for access
+            has_access = any([
+                str(search.user_id) == str(user_id),  # User owns the search
+                "admin" in user_permissions,  # User has admin permissions
+                # User is in the same enterprise as the search (if enterprise_id is set)
+                search.enterprise_id and search.enterprise_id == getattr(user_id, 'enterprise_id', None)
+            ])
+            
+            return has_access
+            
+        except Exception as e:
+            logger.error(f"Error checking user access: {str(e)}")
+            return False
+
     def _tuple_to_search_dto(self, search_tuple: tuple) -> SearchDTO:
         """
         Convert a database tuple to a SearchDTO.

@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime
 
 from core.database import get_db
-from core.auth import get_current_user, get_user_permissions
+from core.auth import get_current_user
 from models.domain.research.search_operations import ResearchOperations
 from models.domain.research.search_message_operations import SearchMessageOperations
 from models.domain.user_operations import UserOperations
@@ -33,6 +33,16 @@ router = APIRouter(
     prefix="/research/messages",
     tags=["research"]
 )
+
+async def get_user_permissions(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+) -> List[str]:
+    """
+    Dependency to get user permissions.
+    """
+    user_ops = UserOperations(db)
+    return await user_ops.get_user_permissions(current_user.id)
 
 async def search_message_dto_to_response(
     message_dto: SearchMessageDTO,
@@ -85,6 +95,7 @@ async def search_message_list_dto_to_response(message_list_dto: Union[SearchMess
 async def get_message(
     message_id: UUID,
     current_user: User = Depends(get_current_user),
+    user_permissions: List[str] = Depends(get_user_permissions),
     db: AsyncSession = Depends(get_db)
 ):
     """Get a specific message by ID."""
@@ -99,12 +110,14 @@ async def get_message(
     
     # Verify user has access to the search this message belongs to
     search_ops = ResearchOperations(db)
-    search = await search_ops.get_search_by_id(
-        message.search_id,
+    has_access = await search_ops.check_user_access(
+        search_id=message.search_id,
+        user_id=current_user.id,
+        user_permissions=user_permissions,
         execution_options={"no_parameters": True, "use_server_side_cursors": False}
     )
     
-    if not search or search.user_id != current_user.id:
+    if not has_access:
         raise HTTPException(status_code=403, detail="Access denied")
     
     return await search_message_dto_to_response(message, db)
@@ -115,6 +128,7 @@ async def list_messages(
     limit: int = Query(100, ge=1, le=500, description="Maximum number of messages"),
     offset: int = Query(0, ge=0, description="Pagination offset"),
     current_user: User = Depends(get_current_user),
+    user_permissions: List[str] = Depends(get_user_permissions),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -124,12 +138,14 @@ async def list_messages(
     """
     # Verify user has access to the search
     search_ops = ResearchOperations(db)
-    search = await search_ops.get_search_by_id(
-        search_id,
+    has_access = await search_ops.check_user_access(
+        search_id=search_id,
+        user_id=current_user.id,
+        user_permissions=user_permissions,
         execution_options={"no_parameters": True, "use_server_side_cursors": False}
     )
     
-    if not search or search.user_id != current_user.id:
+    if not has_access:
         raise HTTPException(status_code=403, detail="Access denied")
     
     # Get messages with pagination
@@ -148,17 +164,20 @@ async def create_message(
     search_id: UUID,
     message: SearchMessageCreate,
     current_user: User = Depends(get_current_user),
+    user_permissions: List[str] = Depends(get_user_permissions),
     db: AsyncSession = Depends(get_db)
 ):
     """Create a new message in a search."""
     # Verify user has access to the search
     search_ops = ResearchOperations(db)
-    search = await search_ops.get_search_by_id(
-        search_id,
+    has_access = await search_ops.check_user_access(
+        search_id=search_id,
+        user_id=current_user.id,
+        user_permissions=user_permissions,
         execution_options={"no_parameters": True, "use_server_side_cursors": False}
     )
     
-    if not search or search.user_id != current_user.id:
+    if not has_access:
         raise HTTPException(status_code=403, detail="Access denied")
     
     # Create message
@@ -186,6 +205,7 @@ async def update_message(
     message_id: UUID,
     data: SearchMessageUpdate,
     current_user: User = Depends(get_current_user),
+    user_permissions: List[str] = Depends(get_user_permissions),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -205,12 +225,14 @@ async def update_message(
     
     # Verify user has access to the search this message belongs to
     search_ops = ResearchOperations(db)
-    search = await search_ops.get_search_by_id(
-        message.search_id,
+    has_access = await search_ops.check_user_access(
+        search_id=message.search_id,
+        user_id=current_user.id,
+        user_permissions=user_permissions,
         execution_options={"no_parameters": True, "use_server_side_cursors": False}
     )
     
-    if not search or search.user_id != current_user.id:
+    if not has_access:
         raise HTTPException(status_code=403, detail="Access denied")
     
     # Only allow updating user messages, not assistant responses
@@ -242,6 +264,7 @@ async def update_message(
 async def delete_message(
     message_id: UUID,
     current_user: User = Depends(get_current_user),
+    user_permissions: List[str] = Depends(get_user_permissions),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -258,12 +281,14 @@ async def delete_message(
     
     # Verify user has access to the search this message belongs to
     search_ops = ResearchOperations(db)
-    search = await search_ops.get_search_by_id(
-        message.search_id,
+    has_access = await search_ops.check_user_access(
+        search_id=message.search_id,
+        user_id=current_user.id,
+        user_permissions=user_permissions,
         execution_options={"no_parameters": True, "use_server_side_cursors": False}
     )
     
-    if not search or search.user_id != current_user.id:
+    if not has_access:
         raise HTTPException(status_code=403, detail="Access denied")
     
     # Delete the message
@@ -315,7 +340,15 @@ async def websocket_endpoint(
                 await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                 return
             user_id = token_data.user_id
-            print(f"WebSocket authenticated for user {user_id}")
+            
+            # Get user permissions
+            try:
+                user_permissions = await user_ops.get_user_permissions(user_id)
+                print(f"WebSocket authenticated for user {user_id} with permissions {user_permissions}")
+            except Exception as e:
+                print(f"Error getting user permissions: {str(e)}")
+                user_permissions = []
+            
         except Exception as e:
             print(f"WebSocket authentication error: {str(e)}")
             await websocket.send_json({
@@ -328,24 +361,15 @@ async def websocket_endpoint(
         # Verify user has access to the search
         search_ops = ResearchOperations(db)
         try:
-            # Add execution_options for pgBouncer compatibility
-            search = await search_ops.get_search_by_id(
-                search_id,
+            # Check user access using the check_user_access method
+            has_access = await search_ops.check_user_access(
+                search_id=search_id,
+                user_id=user_id,
+                user_permissions=user_permissions,
                 execution_options={"no_parameters": True, "use_server_side_cursors": False}
             )
             
-            # Check if search is an error dictionary
-            if isinstance(search, dict) and "error" in search:
-                print(f"WebSocket error: {search['error']}")
-                await websocket.send_json({
-                    "type": "error",
-                    "message": f"Search error: {search['error']}"
-                })
-                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-                return
-            
-            # Now we know search is a SearchDTO object, check user access
-            if not search or search.user_id != user_id:
+            if not has_access:
                 print(f"WebSocket access denied: User {user_id} does not have access to search {search_id}")
                 await websocket.send_json({
                     "type": "error",
@@ -431,7 +455,15 @@ async def websocket_endpoint(
                             )
                             
                             # Convert to dict for JSON serialization
-                            messages_data = [m.model_dump() for m in messages.items]
+                            messages_data = []
+                            for m in messages.items:
+                                message_dict = m.model_dump()
+                                # Convert UUIDs to strings for JSON serialization
+                                if 'id' in message_dict and isinstance(message_dict['id'], UUID):
+                                    message_dict['id'] = str(message_dict['id'])
+                                if 'search_id' in message_dict and isinstance(message_dict['search_id'], UUID):
+                                    message_dict['search_id'] = str(message_dict['search_id'])
+                                messages_data.append(message_dict)
                             
                             await websocket.send_json({
                                 "type": "messages",
@@ -467,7 +499,15 @@ async def websocket_endpoint(
                                         )
                                         
                                         # Convert to dict for JSON serialization
-                                        messages_data = [m.model_dump() for m in messages.items]
+                                        messages_data = []
+                                        for m in messages.items:
+                                            message_dict = m.model_dump()
+                                            # Convert UUIDs to strings for JSON serialization
+                                            if 'id' in message_dict and isinstance(message_dict['id'], UUID):
+                                                message_dict['id'] = str(message_dict['id'])
+                                            if 'search_id' in message_dict and isinstance(message_dict['search_id'], UUID):
+                                                message_dict['search_id'] = str(message_dict['search_id'])
+                                            messages_data.append(message_dict)
                                         
                                         await websocket.send_json({
                                             "type": "messages",

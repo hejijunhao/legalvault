@@ -86,6 +86,21 @@ class SearchMessageDTO(TupleConverterMixin, BaseModel):
     def get_structured_content(self) -> MessageContentDTO:
         """Get content as structured MessageContentDTO"""
         return MessageContentDTO.from_dict(self.content)
+        
+    def model_dump(self, **kwargs) -> Dict[str, Any]:
+        """Override model_dump to ensure UUIDs are converted to strings"""
+        data = super().model_dump(**kwargs)
+        # Convert UUIDs to strings for JSON serialization
+        if 'id' in data and isinstance(data['id'], UUID):
+            data['id'] = str(data['id'])
+        if 'search_id' in data and isinstance(data['search_id'], UUID):
+            data['search_id'] = str(data['search_id'])
+        # Convert datetime objects to ISO format strings
+        if 'created_at' in data and isinstance(data['created_at'], datetime):
+            data['created_at'] = data['created_at'].isoformat()
+        if 'updated_at' in data and isinstance(data['updated_at'], datetime):
+            data['updated_at'] = data['updated_at'].isoformat()
+        return data
 
     @classmethod
     def from_db(cls, db_message: Any) -> "SearchMessageDTO":
@@ -194,4 +209,3 @@ def format_message_for_workflow(message: SearchMessageDTO) -> Dict[str, Any]:
 def format_messages_for_workflow(messages: List[SearchMessageDTO]) -> List[Dict[str, Any]]:
     """Format a list of message DTOs for use in workflow layer"""
     return [format_message_for_workflow(msg) for msg in messages]
-
