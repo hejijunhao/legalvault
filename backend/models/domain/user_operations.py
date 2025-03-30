@@ -439,6 +439,47 @@ class UserOperations:
             logger.error(f"Error getting user by auth_user_id: {str(e)}", exc_info=True)
             return None
 
+    async def get_user_permissions(self, user_id: UUID, execution_options: Dict[str, Any] = None) -> List[str]:
+        """
+        Get user permissions based on role.
+        
+        Args:
+            user_id: The Supabase auth_user_id (from token sub claim)
+            execution_options: Optional SQLAlchemy execution options for pgBouncer compatibility
+            
+        Returns:
+            List of permission strings
+        """
+        try:
+            # Set default execution options if none provided
+            if execution_options is None:
+                execution_options = {"no_parameters": True, "use_server_side_cursors": False}
+            
+            # Get user with pgBouncer compatibility using auth_user_id
+            user = await self.get_user_by_auth_id(
+                auth_user_id=user_id,
+                execution_options=execution_options
+            )
+            
+            if not user:
+                return []
+            
+            # Base permissions that all users have
+            permissions = ["user"]
+            
+            # Add role-based permissions
+            if user["role"] == "admin":
+                permissions.extend(["admin", "manage_users", "manage_enterprises"])
+            elif user["role"] == "enterprise_admin":
+                permissions.extend(["enterprise_admin", "manage_enterprise_users"])
+            
+            logger.info(f"Retrieved permissions for user {user_id}: {permissions}")
+            return permissions
+            
+        except Exception as e:
+            logger.error(f"Error getting user permissions: {str(e)}", exc_info=True)
+            return []
+
     async def get_user_profile(self, user_id: UUID) -> Optional[UserProfile]:
         """Get user profile information including email from public.users table.
         
@@ -517,41 +558,6 @@ class UserOperations:
         except Exception as e:
             logger.error(f"Error getting user profile: {str(e)}", exc_info=True)
             return None
-
-    async def get_user_permissions(self, user_id: UUID) -> List[str]:
-        """Get user permissions based on role.
-        
-        Args:
-            user_id: The Supabase auth_user_id (from token sub claim)
-            
-        Returns:
-            List of permission strings
-        """
-        try:
-            # Get user with pgBouncer compatibility using auth_user_id
-            user = await self.get_user_by_auth_id(
-                auth_user_id=user_id,
-                execution_options={"no_parameters": True, "use_server_side_cursors": False}
-            )
-            
-            if not user:
-                return []
-            
-            # Base permissions that all users have
-            permissions = ["user"]
-            
-            # Add role-based permissions
-            if user["role"] == "admin":
-                permissions.extend(["admin", "manage_users", "manage_enterprises"])
-            elif user["role"] == "enterprise_admin":
-                permissions.extend(["enterprise_admin", "manage_enterprise_users"])
-            
-            logger.info(f"Retrieved permissions for user {user_id}: {permissions}")
-            return permissions
-            
-        except Exception as e:
-            logger.error(f"Error getting user permissions: {str(e)}", exc_info=True)
-            return []
 
     async def decode_token(self, token: str) -> Optional[TokenData]:
         """Decode and validate a JWT token"""

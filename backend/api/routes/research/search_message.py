@@ -327,6 +327,9 @@ async def websocket_endpoint(
         await websocket.accept()
         print(f"WebSocket connection accepted for search {search_id}")
         
+        # Define pgBouncer compatibility options
+        execution_options = {"no_parameters": True, "use_server_side_cursors": False}
+        
         # Authenticate user from token
         try:
             user_ops = UserOperations(db)
@@ -343,7 +346,10 @@ async def websocket_endpoint(
             
             # Get user permissions
             try:
-                user_permissions = await user_ops.get_user_permissions(user_id)
+                user_permissions = await user_ops.get_user_permissions(
+                    user_id, 
+                    execution_options=execution_options
+                )
                 print(f"WebSocket authenticated for user {user_id} with permissions {user_permissions}")
             except Exception as e:
                 print(f"Error getting user permissions: {str(e)}")
@@ -366,7 +372,7 @@ async def websocket_endpoint(
                 search_id=search_id,
                 user_id=user_id,
                 user_permissions=user_permissions,
-                execution_options={"no_parameters": True, "use_server_side_cursors": False}
+                execution_options=execution_options
             )
             
             if not has_access:
@@ -380,13 +386,57 @@ async def websocket_endpoint(
             
             print(f"WebSocket access granted: User {user_id} has access to search {search_id}")
         except Exception as e:
+            error_message = str(e).lower()
             print(f"WebSocket error verifying search access: {e}")
-            await websocket.send_json({
-                "type": "error",
-                "message": "Failed to verify search access"
-            })
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-            return
+            
+            # Handle pgBouncer prepared statement errors
+            if ("prepared statement" in error_message or 
+                "duplicatepreparedstatementerror" in error_message or 
+                "invalidsqlstatementnameerror" in error_message or
+                "protocolviolationerror" in error_message):
+                print(f"pgBouncer prepared statement error encountered during access check: {str(e)}")
+                try:
+                    # Try to create a fresh session and retry
+                    from sqlalchemy.ext.asyncio import AsyncSession
+                    from core.database import async_engine
+                    
+                    print("Creating fresh session to retry access check after pgBouncer error")
+                    async with AsyncSession(async_engine) as fresh_db:
+                        # Create a new instance with the fresh session
+                        fresh_ops = ResearchOperations(fresh_db)
+                        # Retry the operation with explicit execution options
+                        has_access = await fresh_ops.check_user_access(
+                            search_id=search_id,
+                            user_id=user_id,
+                            user_permissions=user_permissions,
+                            execution_options=execution_options
+                        )
+                        
+                        if not has_access:
+                            print(f"WebSocket access denied after retry: User {user_id} does not have access to search {search_id}")
+                            await websocket.send_json({
+                                "type": "error",
+                                "message": "Access denied: You do not have permission to access this search"
+                            })
+                            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                            return
+                        
+                        print(f"WebSocket access granted after retry: User {user_id} has access to search {search_id}")
+                except Exception as retry_error:
+                    print(f"Error in retry attempt for access check: {str(retry_error)}")
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": "Failed to verify search access. Please try again."
+                    })
+                    await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                    return
+            else:
+                await websocket.send_json({
+                    "type": "error",
+                    "message": "Failed to verify search access"
+                })
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                return
         
         # Send initial message
         await websocket.send_json({
@@ -426,6 +476,54 @@ async def websocket_endpoint(
         # Start the heartbeat task
         heartbeat_task = asyncio.create_task(send_heartbeat())
         
+        # Function to handle pgBouncer errors and retry operations
+        async def execute_with_retry(operation_func, *args, **kwargs):
+            try:
+                # Ensure execution_options is included
+                if 'execution_options' not in kwargs:
+                    kwargs['execution_options'] = execution_options
+                return await operation_func(*args, **kwargs)
+            except Exception as e:
+                error_message = str(e).lower()
+                print(f"Error in WebSocket operation: {str(e)}")
+                
+                # Handle pgBouncer prepared statement errors
+                if ("prepared statement" in error_message or 
+                    "duplicatepreparedstatementerror" in error_message or 
+                    "invalidsqlstatementnameerror" in error_message or
+                    "protocolviolationerror" in error_message):
+                    print(f"pgBouncer prepared statement error encountered: {str(e)}")
+                    try:
+                        # Try to create a fresh session and retry
+                        from sqlalchemy.ext.asyncio import AsyncSession
+                        from core.database import async_engine
+                        
+                        print("Creating fresh session to retry operation after pgBouncer error")
+                        async with AsyncSession(async_engine) as fresh_db:
+                            # Create a new instance with the fresh session
+                            if operation_func.__self__.__class__.__name__ == "SearchMessageOperations":
+                                fresh_ops = SearchMessageOperations(fresh_db)
+                            elif operation_func.__self__.__class__.__name__ == "ResearchOperations":
+                                fresh_ops = ResearchOperations(fresh_db)
+                            elif operation_func.__self__.__class__.__name__ == "UserOperations":
+                                fresh_ops = UserOperations(fresh_db)
+                            else:
+                                raise ValueError(f"Unknown operation class: {operation_func.__self__.__class__.__name__}")
+                            
+                            # Get the method with the same name from the fresh instance
+                            method_name = operation_func.__name__
+                            fresh_method = getattr(fresh_ops, method_name)
+                            
+                            # Retry the operation with explicit execution options
+                            if 'execution_options' not in kwargs:
+                                kwargs['execution_options'] = execution_options
+                            return await fresh_method(*args, **kwargs)
+                    except Exception as retry_error:
+                        print(f"Error in retry attempt: {str(retry_error)}")
+                        raise retry_error
+                else:
+                    raise e
+        
         try:
             while True:
                 # Wait for commands from the client with a timeout
@@ -446,12 +544,12 @@ async def websocket_endpoint(
                         # Fetch latest messages
                         message_ops = SearchMessageOperations(db)
                         try:
-                            # Add execution_options for pgBouncer compatibility
-                            messages = await message_ops.list_messages_by_search(
+                            # Use the retry helper function
+                            messages = await execute_with_retry(
+                                message_ops.list_messages_by_search,
                                 search_id=search_id,
                                 limit=data.get("limit", 10),
-                                offset=data.get("offset", 0),
-                                execution_options={"no_parameters": True, "use_server_side_cursors": False}
+                                offset=data.get("offset", 0)
                             )
                             
                             # Convert to dict for JSON serialization
@@ -473,61 +571,11 @@ async def websocket_endpoint(
                                 "limit": messages.limit
                             })
                         except Exception as e:
-                            error_message = str(e).lower()
                             print(f"Error fetching latest messages: {e}")
-                            
-                            # Handle pgBouncer prepared statement errors
-                            if ("prepared statement" in error_message or 
-                                "duplicatepreparedstatementerror" in error_message or 
-                                "invalidsqlstatementnameerror" in error_message):
-                                print(f"pgBouncer prepared statement error encountered: {str(e)}")
-                                try:
-                                    # Try to create a fresh session and retry
-                                    from sqlalchemy.ext.asyncio import AsyncSession
-                                    from core.database import async_engine
-                                    
-                                    print("Creating fresh session to retry operation after pgBouncer error")
-                                    async with AsyncSession(async_engine) as fresh_db:
-                                        # Create a new instance with the fresh session
-                                        fresh_ops = SearchMessageOperations(fresh_db)
-                                        # Retry the operation with explicit execution options
-                                        messages = await fresh_ops.list_messages_by_search(
-                                            search_id=search_id,
-                                            limit=data.get("limit", 10),
-                                            offset=data.get("offset", 0),
-                                            execution_options={"no_parameters": True, "use_server_side_cursors": False}
-                                        )
-                                        
-                                        # Convert to dict for JSON serialization
-                                        messages_data = []
-                                        for m in messages.items:
-                                            message_dict = m.model_dump()
-                                            # Convert UUIDs to strings for JSON serialization
-                                            if 'id' in message_dict and isinstance(message_dict['id'], UUID):
-                                                message_dict['id'] = str(message_dict['id'])
-                                            if 'search_id' in message_dict and isinstance(message_dict['search_id'], UUID):
-                                                message_dict['search_id'] = str(message_dict['search_id'])
-                                            messages_data.append(message_dict)
-                                        
-                                        await websocket.send_json({
-                                            "type": "messages",
-                                            "data": messages_data,
-                                            "total": messages.total,
-                                            "offset": messages.offset,
-                                            "limit": messages.limit
-                                        })
-                                        continue  # Skip the error response
-                                except Exception as retry_error:
-                                    print(f"Error in retry attempt after pgBouncer error: {str(retry_error)}")
-                                    await websocket.send_json({
-                                        "type": "error",
-                                        "message": "Database connection error. Please try again."
-                                    })
-                            else:
-                                await websocket.send_json({
-                                    "type": "error",
-                                    "message": "Failed to fetch latest messages"
-                                })
+                            await websocket.send_json({
+                                "type": "error",
+                                "message": "Failed to fetch latest messages"
+                            })
                     
                     elif command == "typing":
                         # Client is typing - could broadcast to other connected clients
