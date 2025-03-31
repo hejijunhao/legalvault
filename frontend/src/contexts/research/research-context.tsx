@@ -36,37 +36,35 @@ export enum ConnectionStatus {
 }
 
 export interface Citation {
-  text: string;
   url: string;
-  metadata?: Record<string, any>;
+  title: string;
+  snippet: string;
+  metadata?: Record<string, any>;  // Keep metadata for backward compatibility
+}
+
+export interface MessageContent {
+  text: string;
+  citations?: Citation[];
 }
 
 export interface Message {
   id: string;
   role: "user" | "assistant" | "system";
-  content: { text: string; citations?: Citation[] };
+  content: MessageContent;
   sequence: number;
+  created_at: string;
   status?: QueryStatus;
-}
-
-export interface SearchParams {
-  temperature?: number;
-  max_tokens?: number;
-  top_p?: number;
-  top_k?: number;
-  jurisdiction?: string;
-  query_type?: QueryType;
 }
 
 export interface ResearchSession {
   id: string;
-  title: string;
+  title?: string;  // Made optional to match API
   query: string;
   description?: string;
   is_featured: boolean;
-  tags?: string[];
-  search_params?: SearchParams;
-  messages?: Message[];
+  tags: string[];  // Changed from tags?: string[]
+  search_params?: any;
+  messages: Message[];  // Changed from messages?: Message[]
   created_at: string;
   updated_at: string;
   status: QueryStatus;
@@ -90,11 +88,11 @@ export interface ConnectionMetrics {
   lastLatency: number;
 }
 
-export type ErrorType = {
+export interface ErrorType {
   message: string;
   code?: string;
   details?: string;
-} | null;
+}
 
 export interface LoadingStates {
   fetchingSessions: boolean;
@@ -111,7 +109,7 @@ export interface ResearchContextType {
   isLoading: boolean;
   loadingStates: LoadingStates;
   error: ErrorType | null;
-  createSession: (query: string, searchParams?: SearchParams) => Promise<string>;
+  createSession: (query: string, searchParams?: any) => Promise<string>;
   sendMessage: (sessionId: string, content: string) => Promise<void>;
   getSession: (sessionId: string) => Promise<ResearchSession | null>;
   getSessions: (options?: {
@@ -139,7 +137,7 @@ export const ResearchContext = createContext<ResearchContextType | undefined>(un
 export function useResearch() {
   const context = useContext(ResearchContext);
   if (context === undefined) {
-    throw new Error("useResearch must be used within a ResearchProvider");
+    throw new Error('useResearch must be used within a ResearchProvider');
   }
   return context;
 }

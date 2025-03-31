@@ -43,20 +43,22 @@ export interface MessageListResponse {
 
 // Domain types
 export interface Citation {
-  text: string;
   url: string;
-  metadata?: Record<string, any>;
+  title: string;
+  snippet: string;
+}
+
+export interface MessageContent {
+  text: string;
+  citations?: Citation[];
 }
 
 export interface Message {
   id: string;
   role: "user" | "assistant" | "system";
-  content: { text: string; citations?: Citation[] };
-  search_id?: string;
+  content: MessageContent;
   sequence: number;
-  status?: QueryStatus;
-  created_at?: string;
-  updated_at?: string;
+  created_at: string;
 }
 
 export interface SearchParams {
@@ -69,18 +71,18 @@ export interface SearchParams {
 
 export interface ResearchSession {
   id: string;
-  title: string;
-  query: string;
+  query: string;  // Primary search query
+  title?: string; // Optional display title
   description?: string;
-  is_featured: boolean;
-  tags?: string[];
-  search_params?: SearchParams;
-  messages?: Message[];
+  messages: Message[];
   created_at: string;
   updated_at: string;
-  status: QueryStatus;
+  is_featured: boolean;
+  tags: string[];
+  search_params?: SearchParams;
   category?: QueryCategory;
   query_type?: QueryType;
+  status: QueryStatus;
   user_id: string;
   enterprise_id?: string;
 }
@@ -101,24 +103,25 @@ export interface SSEMessage {
   data: any;
 }
 
-export interface SSEConnection {
-  disconnect: () => void;
-  readonly isConnected: boolean;
-}
-
 export interface SSEOptions {
-  onMessage: (message: SSEMessage) => void;
-  onError: (error: ApiError) => void;
-  onConnectionChange: (connected: boolean) => void;
-  retryAttempts?: number;
-  retryDelay?: number;
+  onMessage: (data: Message[]) => void;
+  onError: (error: Error) => void;
+  onConnectionChange: (status: ConnectionStatus) => void;
 }
 
-// Error types
-export interface ApiError extends Error {
-  status?: number;
-  statusText?: string;
-  code?: string;
-  details?: string;
-  originalError?: any;
+export interface SSEConnection {
+  close: () => void;
+  isConnected: () => boolean;
 }
+
+export enum ConnectionStatus {
+  CONNECTED = 'connected',
+  DISCONNECTED = 'disconnected',
+  CONNECTING = 'connecting',
+  ERROR = 'error'
+}
+
+export type ApiError = {
+  message: string;
+  code?: string;
+};

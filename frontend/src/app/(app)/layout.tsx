@@ -5,7 +5,7 @@ import { Inter } from "next/font/google"
 import "../globals.css"
 import { MainHeader } from "@/components/ui/main-header"
 import { ProtectedRoute } from "@/components/auth/protected-route"
-import { ResearchProvider } from "@/contexts/research/research-context"
+import { ResearchProvider } from "@/contexts/research/research-provider"
 
 const inter = Inter({ subsets: ["latin"] })
 

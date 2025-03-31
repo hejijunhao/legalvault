@@ -2,7 +2,7 @@
 
 "use client"
 
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import authManager from '@/lib/auth-manager';
 import { 
@@ -10,7 +10,6 @@ import {
   ResearchSession, 
   ResearchContextType, 
   ResearchProviderProps,
-  SearchParams,
   ErrorType,
   LoadingStates
 } from './research-context';
@@ -32,8 +31,7 @@ export function ResearchProvider({ children }: { children: React.ReactNode }) {
     deletingSession: false
   });
   const [error, setError] = useState<ErrorType | null>(null);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [authChecked, setAuthChecked] = useState(false);
+  const initialFetchRef = useRef(false);
 
   const { isAuthenticated: authContextIsAuthenticated, isLoading: authLoading } = useAuth();
   const api = useResearchApi(setError, setSessions, setCurrentSession, setLoadingStates, setIsLoading, setTotalSessions);
@@ -51,42 +49,17 @@ export function ResearchProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        setIsAuthenticated(!!session);
-      } catch (error) {
-        console.error('Error checking auth status:', error);
-        setIsAuthenticated(false);
-      } finally {
-        setAuthChecked(true);
-      }
-    };
-
-    checkAuth();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setIsAuthenticated(!!session);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
   const getSessions = useCallback(async (options?: Parameters<ResearchContextType['getSessions']>[0]) => {
-    if (!options?.skipAuthCheck && !isAuthenticated) {
-      console.error('Authentication required for getSessions');
-      setError({ message: 'Authentication required', details: 'Please log in to view research sessions', code: 'AUTH_REQUIRED' });
-      return;
-    }
     await api.getSessions(options);
-  }, [api, isAuthenticated]);
+  }, [api]);
 
   useEffect(() => {
-    if (authChecked && isAuthenticated && !authLoading && authContextIsAuthenticated) {
+    // Only fetch if authenticated and not already fetched
+    if (authContextIsAuthenticated && !initialFetchRef.current) {
+      initialFetchRef.current = true;
       getSessions();
     }
-  }, [authChecked, isAuthenticated, authLoading, authContextIsAuthenticated, getSessions]);
+  }, [authContextIsAuthenticated, getSessions]);
 
   const getSession = useCallback(async (sessionId: string) => {
     if (loadingStates.fetchingSession && currentSession?.id === sessionId) {
@@ -96,7 +69,7 @@ export function ResearchProvider({ children }: { children: React.ReactNode }) {
     return api.getSession(sessionId, updateSessionInList);
   }, [api, loadingStates.fetchingSession, currentSession, updateSessionInList]);
 
-  const createSession = useCallback(async (query: string, searchParams?: SearchParams) => {
+  const createSession = useCallback(async (query: string, searchParams?: any) => {
     return api.createSession(query, searchParams, updateSessionInList);
   }, [api, updateSessionInList]);
 
