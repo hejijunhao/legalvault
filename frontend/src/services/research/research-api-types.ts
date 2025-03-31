@@ -114,22 +114,6 @@ export interface SSEOptions {
   retryDelay?: number;
 }
 
-// WebSocket types (to be removed after migration)
-export interface WebSocketMessage {
-  type: string;
-  data?: any;
-  message?: string;
-  search_id?: string;
-  status?: string;
-  subscribed_to?: string[];
-}
-
-export interface WebSocketConnection {
-  disconnect: () => void;
-  send: (data: any) => void;
-  isConnected: boolean;
-}
-
 // Error types
 export interface ApiError extends Error {
   status?: number;
