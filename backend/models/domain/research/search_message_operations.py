@@ -1,19 +1,17 @@
 # models/domain/research/search_message_operations.py
 
-from typing import List, Dict, Any, Optional, Union
+from typing import List, Dict, Any, Optional
 from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, delete, update, func, text
+from sqlalchemy import select, func
+from datetime import datetime
 import logging
 
 from models.database.research.public_search_messages import PublicSearchMessage
-from models.domain.research.search_message import ResearchMessage
 from models.enums.research_enums import QueryStatus
-from models.domain.research.research_errors import ValidationError, DatabaseError
-
-# Import DTOs instead of schema models
+from models.domain.research.research_errors import DatabaseError
 from models.dtos.research.search_message_dto import (
-    SearchMessageDTO, SearchMessageListDTO, SearchMessageCreateDTO, SearchMessageUpdateDTO,
+    SearchMessageDTO, SearchMessageListDTO, SearchMessageCreateDTO,
     to_search_message_dto, to_search_message_list_dto
 )
 
@@ -24,491 +22,104 @@ class SearchMessageOperations:
 
     def __init__(self, db_session: AsyncSession):
         self.db = db_session
-        # Set pgBouncer compatibility options for all operations
         self.execution_options = {
             "no_parameters": True,
             "use_server_side_cursors": False
         }
-    
-    async def _execute_query(self, query, execution_options: Optional[Dict[str, Any]] = None):
+
+    async def _execute_query(self, query, execution_options: Optional[Dict[str, Any]] = None) -> Any:
         """Execute a query with pgBouncer compatibility settings."""
         try:
-            # Apply pgBouncer compatibility options
-            _execution_options = execution_options or self.execution_options
-            
-            # Try to deallocate any prepared statements first
-            try:
-                await self.db.execute(
-                    text("DEALLOCATE ALL").execution_options(
-                        no_parameters=True,
-                        use_server_side_cursors=False
-                    )
-                )
-            except Exception as deallocate_error:
-                # Ignore errors from DEALLOCATE ALL
-                logger.debug(f"DEALLOCATE ALL failed (usually harmless): {str(deallocate_error)}")
-            
-            result = await self.db.execute(
-                query.execution_options(**_execution_options)
-            )
+            opts = execution_options or self.execution_options
+            result = await self.db.execute(query.execution_options(**opts))
             return result
         except Exception as e:
             error_message = str(e).lower()
-            if any(err_type in error_message for err_type in [
-                "duplicatepreparedstatementerror",
-                "prepared statement",
-                "invalidsqlstatementnameerror"
-            ]):
-                logger.warning(f"pgBouncer prepared statement error encountered: {str(e)}")
-                logger.info("Creating fresh session to retry operation after pgBouncer error")
-                # Create a fresh session and retry
-                await self.db.close()
-                self.db = AsyncSession(bind=self.db.bind)
-                
-                # Try to deallocate prepared statements in the new session
-                try:
-                    await self.db.execute(
-                        text("DEALLOCATE ALL").execution_options(
-                            no_parameters=True,
-                            use_server_side_cursors=False
-                        )
-                    )
-                except Exception:
-                    pass  # Ignore errors from DEALLOCATE ALL
-                
-                try:
-                    result = await self.db.execute(
-                        query.execution_options(**_execution_options)
-                    )
-                    return result
-                except Exception as retry_error:
-                    raise DatabaseError(
-                        "Failed to execute query after retry",
-                        details={"query": str(query)},
-                        original_error=retry_error
-                    )
-            raise DatabaseError(
-                "Failed to execute query",
-                details={"query": str(query)},
-                original_error=e
-            )
+            if any(err in error_message for err in ["duplicatepreparedstatementerror", "prepared statement", "invalidsqlstatementnameerror"]):
+                logger.warning(f"pgBouncer prepared statement error: {e}")
+                raise DatabaseError("Prepared statement error", details={"query": str(query)}, original_error=e)
+            raise DatabaseError("Failed to execute query", details={"query": str(query)}, original_error=e)
 
     def _tuple_to_message_dto(self, message_tuple: tuple) -> SearchMessageDTO:
-        """Convert a database tuple to a SearchMessageDTO
-        
-        This method handles the conversion of raw database tuples to proper DTOs
-        when pgBouncer compatibility settings cause SQLAlchemy to return tuples.
-        
-        The tuple structure is expected to match the columns in the PublicSearchMessage table.
-        """
+        """Convert a database tuple to a SearchMessageDTO."""
         try:
-            # Extract values from tuple with safe fallbacks
-            # Adjust indices based on the actual query column order
-            id_val = message_tuple[0] if len(message_tuple) > 0 else None
-            search_id = message_tuple[1] if len(message_tuple) > 1 else None
-            role = message_tuple[2] if len(message_tuple) > 2 else "assistant"
-            content = message_tuple[3] if len(message_tuple) > 3 else {}
-            sequence = message_tuple[4] if len(message_tuple) > 4 else 0
-            status = message_tuple[5] if len(message_tuple) > 5 else "completed"
-            created_at = message_tuple[6] if len(message_tuple) > 6 else None
-            updated_at = message_tuple[7] if len(message_tuple) > 7 else None
-            
-            # Convert status enum to string if needed
-            if hasattr(status, "value"):
-                status = status.value
-                
-            return SearchMessageDTO(
-                role=role,
-                content=content,
-                sequence=sequence
-            )
-        except Exception as e:
-            logger.error(f"Error converting tuple to SearchMessageDTO: {str(e)}")
-            logger.debug(f"Tuple structure: {message_tuple}")
-            # Return a minimal valid DTO rather than failing
-            return SearchMessageDTO(
-                role="system",
-                content={"text": "Error retrieving message data"},
-                sequence=0
-            )
+            id_val, search_id, role, content, sequence, status, created_at, updated_at = message_tuple
+            status_value = status.value if hasattr(status, "value") else status
+            return SearchMessageDTO(role=role, content=content, sequence=sequence)
+        except (ValueError, IndexError) as e:
+            logger.error(f"Tuple structure mismatch: {e}")
+            return SearchMessageDTO(role="system", content={"text": "Error retrieving message data"}, sequence=0)
 
     async def get_next_sequence(self, search_id: UUID, execution_options: Optional[Dict[str, Any]] = None) -> int:
         """Get the next sequence number for a message in a search."""
-        query = select(func.max(PublicSearchMessage.sequence)).where(
-            PublicSearchMessage.search_id == search_id
-        )
+        query = select(func.max(PublicSearchMessage.sequence)).where(PublicSearchMessage.search_id == search_id)
         result = await self._execute_query(query, execution_options)
-        max_sequence = result.scalar() or 0
-        return max_sequence + 1
-
-    async def create_message(self, search_id: UUID, role: str, content: Dict[str, Any], sequence: int, 
-                           status: QueryStatus = QueryStatus.PENDING, execution_options: Optional[Dict[str, Any]] = None) -> PublicSearchMessage:
-        """Create a new message and add it to the session without committing."""
-        message = ResearchMessage(content=content, role=role, sequence=sequence)
-        db_message = PublicSearchMessage(
-            search_id=search_id,
-            role=message.role,
-            content=message.content,
-            sequence=sequence,
-            status=status
-        )
-        self.db.add(db_message)
-        return db_message
+        return (result.scalar() or 0) + 1
 
     async def get_message_by_id(self, message_id: UUID, execution_options: Optional[Dict[str, Any]] = None) -> Optional[SearchMessageDTO]:
         """Retrieve a message by its ID."""
         query = select(PublicSearchMessage).where(PublicSearchMessage.id == message_id)
         result = await self._execute_query(query, execution_options)
         db_message = result.scalars().first()
-        
-        if not db_message:
-            return None
-            
-        # Check if we got a tuple instead of an ORM object
-        if isinstance(db_message, tuple):
-            logger.info("Received tuple instead of ORM object in get_message_by_id")
-            return self._tuple_to_message_dto(db_message)
-        else:
-            # Convert to DTO using the conversion function for ORM objects
-            return to_search_message_dto(db_message)
+        return to_search_message_dto(db_message) if db_message else None
 
-    async def update_message(self, message_id: UUID, updates: SearchMessageUpdateDTO, execution_options: Optional[Dict[str, Any]] = None) -> Optional[SearchMessageDTO]:
-        """Update a message's content or other attributes."""
-        query = select(PublicSearchMessage).where(PublicSearchMessage.id == message_id)
-        result = await self._execute_query(query, execution_options)
-        db_message = result.scalars().first()
-        if not db_message:
-            return None
-            
-        # Check if we got a tuple instead of an ORM object
-        if isinstance(db_message, tuple):
-            logger.warning("Received tuple in update_message, cannot update tuple directly")
-            # We need to re-query to get the actual ORM object for updating
-            try:
-                # Create a new query with different execution options
-                retry_query = select(PublicSearchMessage).where(PublicSearchMessage.id == message_id)
-                retry_result = await self._execute_query(retry_query, execution_options)
-                db_message = retry_result.scalars().first()
-                if not db_message or isinstance(db_message, tuple):
-                    logger.error("Failed to get ORM object for update operation")
-                    return None
-            except Exception as e:
-                logger.error(f"Error re-querying for ORM object: {str(e)}")
-                raise DatabaseError(
-                    "Failed to update message",
-                    details={"message_id": str(message_id)},
-                    original_error=e
-                )
-        
-        # Update the message attributes
-        if hasattr(updates, 'content') and updates.content is not None:
-            db_message.content = updates.content
-        if hasattr(updates, 'role') and updates.role is not None:
-            db_message.role = updates.role
-        if hasattr(updates, 'status') and updates.status is not None:
-            db_message.status = updates.status
-        
-        # Commit the changes
-        try:
-            await self.db.commit()
-            await self.db.refresh(db_message)
-            return to_search_message_dto(db_message)
-        except Exception as e:
-            await self.db.rollback()
-            logger.error(f"Error updating message: {str(e)}")
-            raise DatabaseError(
-                "Failed to update message",
-                details={"message_id": str(message_id)},
-                original_error=e
-            )
-
-    async def update_message_status(self, message_id: UUID, status: QueryStatus, execution_options: Optional[Dict[str, Any]] = None) -> Optional[SearchMessageDTO]:
-        """Update a message's status."""
-        query = select(PublicSearchMessage).where(PublicSearchMessage.id == message_id)
-        result = await self._execute_query(query, execution_options)
-        db_message = result.scalars().first()
-        if not db_message:
-            return None
-            
-        # Check if we got a tuple instead of an ORM object
-        if isinstance(db_message, tuple):
-            logger.warning("Received tuple in update_message_status, cannot update tuple directly")
-            # We need to re-query to get the actual ORM object for updating
-            try:
-                # Create a new query with different execution options
-                retry_query = select(PublicSearchMessage).where(PublicSearchMessage.id == message_id)
-                retry_result = await self._execute_query(retry_query, execution_options)
-                db_message = retry_result.scalars().first()
-                if not db_message or isinstance(db_message, tuple):
-                    logger.error("Failed to get ORM object for update operation")
-                    return None
-            except Exception as e:
-                logger.error(f"Error re-querying for ORM object: {str(e)}")
-                raise DatabaseError(
-                    "Failed to update message status",
-                    details={"message_id": str(message_id)},
-                    original_error=e
-                )
-        
-        # Update the status
-        db_message.status = status
-        
-        # Commit the changes
-        try:
-            await self.db.commit()
-            await self.db.refresh(db_message)
-            return to_search_message_dto(db_message)
-        except Exception as e:
-            await self.db.rollback()
-            logger.error(f"Error updating message status: {str(e)}")
-            raise DatabaseError(
-                "Failed to update message status",
-                details={"message_id": str(message_id)},
-                original_error=e
-            )
-
-    async def delete_message(self, message_id: UUID, execution_options: Optional[Dict[str, Any]] = None) -> bool:
-        """Delete a message from the database."""
-        query = delete(PublicSearchMessage).where(PublicSearchMessage.id == message_id)
-        result = await self._execute_query(query, execution_options)
-        await self.db.commit()
-        return result.rowcount > 0
-
-    async def list_messages_by_search(self, search_id: UUID, limit: int = 100, offset: int = 0, execution_options: Optional[Dict[str, Any]] = None) -> SearchMessageListDTO:
-        """List all messages for a given search with pagination."""
-        # Query for messages
+    async def list_messages_by_search(self, search_id: UUID, limit: int = 100, offset: int = 0,
+                                      execution_options: Optional[Dict[str, Any]] = None) -> SearchMessageListDTO:
+        """List all messages for a search with pagination."""
         query = select(PublicSearchMessage).where(PublicSearchMessage.search_id == search_id)\
             .order_by(PublicSearchMessage.sequence).offset(offset).limit(limit)
-        
-        # Use provided execution_options if given, otherwise use default
-        if execution_options:
-            result = await self.db.execute(
-                query.execution_options(**execution_options)
-            )
-        else:
-            result = await self._execute_query(query)
-            
-        messages = result.scalars().all()
-        
-        # Convert messages to DTOs, handling both tuple and ORM cases
-        message_dtos = []
-        if messages:
-            for message in messages:
-                if isinstance(message, tuple):
-                    logger.info("Received tuple instead of ORM object in list_messages_by_search")
-                    message_dtos.append(self._tuple_to_message_dto(message))
-                else:
-                    message_dtos.append(to_search_message_dto(message))
-        
-        # Count total messages
-        count_query = select(func.count()).select_from(PublicSearchMessage).where(
-            PublicSearchMessage.search_id == search_id
-        )
-        
-        # Use provided execution_options for count query as well
-        if execution_options:
-            count_result = await self.db.execute(
-                count_query.execution_options(**execution_options)
-            )
-        else:
-            count_result = await self._execute_query(count_query)
-            
-        total_count = count_result.scalar() or 0
-        
-        # Return custom DTO with our processed items
-        return SearchMessageListDTO(
-            items=message_dtos,
-            total=total_count,
-            search_id=search_id
-        )
-
-    async def list_messages_by_status(self, status: QueryStatus, limit: int = 100, offset: int = 0, execution_options: Optional[Dict[str, Any]] = None) -> List[SearchMessageDTO]:
-        """List messages by status with pagination."""
-        query = select(PublicSearchMessage).where(PublicSearchMessage.status == status)\
-            .order_by(PublicSearchMessage.created_at).offset(offset).limit(limit)
         result = await self._execute_query(query, execution_options)
         messages = result.scalars().all()
-        
-        # Check if we got tuples instead of ORM objects
-        message_dtos = []
-        if messages and len(messages) > 0:
-            if isinstance(messages[0], tuple):
-                logger.info("Received tuples instead of ORM objects in list_messages_by_status")
-                message_dtos = [self._tuple_to_message_dto(message) for message in messages]
-            else:
-                # Normal ORM object conversion
-                message_dtos = [to_search_message_dto(message) for message in messages]
-        
-        return message_dtos
+        message_dtos = [to_search_message_dto(m) if not isinstance(m, tuple) else self._tuple_to_message_dto(m) for m in messages]
+        count_query = select(func.count()).where(PublicSearchMessage.search_id == search_id)
+        total_count = (await self._execute_query(count_query, execution_options)).scalar() or 0
+        return SearchMessageListDTO(items=message_dtos, total=total_count, search_id=search_id)
 
-    async def create_message_with_commit(self, message_create_dto: SearchMessageCreateDTO, execution_options: Optional[Dict[str, Any]] = None) -> SearchMessageDTO:
-        """Create a new message and commit it to the database."""
+    async def create_message_with_commit(self, message_create_dto: SearchMessageCreateDTO,
+                                         execution_options: Optional[Dict[str, Any]] = None) -> SearchMessageDTO:
+        """Create a new message and commit it."""
         try:
-            # Create domain model for validation
-            message = ResearchMessage(
-                content=message_create_dto.content,
-                role=message_create_dto.role,
-                sequence=message_create_dto.sequence or 1
-            )
-            
-            # If sequence not provided, get the next sequence number
-            if message_create_dto.sequence is None:
-                message.sequence = await self.get_next_sequence(message_create_dto.search_id, execution_options)
-            
-            # Create database record
+            sequence = message_create_dto.sequence or await self.get_next_sequence(message_create_dto.search_id, execution_options)
             db_message = PublicSearchMessage(
                 search_id=message_create_dto.search_id,
-                role=message.role,
-                content=message.content,
-                sequence=message.sequence,
-                status=message_create_dto.status if hasattr(message_create_dto, 'status') else QueryStatus.PENDING
+                role=message_create_dto.role,
+                content=message_create_dto.content,
+                sequence=sequence,
+                status=message_create_dto.status or QueryStatus.PENDING
             )
             self.db.add(db_message)
             await self.db.commit()
-            
-            # Refresh to get generated values
             await self.db.refresh(db_message)
-            
-            # Return as DTO
             return to_search_message_dto(db_message)
         except Exception as e:
-            error_message = str(e).lower()
             await self.db.rollback()
-            
-            # Handle pgBouncer prepared statement errors
-            if ("prepared statement" in error_message or 
-                "duplicatepreparedstatementerror" in error_message or 
-                "invalidsqlstatementnameerror" in error_message):
-                logger.warning(f"pgBouncer prepared statement error encountered: {str(e)}")
-                try:
-                    # Try to create a fresh session and retry
-                    from sqlalchemy.ext.asyncio import AsyncSession
-                    from core.database import async_engine
-                    
-                    logger.info("Creating fresh session to retry operation after pgBouncer error")
-                    async with AsyncSession(async_engine) as fresh_session:
-                        # Create a new instance with the fresh session
-                        fresh_ops = SearchMessageOperations(fresh_session)
-                        # Retry the operation
-                        return await fresh_ops.create_message_with_commit(message_create_dto, execution_options)
-                except Exception as retry_error:
-                    logger.error(f"Error in retry attempt after pgBouncer error: {str(retry_error)}")
-                    raise DatabaseError(
-                        "Failed to create message after retry",
-                        details={"message_create_dto": str(message_create_dto)},
-                        original_error=retry_error
-                    )
-            
-            raise DatabaseError(
-                "Failed to create message",
-                details={"message_create_dto": str(message_create_dto)},
-                original_error=e
-            )
+            logger.error(f"Error creating message: {e}")
+            raise DatabaseError("Failed to create message", details={"dto": str(message_create_dto)}, original_error=e)
 
-    async def get_messages_list_response(self, search_id: UUID, limit: int = 100, offset: int = 0, execution_options: Optional[Dict[str, Any]] = None) -> SearchMessageListDTO:
-        """
-        Get a paginated list of messages for a search with proper response formatting.
-        
-        This is a wrapper around list_messages_by_search that ensures proper formatting
-        for API responses and handles pgBouncer compatibility options.
-        """
-        # Call the underlying list_messages_by_search method with execution options
-        messages_list = await self.list_messages_by_search(
-            search_id=search_id,
-            limit=limit,
-            offset=offset,
-            execution_options=execution_options or self.execution_options
-        )
-        
-        # Ensure the response has the correct format for the API
-        if not hasattr(messages_list, 'offset'):
-            messages_list.offset = offset
-        if not hasattr(messages_list, 'limit'):
-            messages_list.limit = limit
-            
+    async def get_messages_list_response(self, search_id: UUID, limit: int = 100, offset: int = 0,
+                                         execution_options: Optional[Dict[str, Any]] = None) -> SearchMessageListDTO:
+        """Get a paginated list of messages for a search."""
+        messages_list = await self.list_messages_by_search(search_id, limit, offset, execution_options or self.execution_options)
+        messages_list.offset = offset
+        messages_list.limit = limit
         return messages_list
 
-    async def get_messages_for_search(
-        self, 
-        search_id: UUID, 
-        user_id: UUID, 
-        user_permissions: List[str],
-        execution_options: Optional[Dict[str, Any]] = None
-    ) -> List[SearchMessageDTO]:
-        """
-        Get new messages for a search that haven't been delivered yet.
-        
-        This method is specifically designed for the SSE endpoint to retrieve
-        new messages that should be sent to the client in real-time.
-        
-        Args:
-            search_id: The UUID of the search to get messages for
-            user_id: The UUID of the user requesting the messages
-            user_permissions: List of permission strings for the user
-            execution_options: Optional SQLAlchemy execution options for pgBouncer compatibility
-            
-        Returns:
-            A list of SearchMessageDTO objects representing new messages
-        """
+    async def get_messages_for_search(self, search_id: UUID, user_id: UUID, user_permissions: List[str],
+                                      after_time: Optional[datetime] = None,
+                                      execution_options: Optional[Dict[str, Any]] = None) -> List[SearchMessageDTO]:
+        """Get completed messages for a search, designed for SSE delivery."""
+        # TODO: Implement permission checks using user_id and user_permissions
         try:
-            # Query for new messages with completed status
-            # In a real implementation, you might want to track which messages have been delivered
-            # For now, we'll just get the most recent messages (last 5 seconds)
-            from datetime import datetime, timedelta
-            recent_time = datetime.utcnow() - timedelta(seconds=5)
-            
             query = select(PublicSearchMessage).where(
                 PublicSearchMessage.search_id == search_id,
-                PublicSearchMessage.status == QueryStatus.COMPLETED,
-                PublicSearchMessage.updated_at >= recent_time
-            ).order_by(PublicSearchMessage.sequence)
-            
-            # Execute with pgBouncer compatibility options
+                PublicSearchMessage.status == QueryStatus.COMPLETED
+            )
+            if after_time:
+                query = query.where(PublicSearchMessage.updated_at > after_time)
+            query = query.order_by(PublicSearchMessage.sequence)
             result = await self._execute_query(query, execution_options)
             messages = result.scalars().all()
-            
-            # Convert messages to DTOs, handling both tuple and ORM cases
-            message_dtos = []
-            if messages:
-                for message in messages:
-                    if isinstance(message, tuple):
-                        logger.info("Received tuple instead of ORM object in get_messages_for_search")
-                        message_dtos.append(self._tuple_to_message_dto(message))
-                    else:
-                        message_dtos.append(to_search_message_dto(message))
-            
-            return message_dtos
-            
+            return [to_search_message_dto(m) if not isinstance(m, tuple) else self._tuple_to_message_dto(m) for m in messages]
         except Exception as e:
-            # Check if this is a pgBouncer prepared statement error
-            error_message = str(e).lower()
-            if ("prepared statement" in error_message or 
-                "duplicatepreparedstatementerror" in error_message or 
-                "invalidsqlstatementnameerror" in error_message):
-                
-                logger.warning(f"pgBouncer prepared statement error in get_messages_for_search: {str(e)}")
-                try:
-                    # Try to create a fresh session and retry
-                    from sqlalchemy.ext.asyncio import AsyncSession
-                    from core.database import async_engine
-                    
-                    logger.info("Creating fresh session to retry get_messages_for_search after pgBouncer error")
-                    async with AsyncSession(async_engine) as fresh_session:
-                        # Create a new instance with the fresh session
-                        fresh_ops = SearchMessageOperations(fresh_session)
-                        # Retry the operation
-                        return await fresh_ops.get_messages_for_search(
-                            search_id=search_id,
-                            user_id=user_id,
-                            user_permissions=user_permissions,
-                            execution_options=execution_options
-                        )
-                except Exception as retry_error:
-                    logger.error(f"Error in retry attempt after pgBouncer error: {str(retry_error)}")
-                    # Return empty list instead of raising error for SSE
-                    return []
-            
-            logger.error(f"Error fetching messages for SSE: {str(e)}")
-            # For SSE, it's better to return an empty list than to raise an exception
-            # This allows the connection to stay open and retry on the next cycle
+            logger.error(f"Error fetching messages for SSE: {e}")
             return []

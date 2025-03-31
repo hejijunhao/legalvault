@@ -75,7 +75,7 @@ logger.info(f"Configured CORS origins: {'*'}" if settings.ENV == "development" e
 
 # Include all routers
 app.include_router(api_router, prefix="/api")
-app.include_router(webhook_router, prefix="/api/webhooks")
+app.include_router(webhook_router, prefix="/api/webhooks")  # Keep webhooks separate as they are external integrations
 
 @app.on_event("startup")
 async def startup_event():

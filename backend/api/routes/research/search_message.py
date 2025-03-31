@@ -8,18 +8,11 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime
 import json
-import asyncio
 from contextlib import asynccontextmanager
-
-from typing import List, Optional, Union
-from uuid import UUID
-import asyncio
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy.ext.asyncio import AsyncSession
-from datetime import datetime
+import logging
 
 from core.database import get_db, get_session_db
-from core.auth import get_current_user
+from core.auth import get_current_user, get_current_user_from_token
 from models.domain.research.search_operations import ResearchOperations
 from models.domain.research.search_message_operations import SearchMessageOperations
 from models.domain.user_operations import UserOperations
@@ -39,10 +32,29 @@ from models.dtos.research.search_message_dto import (
     SearchMessageListDTO
 )
 
+# Set up logging
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
-    prefix="/research/messages",
-    tags=["research"]
+    prefix="/v1/research/searches/{search_id}/messages",
+    tags=["research"],
+    responses={
+        401: {"description": "Authentication required"},
+        403: {"description": "Insufficient permissions"},
+        429: {"description": "Too many requests"},
+        500: {"description": "Internal server error"}
+    }
+)
+
+stream_router = APIRouter(
+    prefix="/v1/research/searches",
+    tags=["research"],
+    responses={
+        401: {"description": "Authentication required"},
+        403: {"description": "Insufficient permissions"},
+        429: {"description": "Too many requests"},
+        500: {"description": "Internal server error"}
+    }
 )
 
 async def get_user_permissions(
@@ -102,8 +114,9 @@ async def search_message_list_dto_to_response(message_list_dto: Union[SearchMess
         limit=limit
     )
 
-@router.get("/{message_id}", response_model=SearchMessageResponse)
+@router.get("/messages/{message_id}", response_model=SearchMessageResponse)
 async def get_message(
+    search_id: UUID,
     message_id: UUID,
     current_user: User = Depends(get_current_user),
     user_permissions: List[str] = Depends(get_user_permissions),
@@ -122,7 +135,7 @@ async def get_message(
     # Verify user has access to the search this message belongs to
     search_ops = ResearchOperations(db)
     has_access = await search_ops.check_user_access(
-        search_id=message.search_id,
+        search_id=search_id,
         user_id=current_user.id,
         user_permissions=user_permissions,
         execution_options={"no_parameters": True, "use_server_side_cursors": False}
@@ -133,7 +146,7 @@ async def get_message(
     
     return await search_message_dto_to_response(message, db)
 
-@router.get("/search/{search_id}", response_model=SearchMessageListResponse)
+@router.get("/messages", response_model=SearchMessageListResponse)
 async def list_messages(
     search_id: UUID,
     limit: int = Query(100, ge=1, le=500, description="Maximum number of messages"),
@@ -170,7 +183,7 @@ async def list_messages(
     
     return await search_message_list_dto_to_response(messages)
 
-@router.post("/search/{search_id}", response_model=SearchMessageResponse)
+@router.post("/messages", response_model=SearchMessageResponse)
 async def create_message(
     search_id: UUID,
     message: SearchMessageCreate,
@@ -211,8 +224,9 @@ async def create_message(
     
     return await search_message_dto_to_response(created_message, db)
 
-@router.patch("/{message_id}", response_model=SearchMessageResponse)
+@router.patch("/messages/{message_id}", response_model=SearchMessageResponse)
 async def update_message(
+    search_id: UUID,
     message_id: UUID,
     data: SearchMessageUpdate,
     current_user: User = Depends(get_current_user),
@@ -237,7 +251,7 @@ async def update_message(
     # Verify user has access to the search this message belongs to
     search_ops = ResearchOperations(db)
     has_access = await search_ops.check_user_access(
-        search_id=message.search_id,
+        search_id=search_id,
         user_id=current_user.id,
         user_permissions=user_permissions,
         execution_options={"no_parameters": True, "use_server_side_cursors": False}
@@ -271,8 +285,9 @@ async def update_message(
     )
     return await search_message_dto_to_response(updated_message, db)
 
-@router.delete("/{message_id}", status_code=204)
+@router.delete("/messages/{message_id}", status_code=204)
 async def delete_message(
+    search_id: UUID,
     message_id: UUID,
     current_user: User = Depends(get_current_user),
     user_permissions: List[str] = Depends(get_user_permissions),
@@ -293,7 +308,7 @@ async def delete_message(
     # Verify user has access to the search this message belongs to
     search_ops = ResearchOperations(db)
     has_access = await search_ops.check_user_access(
-        search_id=message.search_id,
+        search_id=search_id,
         user_id=current_user.id,
         user_permissions=user_permissions,
         execution_options={"no_parameters": True, "use_server_side_cursors": False}
@@ -313,93 +328,115 @@ async def delete_message(
     
     return None
 
-@router.get("/searches/{search_id}/stream")
+@stream_router.get("/{search_id}/stream", response_class=StreamingResponse)
 async def stream_search_messages(
     request: Request,
     search_id: UUID,
     token: Optional[str] = Query(None, description="Authentication token (for SSE)"),
-    current_user: Optional[User] = Depends(get_current_user),
-    db: AsyncSession = Depends(get_session_db)
+    current_user: Optional[User] = Depends(get_current_user),  
+    token_user: Optional[User] = Depends(get_current_user_from_token),  
+    db: AsyncSession = Depends(get_db)  
 ) -> StreamingResponse:
     """
     Stream search messages in real-time using Server-Sent Events (SSE).
-    Supports both header-based and query parameter authentication.
+    Supports both header-based and token-based authentication.
+    Uses raw SQL queries for pgBouncer compatibility.
     """
+    # Authenticate user through either method
+    authenticated_user = current_user or token_user
+    if not authenticated_user:
+        raise HTTPException(
+            status_code=401,
+            detail="Authentication required"
+        )
+
     async def event_generator():
         try:
-            # If no user from header auth, try query param
-            if not current_user and token:
-                user_ops = UserOperations(db)
-                token_data = await user_ops.decode_token(token)
-                if not token_data:
-                    yield "event: error\ndata: " + json.dumps({"message": "Invalid token"}) + "\n\n"
-                    return
-                current_user = await user_ops.get_user_by_id(token_data.user_id)
-            
-            if not current_user:
-                yield "event: error\ndata: " + json.dumps({"message": "Authentication required"}) + "\n\n"
-                return
-
-            # Get user permissions
-            user_ops = UserOperations(db)
-            user_permissions = await user_ops.get_user_permissions(
-                current_user.id,
-                execution_options={"no_parameters": True, "use_server_side_cursors": False}
-            )
-
-            # Initialize operations with pgBouncer compatibility
+            # Get operations instances with pgBouncer compatibility options
             operations = SearchMessageOperations(db)
-            execution_options = {"no_parameters": True, "use_server_side_cursors": False}
-            
-            # Verify search access
             search_ops = ResearchOperations(db)
-            has_access = await search_ops.check_user_access(
+            
+            # Verify search access using raw SQL
+            user_permissions = await get_user_permissions(authenticated_user, db)
+            has_access = await search_ops.check_user_access_raw(
                 search_id=search_id,
-                user_id=current_user.id,
+                user_id=authenticated_user.id,
                 user_permissions=user_permissions,
-                execution_options=execution_options
+                execution_options={"no_parameters": True, "use_server_side_cursors": False}
             )
             
             if not has_access:
                 yield "event: error\ndata: " + json.dumps({"message": "Access denied"}) + "\n\n"
                 return
-            
-            # Initial connection event
+
+            # Send initial connection event
             yield "event: connected\ndata: {}\n\n"
             
-            last_message_time = datetime.now()
-            while True:
-                if await request.is_disconnected():
-                    break
+            # Initialize message buffer for collecting chunks
+            message_buffer = []
+            last_save_time = datetime.now()
+            
+            try:
+                while True:
+                    if await request.is_disconnected():
+                        logger.debug(f"Client disconnected from SSE stream for search {search_id}")
+                        break
                     
-                # Check for new messages
-                messages = await operations.get_messages_for_search(
-                    search_id=search_id,
-                    after_time=last_message_time,
-                    execution_options=execution_options
-                )
+                    # Get new message chunks using raw SQL with pgBouncer options
+                    try:
+                        new_chunks = await operations.get_messages_raw(
+                            search_id=search_id,
+                            user_id=authenticated_user.id,
+                            execution_options={"no_parameters": True, "use_server_side_cursors": False}
+                        )
+                        
+                        if new_chunks:
+                            # Add chunks to buffer
+                            message_buffer.extend(new_chunks)
+                            
+                            # Stream chunks to frontend
+                            for chunk in new_chunks:
+                                yield f"event: chunk\ndata: {json.dumps({'content': chunk})}\n\n"
+                            
+                            # Save to database periodically using raw SQL
+                            if (datetime.now() - last_save_time).seconds >= 5:
+                                await operations.save_message_chunks_raw(
+                                    search_id=search_id,
+                                    chunks=message_buffer,
+                                    execution_options={"no_parameters": True, "use_server_side_cursors": False}
+                                )
+                                message_buffer = []  # Clear buffer after saving
+                                last_save_time = datetime.now()
+                        
+                        # Send heartbeat if no new chunks
+                        elif (datetime.now() - last_save_time).seconds >= 30:
+                            yield "event: heartbeat\ndata: {}\n\n"
+                            last_save_time = datetime.now()
+                        
+                        await asyncio.sleep(0.1)
+                        
+                    except Exception as e:
+                        logger.error(f"Error in streaming loop: {str(e)}")
+                        yield f"event: error\ndata: {json.dumps({'error': 'Error processing message chunks'})}\n\n"
+                        await asyncio.sleep(1)  # Wait before retrying
                 
-                if messages:
-                    last_message_time = messages[-1].created_at
-                    # Convert messages to response format
-                    message_responses = [
-                        await search_message_dto_to_response(msg, db)
-                        for msg in messages
-                    ]
-                    yield f"data: {json.dumps([msg.dict() for msg in message_responses])}\n\n"
+            finally:
+                # Save any remaining chunks before closing
+                if message_buffer:
+                    try:
+                        await operations.save_message_chunks_raw(
+                            search_id=search_id,
+                            chunks=message_buffer,
+                            execution_options={"no_parameters": True, "use_server_side_cursors": False}
+                        )
+                    except Exception as e:
+                        logger.error(f"Error saving final chunks: {str(e)}")
                 
-                # Heartbeat every 30 seconds
-                if (datetime.now() - last_message_time).seconds >= 30:
-                    yield "event: heartbeat\ndata: {}\n\n"
-                    last_message_time = datetime.now()
-                
-                await asyncio.sleep(0.1)
-                
+                yield "event: complete\ndata: {}\n\n"
+        
         except Exception as e:
             logger.error(f"Error in SSE stream: {str(e)}")
             yield f"event: error\ndata: {json.dumps({'error': str(e)})}\n\n"
-        finally:
-            await db.close()
 
     return StreamingResponse(
         event_generator(),

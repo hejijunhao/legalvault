@@ -2,7 +2,7 @@
 
 from typing import List, Optional
 from uuid import UUID
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Query
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 from models.database.auth_user import AuthUser
@@ -12,16 +12,23 @@ from models.domain.user_operations import UserOperations
 from core.database import get_db, async_session_factory
 import jwt
 from sqlalchemy import text
+import logging
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
+logger = logging.getLogger(__name__)
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
 
 async def get_current_user(
-    token: str = Depends(oauth2_scheme), 
+    token: Optional[str] = Depends(oauth2_scheme), 
     session: AsyncSession = Depends(get_db)
-) -> User:
+) -> Optional[User]:
     """
     Validate the access token and return the current user.
+    Returns None if no token is provided or if token is invalid.
     """
+    if not token:
+        return None
+        
     print(f"\n\n===== Authentication Debug =====\nReceived token: {token[:10]}...")
     
     credentials_exception = HTTPException(
@@ -204,6 +211,49 @@ async def get_current_user(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Error retrieving user: {e}"
             )
+
+async def get_current_user_from_token(
+    token: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db)
+) -> Optional[User]:
+    """
+    Dependency for token-based authentication, primarily used for SSE endpoints.
+    Returns None if no token is provided, allowing the endpoint to handle authentication flexibly.
+    Raises HTTPException(401) if an invalid token is provided.
+    """
+    if not token:
+        return None
+
+    try:
+        user_ops = UserOperations(db)
+        token_data = await user_ops.decode_token(token)
+        
+        if not token_data or not token_data.user_id:
+            logger.warning("Invalid token: missing or invalid user_id")
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid authentication token"
+            )
+        
+        # Get user from database using raw SQL for pgBouncer compatibility
+        user = await user_ops.get_user_by_auth_id(token_data.user_id)
+        if not user:
+            logger.warning(f"User not found for auth_id {token_data.user_id}")
+            raise HTTPException(
+                status_code=401,
+                detail="User not found"
+            )
+        
+        return user
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Token authentication error: {str(e)}")
+        raise HTTPException(
+            status_code=401,
+            detail="Authentication failed"
+        )
 
 async def get_user_permissions(
     user: User = Depends(get_current_user)

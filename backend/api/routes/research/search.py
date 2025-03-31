@@ -42,9 +42,22 @@ from services.workflow.research.search_workflow import (
     IrrelevantQueryError, PersistenceError
 )
 
+# Constants for API configuration
+DEFAULT_PAGE_SIZE = 50
+MAX_PAGE_SIZE = 200
+CACHE_TIMEOUT = 300  # 5 minutes in seconds
+RATE_LIMIT_REQUESTS = 100
+RATE_LIMIT_PERIOD = 60  # 1 minute in seconds
+
 router = APIRouter(
-    prefix="/research/searches",
-    tags=["research"]
+    prefix="/v1/research/searches",  # Main app adds /api prefix
+    tags=["research"],
+    responses={
+        401: {"description": "Authentication required"},
+        403: {"description": "Insufficient permissions"},
+        429: {"description": "Too many requests"},
+        500: {"description": "Internal server error"}
+    }
 )
 
 # Dependency to get research operations
@@ -162,7 +175,7 @@ def search_list_dto_to_response(search_list_dto: Union[SearchListDTO, tuple]) ->
         limit=limit
     )
 
-@router.post("/", response_model=SearchResponse)
+@router.post("", response_model=SearchResponse)
 async def create_search(
     data: SearchCreate,
     current_user: User = Depends(get_current_user),
@@ -348,7 +361,7 @@ async def get_search(
             detail="An unexpected error occurred. Please try again later."
         )
 
-@router.get("/", response_model=SearchListResponse)
+@router.get("", response_model=SearchListResponse)
 async def list_searches(
     limit: int = Query(20, ge=1, le=100, description="Maximum number of results"),
     offset: int = Query(0, ge=0, description="Pagination offset"),

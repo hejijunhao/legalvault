@@ -388,56 +388,53 @@ class UserOperations:
             print(f"Error getting user by email: {str(e)}")
             return None
 
-    async def get_user_by_auth_id(self, auth_user_id: UUID, execution_options: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
-        """Get user by Supabase auth_user_id.
-        
-        Args:
-            auth_user_id: The Supabase auth_user_id (from token sub claim)
-            execution_options: Optional execution options for pgBouncer compatibility
-            
-        Returns:
-            User data as a dictionary or None if not found
-        """
+    async def get_user_by_auth_id(self, auth_user_id: str) -> Optional[User]:
+        """Get user by auth_user_id using raw SQL for pgBouncer compatibility."""
         try:
-            # Set default execution options if none provided
-            if execution_options is None:
-                execution_options = {"no_parameters": True, "use_server_side_cursors": False}
-                
+            # Use raw SQL with text() to avoid prepared statements
+            from sqlalchemy import text
             query = text("""
                 SELECT id, auth_user_id, first_name, last_name, name, role, email, 
                        virtual_paralegal_id, enterprise_id, created_at, updated_at
                 FROM public.users WHERE auth_user_id = :auth_user_id
             """)
             
-            result = await self.db.execute(
-                query, 
-                {"auth_user_id": str(auth_user_id)},
-                execution_options=execution_options
-            )
-            user_data = result.fetchone()
-            
-            if not user_data:
-                logger.warning(f"User not found with auth_user_id: {auth_user_id}")
-                return None
-                
-            # Return as a dictionary for easier access
-            return {
-                "id": user_data[0],
-                "auth_user_id": user_data[1],
-                "first_name": user_data[2],
-                "last_name": user_data[3],
-                "name": user_data[4],
-                "role": user_data[5],
-                "email": user_data[6],
-                "virtual_paralegal_id": user_data[7],
-                "enterprise_id": user_data[8],
-                "created_at": user_data[9],
-                "updated_at": user_data[10]
+            # Execute with pgBouncer compatibility options
+            execution_options = {
+                "no_parameters": False,  # We need parameters for security
+                "statement_cache_size": 0,
+                "prepared_statement_cache_size": 0,
+                "use_server_side_cursors": False
             }
             
+            result = await self.db.execute(
+                query,
+                {"auth_user_id": auth_user_id},
+                execution_options=execution_options
+            )
+            row = result.fetchone()
+            
+            if not row:
+                return None
+                
+            # Convert row to User model
+            return User(
+                id=row.id,
+                auth_user_id=row.auth_user_id,
+                first_name=row.first_name,
+                last_name=row.last_name,
+                name=row.name,
+                role=row.role,
+                email=row.email,
+                virtual_paralegal_id=row.virtual_paralegal_id,
+                enterprise_id=row.enterprise_id,
+                created_at=row.created_at,
+                updated_at=row.updated_at
+            )
+            
         except Exception as e:
-            logger.error(f"Error getting user by auth_user_id: {str(e)}", exc_info=True)
-            return None
+            logger.error(f"Error getting user by auth_user_id: {str(e)}")
+            raise
 
     async def get_user_permissions(self, user_id: UUID, execution_options: Dict[str, Any] = None) -> List[str]:
         """
