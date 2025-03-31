@@ -10,7 +10,8 @@ import {
   getAuthHeader, 
   fetchWithSelfSignedCert, 
   withRetry, 
-  handleApiError 
+  handleApiError,
+  handleEncryptedFields 
 } from './research-api-core';
 import { researchCache } from './research-cache';
 
@@ -23,7 +24,7 @@ export async function fetchMessage(messageId: string): Promise<Message> {
   // Check cache first
   const cachedMessage = researchCache.getMessage(messageId);
   if (cachedMessage) {
-    return cachedMessage;
+    return handleEncryptedFields(cachedMessage);
   }
 
   const headers = await getAuthHeader();
@@ -33,11 +34,11 @@ export async function fetchMessage(messageId: string): Promise<Message> {
   
   if (!response.ok) return handleApiError(response);
   const data = await response.json();
-  
+  const processedData = handleEncryptedFields(data);
   // Cache the response
-  researchCache.setMessage(data);
+  researchCache.setMessage(processedData);
   
-  return data;
+  return processedData;
 }
 
 /**
@@ -63,14 +64,14 @@ export async function createMessage(
   
   if (!response.ok) return handleApiError(response);
   const data = await response.json();
-  
+  const processedData = handleEncryptedFields(data);
   // Cache the new message
-  researchCache.setMessage(data);
+  researchCache.setMessage(processedData);
   
   // Invalidate message list cache for this search
   researchCache.invalidateMessageList(searchId);
   
-  return data;
+  return processedData;
 }
 
 /**
@@ -89,7 +90,7 @@ export async function fetchMessagesForSearch(
   // Check cache first
   const cachedMessages = researchCache.getMessageList(searchId, options);
   if (cachedMessages) {
-    return cachedMessages;
+    return handleEncryptedFields(cachedMessages);
   }
 
   const headers = await getAuthHeader();
@@ -106,47 +107,46 @@ export async function fetchMessagesForSearch(
   
   if (!response.ok) return handleApiError(response);
   const data = await response.json();
-  
+  const processedData = handleEncryptedFields(data);
   // Cache the response
-  researchCache.setMessageList(searchId, data, options);
+  researchCache.setMessageList(searchId, processedData, options);
   
-  return data;
+  return processedData;
 }
 
 /**
  * Update a message
  * @param messageId The ID of the message to update
- * @param updates The updates to apply
+ * @param data The updates to apply
  * @returns The updated message
  */
 export async function updateMessage(
-  messageId: string, 
-  updates: {
-    content?: { text: string, citations?: Citation[] };
-    status?: QueryStatus;
-  }
+  messageId: string,
+  data: Partial<Message>
 ): Promise<Message> {
   const headers = await getAuthHeader();
-  const response = await withRetry(() => 
-    fetchWithSelfSignedCert(`/api/research/messages/${messageId}`, {
+  const response = await withRetry(() =>
+    fetchWithSelfSignedCert(`/api/research/messages/${messageId}/`, {
       method: 'PATCH',
       headers,
-      body: JSON.stringify(updates)
+      body: JSON.stringify(data)
     })
   );
   
   if (!response.ok) return handleApiError(response);
-  const data = await response.json();
+  const responseData = await response.json();
+  const processedData = handleEncryptedFields(responseData);
   
   // Cache the updated message
-  researchCache.setMessage(data);
+  researchCache.setMessage(processedData);
   
   // Invalidate message list cache if we have the search_id
-  if (data.search_id) {
-    researchCache.invalidateMessageList(data.search_id);
+  const searchId = (processedData as Message).search_id;
+  if (searchId) {
+    researchCache.invalidateMessageList(searchId);
   }
   
-  return data;
+  return processedData;
 }
 
 /**

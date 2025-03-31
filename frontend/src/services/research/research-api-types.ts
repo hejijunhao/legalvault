@@ -55,10 +55,13 @@ export interface MessageContent {
 
 export interface Message {
   id: string;
+  search_id?: string;
   role: "user" | "assistant" | "system";
   content: MessageContent;
   sequence: number;
   created_at: string;
+  updated_at?: string;
+  status?: QueryStatus;
 }
 
 export interface SearchParams {
@@ -104,13 +107,13 @@ export interface SSEMessage {
 }
 
 export interface SSEOptions {
-  onMessage: (data: Message[]) => void;
-  onError: (error: Error) => void;
-  onConnectionChange: (status: ConnectionStatus) => void;
+  onMessage: (message: SSEMessage) => void;
+  onError?: (error: Error) => void;
+  onConnectionChange?: (status: ConnectionStatus) => void;
 }
 
 export interface SSEConnection {
-  close: () => void;
+  disconnect: () => void;
   isConnected: () => boolean;
 }
 
@@ -118,10 +121,14 @@ export enum ConnectionStatus {
   CONNECTED = 'connected',
   DISCONNECTED = 'disconnected',
   CONNECTING = 'connecting',
+  RECONNECTING = 'reconnecting',
   ERROR = 'error'
 }
 
-export type ApiError = {
-  message: string;
+export interface ApiError extends Error {
+  status?: number;
+  statusText?: string;
   code?: string;
-};
+  details?: string;
+  originalError?: any;
+}

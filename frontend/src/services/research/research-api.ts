@@ -1,40 +1,10 @@
 // src/services/research/research-api.ts
 
-// Re-export types
-export * from './research-api-types';
-
-// Re-export core functionality
-export {
-  getApiBaseUrl,
-  getAuthHeader,
-  fetchWithSelfSignedCert,
-  withRetry,
-  formatApiError,
-  handleApiError,
-  scheduleCacheClear
-} from './research-api-core';
-
-// Re-export session-related functions
-export {
-  fetchSessions,
-  fetchSession,
-  createNewSession,
-  sendSessionMessage,
-  updateSessionMetadata,
-  deleteSession
-} from './research-api-sessions';
-
-// Re-export message-related functions
-export {
-  fetchMessage,
-  fetchMessagesForSearch,
-  updateMessage,
-  deleteMessage,
-  forwardMessage
-} from './research-api-messages';
-
-// Re-export SSE-related functions
-export { connectToSSE } from './research-api-sse';
+// Re-export everything from individual API modules
+export * from './research-api-core';
+export * from './research-api-messages';
+export * from './research-api-sessions';
+export * from './research-api-sse';
 
 // Export cache interface
 import { researchCache } from './research-cache';

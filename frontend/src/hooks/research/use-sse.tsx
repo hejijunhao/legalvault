@@ -3,8 +3,16 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { connectToSSE, SSEConnection, SSEEventType } from '@/services/research/research-api';
-import { ResearchSession, ConnectionStatus, ErrorType, Message } from '@/contexts/research/research-context';
+import { 
+  SSEEventType, 
+  SSEMessage, 
+  SSEConnection,
+  ConnectionStatus,
+  Message
+} from '@/services/research/research-api-types';
+import { connectToSSE } from '@/services/research/research-api-sse';
+import { ResearchSession, ErrorType } from '@/contexts/research/research-context';
+import { handleEncryptedFields } from '@/services/research/research-api-core';
 
 interface ValidatedMessageData {
   messages?: Message[];
@@ -66,7 +74,7 @@ export function useSSE(
         }
 
         const startTime = Date.now();
-        const connection = await connectToSSE(sessionId, {
+        sseConnectionRef.current = await connectToSSE(sessionId, {
           onMessage: (message) => {
             try {
               console.log('Received SSE message:', message);
@@ -82,33 +90,36 @@ export function useSSE(
                 return;
               }
 
-              const messages = validatedData.messages;
-              if (message.type === SSEEventType.MESSAGES && Array.isArray(messages) && messages.length > 0) {
-                setCurrentSession(prev => {
-                  if (!prev || prev.id !== sessionId) return prev;
-                  
-                  const processedMessages = messages.map(m => ({
-                    ...m,
-                    id: m.id || `msg-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
-                  }));
-                  
-                  const existingMessages = new Map(prev.messages?.map(m => [m.id, m]) ?? []);
-                  const newMessages = processedMessages.filter(m => !existingMessages.has(m.id));
-                  if (newMessages.length === 0) return prev;
-                  
-                  const mergedMessages = [...(prev.messages ?? []), ...newMessages]
-                    .sort((a, b) => a.sequence - b.sequence);
-                  
-                  const uniqueMessages = Array.from(
-                    new Map(mergedMessages.map(m => [m.id, m])).values()
-                  );
-                  
-                  return {
-                    ...prev,
-                    messages: uniqueMessages,
-                    updated_at: new Date().toISOString()
-                  };
-                });
+              if (message.type === SSEEventType.MESSAGES) {
+                const messages = validatedData.messages;
+                if (Array.isArray(messages) && messages.length > 0) {
+                  setCurrentSession(prev => {
+                    if (!prev || prev.id !== sessionId) return prev;
+                    
+                    const processedMessages = handleEncryptedFields(messages).map(m => ({
+                      ...m,
+                      id: m.id || `msg-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
+                      created_at: m.created_at || new Date().toISOString(),
+                    }));
+                    
+                    const existingMessages = new Map(prev.messages?.map(m => [m.id, m]) ?? []);
+                    const newMessages = processedMessages.filter(m => !existingMessages.has(m.id));
+                    if (newMessages.length === 0) return prev;
+                    
+                    const mergedMessages = [...(prev.messages ?? []), ...newMessages]
+                      .sort((a, b) => a.sequence - b.sequence);
+                    
+                    const uniqueMessages = Array.from(
+                      new Map(mergedMessages.map(m => [m.id, m])).values()
+                    );
+                    
+                    return {
+                      ...prev,
+                      messages: uniqueMessages,
+                      updated_at: new Date().toISOString()
+                    };
+                  });
+                }
               } else if (message.type === SSEEventType.CONNECTION_ESTABLISHED) {
                 handleConnectionStateChange(ConnectionStatus.CONNECTED);
               } else if (message.type === SSEEventType.ASSISTANT_CHUNK && typeof validatedData.text === 'string') {
@@ -136,22 +147,23 @@ export function useSSE(
                     };
                   }
                   
-                  const newMessage: Message = {
+                  const message: Message = {
                     id: `chunk-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
                     role: 'assistant',
                     content: { text: chunkText },
-                    sequence: (lastMessage?.sequence ?? 0) + 1
+                    sequence: prev.messages?.length ?? 0,
+                    created_at: new Date().toISOString(),
                   };
                   
                   return {
                     ...prev,
-                    messages: [...messages, newMessage],
+                    messages: [...messages, message],
                     updated_at: new Date().toISOString()
                   };
                 });
               }
-            } catch (err) {
-              console.error('Error processing SSE message:', err);
+            } catch (error) {
+              console.error('Error processing SSE message:', error);
             }
           },
           onError: async (error) => {
@@ -181,7 +193,6 @@ export function useSSE(
           }
         });
         
-        sseConnectionRef.current = connection;
         lastHeartbeatRef.current = Date.now();
         setError(null);
         

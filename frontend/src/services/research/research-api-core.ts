@@ -200,18 +200,39 @@ export function formatApiError(error: any, defaultMessage?: string): ApiError {
     }
   }
   
-  // Special handling for Perplexity API errors
-  if (error.message?.includes('Perplexity API') || error.details?.includes('Perplexity API')) {
-    if (error.message?.includes('rate limit') || error.details?.includes('rate limit')) {
-      formattedError.message = 'Perplexity API rate limit exceeded. Please try again later.';
-      formattedError.code = 'PERPLEXITY_RATE_LIMITED';
-    } else {
-      formattedError.message = 'An error occurred with the Perplexity API. Please try again later.';
-      formattedError.code = 'PERPLEXITY_ERROR';
+  return formattedError;
+}
+
+/**
+ * Handle encrypted fields in the response data
+ * @param data The response data to process
+ * @returns The processed data with decrypted fields
+ */
+export function handleEncryptedFields<T>(data: T): T {
+  if (!data || typeof data !== 'object') return data;
+
+  const processValue = (value: any): any => {
+    if (typeof value === 'string' && value.startsWith('[ENCRYPTED: ')) {
+      // Extract the actual value from the encrypted string
+      return value.substring(11, value.length - 1);
+    }
+    if (Array.isArray(value)) {
+      return value.map(item => handleEncryptedFields(item));
+    }
+    if (value && typeof value === 'object') {
+      return handleEncryptedFields(value);
+    }
+    return value;
+  };
+
+  const processed = { ...data };
+  for (const key in processed) {
+    if (Object.prototype.hasOwnProperty.call(processed, key)) {
+      processed[key] = processValue(processed[key]);
     }
   }
-  
-  return formattedError;
+
+  return processed;
 }
 
 /**
@@ -230,7 +251,7 @@ export async function handleApiError(response: Response): Promise<never> {
     const contentType = response.headers.get('content-type');
     if (contentType && contentType.includes('application/json')) {
       const json = await response.json();
-      errorData = { ...errorData, ...json };
+      errorData = handleEncryptedFields({ ...errorData, ...json });
     } else {
       errorData.details = await response.text();
     }

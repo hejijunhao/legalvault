@@ -9,10 +9,12 @@ import {
   QueryType 
 } from './research-api-types';
 import { 
+  getApiBaseUrl, 
   getAuthHeader, 
   fetchWithSelfSignedCert, 
   withRetry, 
-  handleApiError 
+  handleApiError,
+  handleEncryptedFields 
 } from './research-api-core';
 import { researchCache } from './research-cache';
 
@@ -67,7 +69,7 @@ export async function fetchSession(sessionId: string): Promise<ResearchSession> 
   // Check cache first
   const cachedSession = researchCache.getSession(sessionId);
   if (cachedSession) {
-    return cachedSession;
+    return handleEncryptedFields(cachedSession);
   }
   
   const headers = await getAuthHeader();
@@ -77,11 +79,9 @@ export async function fetchSession(sessionId: string): Promise<ResearchSession> 
   
   if (!response.ok) return handleApiError(response);
   const data = await response.json();
-  
-  // Cache the response
-  researchCache.setSession(data);
-  
-  return data;
+  const processedData = handleEncryptedFields(data);
+  researchCache.setSession(processedData);
+  return processedData;
 }
 
 /**
