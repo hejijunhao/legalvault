@@ -11,16 +11,18 @@ import {
   fetchWithSelfSignedCert, 
   withRetry, 
   handleApiError,
-  handleEncryptedFields 
+  handleEncryptedFields,
+  getApiBaseUrl
 } from './research-api-core';
 import { researchCache } from './research-cache';
 
 /**
  * Fetch a single message by ID
+ * @param searchId The ID of the search to fetch messages for
  * @param messageId The ID of the message to fetch
  * @returns The message
  */
-export async function fetchMessage(messageId: string): Promise<Message> {
+export async function fetchMessage(searchId: string, messageId: string): Promise<Message> {
   // Check cache first
   const cachedMessage = researchCache.getMessage(messageId);
   if (cachedMessage) {
@@ -29,13 +31,12 @@ export async function fetchMessage(messageId: string): Promise<Message> {
 
   const headers = await getAuthHeader();
   const response = await withRetry(() => 
-    fetchWithSelfSignedCert(`/api/research/messages/${messageId}`, { headers })
+    fetchWithSelfSignedCert(`${getApiBaseUrl()}/research/searches/${searchId}/messages/${messageId}`, { headers })
   );
   
   if (!response.ok) return handleApiError(response);
   const data = await response.json();
   const processedData = handleEncryptedFields(data);
-  // Cache the response
   researchCache.setMessage(processedData);
   
   return processedData;
@@ -49,23 +50,25 @@ export async function createMessage(
   message: {
     role: string;
     content: { text: string; citations?: Citation[] };
-    sequence?: number;
     status?: QueryStatus;
+    metadata?: Record<string, any>;
   }
 ): Promise<Message> {
   const headers = await getAuthHeader();
-  const response = await withRetry(() => 
-    fetchWithSelfSignedCert(`/api/research/messages/search/${searchId}`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(message)
-    })
+  const response = await withRetry(() =>
+    fetchWithSelfSignedCert(
+      `${getApiBaseUrl()}/research/searches/${searchId}/messages`,
+      {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify(message)
+      }
+    )
   );
-  
+
   if (!response.ok) return handleApiError(response);
   const data = await response.json();
   const processedData = handleEncryptedFields(data);
-  // Cache the new message
   researchCache.setMessage(processedData);
   
   // Invalidate message list cache for this search
@@ -88,124 +91,114 @@ export async function fetchMessagesForSearch(
   } | null
 ): Promise<MessageListResponse> {
   // Check cache first
-  const cachedMessages = researchCache.getMessageList(searchId, options);
+  const cachedMessages = researchCache.getMessageList(searchId);
   if (cachedMessages) {
     return handleEncryptedFields(cachedMessages);
   }
 
   const headers = await getAuthHeader();
-  
-  // Build query parameters
-  const params = new URLSearchParams();
-  if (options?.limit) params.append('limit', options.limit.toString());
-  if (options?.offset) params.append('offset', options.offset.toString());
-  
-  const queryString = params.toString() ? `?${params.toString()}` : '';
-  const response = await withRetry(() => 
-    fetchWithSelfSignedCert(`/api/research/messages/search/${searchId}${queryString}`, { headers })
+  const queryParams = new URLSearchParams();
+  if (options?.limit) queryParams.append('limit', options.limit.toString());
+  if (options?.offset) queryParams.append('offset', options.offset.toString());
+
+  const response = await withRetry(() =>
+    fetchWithSelfSignedCert(
+      `${getApiBaseUrl()}/research/searches/${searchId}/messages?${queryParams}`,
+      { headers }
+    )
   );
-  
+
   if (!response.ok) return handleApiError(response);
   const data = await response.json();
   const processedData = handleEncryptedFields(data);
-  // Cache the response
-  researchCache.setMessageList(searchId, processedData, options);
+  researchCache.setMessageList(searchId, processedData);
   
   return processedData;
 }
 
 /**
  * Update a message
+ * @param searchId The ID of the search to update messages for
  * @param messageId The ID of the message to update
  * @param data The updates to apply
  * @returns The updated message
  */
 export async function updateMessage(
+  searchId: string,
   messageId: string,
   data: Partial<Message>
 ): Promise<Message> {
   const headers = await getAuthHeader();
   const response = await withRetry(() =>
-    fetchWithSelfSignedCert(`/api/research/messages/${messageId}/`, {
-      method: 'PATCH',
-      headers,
-      body: JSON.stringify(data)
-    })
+    fetchWithSelfSignedCert(
+      `${getApiBaseUrl()}/research/searches/${searchId}/messages/${messageId}`,
+      {
+        method: 'PATCH',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      }
+    )
   );
-  
+
   if (!response.ok) return handleApiError(response);
   const responseData = await response.json();
   const processedData = handleEncryptedFields(responseData);
-  
-  // Cache the updated message
   researchCache.setMessage(processedData);
   
   // Invalidate message list cache if we have the search_id
-  const searchId = (processedData as Message).search_id;
-  if (searchId) {
-    researchCache.invalidateMessageList(searchId);
-  }
+  researchCache.invalidateMessageList(searchId);
   
   return processedData;
 }
 
 /**
  * Delete a message
+ * @param searchId The ID of the search to delete messages for
  * @param messageId The ID of the message to delete
- * @param searchId Optional search ID if known, to avoid extra API call
  */
-export async function deleteMessage(messageId: string, searchId?: string): Promise<void> {
+export async function deleteMessage(searchId: string, messageId: string): Promise<void> {
   const headers = await getAuthHeader();
-  
-  // If searchId wasn't provided, try to get it from the message
-  if (!searchId) {
-    try {
-      const message = await fetchMessage(messageId);
-      searchId = message.search_id;
-    } catch (error) {
-      console.error('Failed to fetch message before deletion:', error);
-    }
-  }
-  
-  const response = await withRetry(() => 
-    fetchWithSelfSignedCert(`/api/research/messages/${messageId}`, {
-      method: 'DELETE',
-      headers
-    })
+  const response = await withRetry(() =>
+    fetchWithSelfSignedCert(
+      `${getApiBaseUrl()}/research/searches/${searchId}/messages/${messageId}`,
+      {
+        method: 'DELETE',
+        headers
+      }
+    )
   );
-  
+
   if (!response.ok) return handleApiError(response);
-  
-  // Remove from cache
   researchCache.deleteMessage(messageId);
-  
-  // Invalidate message list cache if we have the search_id
-  if (searchId) {
-    researchCache.invalidateMessageList(searchId);
-  }
+  researchCache.invalidateMessageList(searchId);
 }
 
 /**
  * Forward a message
-     * @param messageId The ID of the message to forward
-     * @param destination The destination to forward the message to
-     * @param destinationType The type of destination (email, user, workspace)
+ * @param searchId The ID of the search to forward messages for
+ * @param messageId The ID of the message to forward
+ * @param destination The destination to forward the message to
+ * @param destinationType The type of destination (email, user, workspace)
  */
 export async function forwardMessage(
+  searchId: string,
   messageId: string,
   destination: string,
   destinationType: 'email' | 'user' | 'workspace'
 ): Promise<any> {
   const headers = await getAuthHeader();
   const response = await withRetry(() => 
-    fetchWithSelfSignedCert(`/api/research/messages/${messageId}/forward`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        destination,
-        destination_type: destinationType
-      })
-    })
+    fetchWithSelfSignedCert(
+      `${getApiBaseUrl()}/research/searches/${searchId}/messages/${messageId}/forward`,
+      {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          destination,
+          destination_type: destinationType
+        })
+      }
+    )
   );
   
   if (!response.ok) return handleApiError(response);

@@ -212,7 +212,7 @@ export function useSSE(
     };
     
     await attemptConnection();
-  }, [sessionId, setCurrentSession, setError, connectionMetrics.messageCount, connectionMetrics.reconnectAttempts]);
+  }, [sessionId, setCurrentSession, setError, connectionMetrics.messageCount]);
 
   const disconnectStream = useCallback(() => {
     if (sseConnectionRef.current) {
@@ -220,36 +220,36 @@ export function useSSE(
       sseConnectionRef.current = null;
       setIsConnected(false);
       lastHeartbeatRef.current = null;
+      setConnectionStatus(ConnectionStatus.DISCONNECTED);
     }
   }, []);
 
+  // Establish connection on mount and reconnect on sessionId change
   useEffect(() => {
-    return () => disconnectStream();
-  }, [disconnectStream]);
+    console.log('Initializing SSE connection for session:', sessionId);
+    connectToStream();
 
+    // Cleanup on unmount or sessionId change
+    return () => {
+      console.log('Cleaning up SSE connection');
+      disconnectStream();
+    };
+  }, [sessionId, connectToStream, disconnectStream]);
+
+  // Monitor connection health
   useEffect(() => {
-    if (!isConnected || !lastHeartbeatRef.current) return;
+    if (!isConnected) return;
 
-    const intervalId = setInterval(() => {
-      const now = Date.now();
-      if (now - lastHeartbeatRef.current! > 30000) {
-        console.warn('No heartbeat received for 30 seconds, initiating reconnection');
-        setError({
-          message: 'Connection stale',
-          details: 'No heartbeat received from server. Attempting to reconnect...',
-          code: 'STALE_CONNECTION'
-        });
-        disconnectStream();
-        if (sessionId) {
-          connectToStream().catch(error => {
-            console.error('Failed to reconnect after stale connection:', error);
-          });
-        }
+    const healthCheck = setInterval(() => {
+      const lastHeartbeat = lastHeartbeatRef.current;
+      if (lastHeartbeat && Date.now() - lastHeartbeat > 35000) {
+        console.log('No heartbeat received, reconnecting...');
+        connectToStream();
       }
     }, 5000);
 
-    return () => clearInterval(intervalId);
-  }, [isConnected, sessionId, connectToStream, disconnectStream, setError]);
+    return () => clearInterval(healthCheck);
+  }, [isConnected, connectToStream]);
 
   return {
     isConnected,

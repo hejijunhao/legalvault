@@ -1,77 +1,7 @@
 // src/services/research/research-api-sse.ts
 
 import { getApiBaseUrl, getAuthHeader } from "./research-api-core";
-import { SSEConnection, SSEOptions, ConnectionStatus } from "./research-api-types";
-
-/**
- * Custom EventSource class that supports headers
- */
-class HeaderSupportingEventSource extends EventTarget {
-  private url: string;
-  private headers: Record<string, string>;
-  private eventSource: EventSource | null = null;
-  private reconnectTimeout: number = 1000;
-  private maxReconnectAttempts: number = 5;
-  private reconnectAttempts: number = 0;
-
-  constructor(url: string, headers: Record<string, string>) {
-    super();
-    this.url = this.addAuthHeader(url, headers.Authorization);
-    this.headers = headers;
-    this.connect();
-  }
-
-  private addAuthHeader(url: string, authHeader: string): string {
-    const urlObj = new URL(url);
-    const token = authHeader.replace('Bearer ', '');
-    urlObj.searchParams.append('token', token);
-    return urlObj.toString();
-  }
-
-  private connect() {
-    this.eventSource = new EventSource(this.url);
-
-    this.eventSource.onopen = () => {
-      this.reconnectAttempts = 0;
-      this.dispatchEvent(new Event('open'));
-    };
-
-    this.eventSource.onmessage = (event) => {
-      this.dispatchEvent(new MessageEvent('message', { data: event.data }));
-    };
-
-    this.eventSource.onerror = (event) => {
-      this.dispatchEvent(new Event('error'));
-      this.eventSource?.close();
-      
-      if (this.reconnectAttempts < this.maxReconnectAttempts) {
-        setTimeout(() => {
-          this.reconnectAttempts++;
-          this.connect();
-        }, this.reconnectTimeout);
-      }
-    };
-
-    // Forward other events
-    ['connected', 'heartbeat'].forEach(eventName => {
-      this.eventSource?.addEventListener(eventName, (event: Event) => {
-        this.dispatchEvent(new Event(eventName));
-      });
-    });
-  }
-
-  close() {
-    this.eventSource?.close();
-  }
-
-  addEventListener(type: string, listener: EventListener) {
-    super.addEventListener(type, listener);
-  }
-
-  removeEventListener(type: string, listener: EventListener) {
-    super.removeEventListener(type, listener);
-  }
-}
+import { SSEConnection, SSEOptions, ConnectionStatus, SSEEventType } from "./research-api-types";
 
 /**
  * Establishes an SSE connection for real-time message updates
@@ -83,46 +13,60 @@ export async function connectToSSE(
   searchId: string,
   options: SSEOptions
 ): Promise<SSEConnection> {
-  const { onMessage, onError, onConnectionChange } = options;
+  const { onMessage, onError = console.error, onConnectionChange = () => {} } = options;
 
   // Get auth header
   const headers = await getAuthHeader();
-  if (!headers.Authorization) {
+  const token = headers.Authorization?.replace('Bearer ', '');
+  if (!token) {
     throw new Error('No authentication token found');
   }
 
-  // Create EventSource with auth header
-  const url = `${getApiBaseUrl()}/research/searches/${searchId}/stream`;
-  const eventSource = new HeaderSupportingEventSource(url, headers);
+  // Create EventSource with auth token in URL
+  const baseUrl = `${getApiBaseUrl()}/research/searches/${searchId}/stream?token=${token}`;
+  console.log('Connecting to SSE URL:', baseUrl);
+  const eventSource = new EventSource(baseUrl);
 
   let connected = false;
 
-  eventSource.addEventListener('open', () => {
+  eventSource.onopen = () => {
+    connected = true;
+    onConnectionChange(ConnectionStatus.CONNECTED);
+  };
+
+  // Handle specific event types
+  eventSource.addEventListener('connected', () => {
     connected = true;
     onConnectionChange(ConnectionStatus.CONNECTED);
   });
 
-  eventSource.addEventListener('message', (event: Event) => {
+  eventSource.addEventListener('messages', (event) => {
     try {
-      const messages = JSON.parse((event as MessageEvent).data);
-      onMessage(messages);
+      const data = JSON.parse(event.data);
+      onMessage({
+        type: SSEEventType.MESSAGES,
+        data
+      });
     } catch (error) {
       onError(error as Error);
     }
   });
 
-  eventSource.addEventListener('error', () => {
+  eventSource.addEventListener('heartbeat', () => {
+    onMessage({
+      type: SSEEventType.HEARTBEAT,
+      data: {}
+    });
+  });
+
+  eventSource.addEventListener('error', (event) => {
     connected = false;
     onConnectionChange(ConnectionStatus.ERROR);
     onError(new Error('SSE connection error'));
   });
 
-  eventSource.addEventListener('heartbeat', () => {
-    // Connection is alive
-  });
-
   return {
-    close: () => {
+    disconnect: () => {
       eventSource.close();
       connected = false;
       onConnectionChange(ConnectionStatus.DISCONNECTED);

@@ -9,20 +9,20 @@ import { ApiError } from "./research-api-types";
 export function getApiBaseUrl(): string {
   // In development, default to localhost:8000 if no API URL is provided
   if (process.env.NODE_ENV === 'development') {
-    return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    return (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000') + '/api/v1';
   }
   
   // In production, use the provided API URL or current origin
   const apiUrl = process.env.NEXT_PUBLIC_API_URL;
   if (apiUrl) {
-    // Ensure the URL doesn't have a trailing slash
-    return apiUrl.endsWith('/') ? apiUrl.slice(0, -1) : apiUrl;
+    // Ensure the URL doesn't have a trailing slash and add /api/v1
+    return (apiUrl.endsWith('/') ? apiUrl.slice(0, -1) : apiUrl) + '/api/v1';
   }
   
   // Fallback to current origin (should only happen in production)
   const origin = window.location.origin;
   console.warn(`No NEXT_PUBLIC_API_URL provided, falling back to current origin: ${origin}`);
-  return origin;
+  return origin + '/api/v1';
 }
 
 /**
@@ -134,6 +134,20 @@ export async function fetchWithSelfSignedCert(
   }
 }
 
+// API configuration constants
+export const API_CONFIG = {
+  RATE_LIMIT: {
+    MAX_REQUESTS: 100,
+    PERIOD: 60,
+    BACKOFF_BASE: 2,
+    MAX_RETRIES: 3
+  },
+  CACHE: {
+    TTL: 300,  // 5 minutes
+    REFRESH_THRESHOLD: 240  // 4 minutes
+  }
+};
+
 /**
  * Retry a function with exponential backoff
  * @param fn The function to retry
@@ -143,8 +157,12 @@ export async function fetchWithSelfSignedCert(
  */
 export async function withRetry<T>(
   fn: () => Promise<T>,
-  maxRetries: number = 3,
-  shouldRetry: (error: any, retryCount: number) => boolean = () => true
+  maxRetries: number = API_CONFIG.RATE_LIMIT.MAX_RETRIES,
+  shouldRetry: (error: any, retryCount: number) => boolean = (error) => {
+    return error?.status === 429 || 
+           error?.code === 'RATE_LIMITED' || 
+           error?.code === 'PERPLEXITY_RATE_LIMITED';
+  }
 ): Promise<T> {
   let retryCount = 0;
   
@@ -158,9 +176,10 @@ export async function withRetry<T>(
         throw error;
       }
       
-      // Exponential backoff
-      const delay = Math.pow(2, retryCount) * 1000;
-      await new Promise(resolve => setTimeout(resolve, delay));
+      // Exponential backoff with jitter
+      const baseDelay = Math.pow(API_CONFIG.RATE_LIMIT.BACKOFF_BASE, retryCount) * 1000;
+      const jitter = Math.random() * 1000;
+      await new Promise(resolve => setTimeout(resolve, baseDelay + jitter));
     }
   }
 }

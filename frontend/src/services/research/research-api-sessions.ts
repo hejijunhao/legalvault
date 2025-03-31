@@ -47,7 +47,7 @@ export async function fetchSessions(
   if (options?.offset) params.append('offset', options.offset.toString());
   
   const queryString = params.toString() ? `?${params.toString()}` : '';
-  const url = `/api/research/searches/${queryString}`;
+  const url = `${getApiBaseUrl()}/research/searches${queryString}`;
   
   const response = await withRetry(() => fetchWithSelfSignedCert(url, { headers }));
   
@@ -74,7 +74,7 @@ export async function fetchSession(sessionId: string): Promise<ResearchSession> 
   
   const headers = await getAuthHeader();
   const response = await withRetry(() => 
-    fetchWithSelfSignedCert(`/api/research/searches/${sessionId}/`, { headers })
+    fetchWithSelfSignedCert(`${getApiBaseUrl()}/research/searches/${sessionId}/`, { headers })
   );
   
   if (!response.ok) return handleApiError(response);
@@ -95,7 +95,7 @@ export async function createNewSession(
   searchParams?: SearchParams
 ): Promise<ResearchSession> {
   const headers = await getAuthHeader();
-  const response = await withRetry(() => fetchWithSelfSignedCert('/api/research/searches/', {
+  const response = await withRetry(() => fetchWithSelfSignedCert(`${getApiBaseUrl()}/research/searches/`, {
     method: 'POST',
     headers,
     body: JSON.stringify({
@@ -128,7 +128,7 @@ export async function sendSessionMessage(
 ): Promise<ResearchSession> {
   const headers = await getAuthHeader();
   const response = await withRetry(
-    () => fetchWithSelfSignedCert(`/api/research/searches/${sessionId}/messages/`, {
+    () => fetchWithSelfSignedCert(`${getApiBaseUrl()}/research/searches/${sessionId}/messages/`, {
       method: 'POST',
       headers,
       body: JSON.stringify({ content: { text: content } })
@@ -177,7 +177,7 @@ export async function continueSession(
 ): Promise<ResearchSession> {
   const headers = await getAuthHeader();
   const response = await withRetry(
-    () => fetchWithSelfSignedCert(`/api/research/searches/${sessionId}/continue`, {
+    () => fetchWithSelfSignedCert(`${getApiBaseUrl()}/research/searches/${sessionId}/continue`, {
       method: 'POST',
       headers,
       body: JSON.stringify({
@@ -231,7 +231,7 @@ export async function updateSessionMetadata(
   }
 ): Promise<ResearchSession> {
   const headers = await getAuthHeader();
-  const response = await withRetry(() => fetchWithSelfSignedCert(`/api/research/searches/${sessionId}/`, {
+  const response = await withRetry(() => fetchWithSelfSignedCert(`${getApiBaseUrl()}/research/searches/${sessionId}/`, {
     method: 'PATCH',
     headers,
     body: JSON.stringify(updates)
@@ -255,7 +255,7 @@ export async function updateSessionMetadata(
  */
 export async function deleteSession(sessionId: string): Promise<void> {
   const headers = await getAuthHeader();
-  const response = await withRetry(() => fetchWithSelfSignedCert(`/api/research/searches/${sessionId}/`, {
+  const response = await withRetry(() => fetchWithSelfSignedCert(`${getApiBaseUrl()}/research/searches/${sessionId}/`, {
     method: 'DELETE',
     headers
   }));
