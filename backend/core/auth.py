@@ -1,205 +1,186 @@
 # core/auth.py
 
-from typing import List, Optional
+import logging
+import json
+from typing import List, Optional, Union, Dict, Any
 from uuid import UUID
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text
 from models.database.auth_user import AuthUser
 from models.database.user import User
 from models.schemas.auth.token import TokenData
 from models.domain.user_operations import UserOperations
 from core.database import get_db, async_session_factory
 import jwt
-from sqlalchemy import text
+
+logger = logging.getLogger(__name__)
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 async def get_current_user(
-    token: str = Depends(oauth2_scheme), 
+    token: Union[str, Depends] = Depends(oauth2_scheme), 
     session: AsyncSession = Depends(get_db)
 ) -> User:
     """
     Validate the access token and return the current user.
-    """
-    print(f"\n\n===== Authentication Debug =====\nReceived token: {token[:10]}...")
+    Supports both HTTP Bearer auth and WebSocket token authentication.
     
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-    
-    # Decode token
-    user_ops = UserOperations(session)
-    token_data = await user_ops.decode_token(token)
-    
-    print(f"Token data after decoding: {token_data}")
-    
-    if token_data is None:
-        print("Token data is None, raising credentials exception")
-        raise credentials_exception
+    Args:
+        token: Either a direct token string (WebSocket) or OAuth2 dependency result (HTTP)
+        session: Database session for user lookup
         
-    # Get user from database using direct SQL to avoid relationship loading issues
-    
-    # Create a safe string representation of the UUID
-    # UUIDs have a fixed format and come from a validated token, so this is safe from SQL injection
-    user_id_str = str(token_data.user_id)
-    
-    # Create a query with the UUID as a string literal with proper type casting
-    query = text(f"""
-        SELECT id, auth_user_id, first_name, last_name, name, role, email, virtual_paralegal_id, enterprise_id, created_at, updated_at
-        FROM public.users WHERE auth_user_id = '{user_id_str}'::UUID
-    """).execution_options(
-        no_parameters=True,  # Required for pgBouncer compatibility
-        use_server_side_cursors=False  # Disable server-side cursors
-    )
-    
-    print(f"Looking up user with auth_user_id: {token_data.user_id}")
+    Returns:
+        User: Authenticated user object with internal user ID
+        
+    Raises:
+        HTTPException: If token is invalid, expired, or user not found
+        
+    Note:
+        For WebSocket connections, pass the token directly as a string.
+        For HTTP endpoints, the token is automatically extracted from the Authorization header.
+    """
+    logger.info("===== Authentication Debug =====")
     
     try:
-        # Execute without parameters since they're already embedded in the query
+        # Handle both direct token strings (WebSocket) and Depends(oauth2_scheme) (HTTP)
+        actual_token = token if isinstance(token, str) else await token
+        logger.info(f"Received token: {actual_token[:10]}...")
+        
+        # Decode token
+        user_ops = UserOperations(session)
+        token_data = await user_ops.decode_token(actual_token)
+        
+        if token_data is None:
+            logger.info("Authentication failed: Invalid or expired token")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication failed: Invalid or expired token",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        # Get user from database using direct SQL to avoid prepared statements
+        user_id_str = str(token_data.user_id)
+        
+        # Using string formatting for the query to work around pgBouncer limitations
+        query = text(f"""
+            SELECT id, auth_user_id, first_name, last_name, name, role, email, 
+                   virtual_paralegal_id, enterprise_id, created_at, updated_at
+            FROM public.users WHERE auth_user_id = '{user_id_str}'::UUID
+        """).execution_options(
+            no_parameters=True,
+            use_server_side_cursors=False
+        )
+        
+        logger.info(f"Looking up user with auth_user_id: {token_data.user_id}")
+        
         result = await session.execute(query)
         user_row = result.fetchone()
         
         if not user_row:
-            print(f"No user found with auth_user_id: {token_data.user_id}")
-            raise credentials_exception
-            
-        print(f"Found user: {user_row[6]} (ID: {user_row[0]})")
+            logger.info(f"No user found with auth_user_id: {token_data.user_id}")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication failed: User not found",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        logger.info(f"Found user: {user_row.email} (ID: {user_row.id})")
         
         # Create a User object from the row data
         user = User(
-            id=user_row[0],
-            auth_user_id=user_row[1],
-            first_name=user_row[2],
-            last_name=user_row[3],
-            name=user_row[4],
-            role=user_row[5],
-            email=user_row[6],
-            virtual_paralegal_id=user_row[7],
-            enterprise_id=user_row[8],
-            created_at=user_row[9],
-            updated_at=user_row[10]
+            id=user_row.id,
+            auth_user_id=user_row.auth_user_id,
+            first_name=user_row.first_name,
+            last_name=user_row.last_name,
+            name=user_row.name,
+            role=user_row.role,
+            email=user_row.email,
+            virtual_paralegal_id=user_row.virtual_paralegal_id,
+            enterprise_id=user_row.enterprise_id,
+            created_at=user_row.created_at,
+            updated_at=user_row.updated_at
         )
         
         return user
+    except jwt.ExpiredSignatureError:
+        logger.info("Authentication failed: Token expired")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication failed: Token expired",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     except Exception as e:
         error_message = str(e).lower()
-        # Check for pgBouncer-related errors
         if ("prepared statement" in error_message or 
             "duplicatepreparedstatementerror" in error_message or 
             "invalidsqlstatementnameerror" in error_message):
-            print(f"pgBouncer error encountered: {e}. Attempting with a fresh session...")
-            # Close the current session
-            await session.close()
-            
-            # Create a fresh session directly instead of using get_db() as a context manager
-            fresh_session = async_session_factory()
+            logger.info(f"pgBouncer error encountered: {e}. Attempting with a fresh session...")
             try:
-                # Execute the test query to ensure connection is valid
+                # Create a fresh session
+                fresh_session = async_session_factory()
+                
+                # Run a test query first
                 test_query = text("SELECT 1").execution_options(
                     no_parameters=True, 
                     use_server_side_cursors=False
                 )
                 await fresh_session.execute(test_query)
                 
-                # Create a completely new query with the fresh session
-                # Use a parameterized query with execution_options instead of string interpolation
-                fresh_query = text("""
-                    SELECT id, auth_user_id, first_name, last_name, name, role, email, virtual_paralegal_id, enterprise_id, created_at, updated_at
-                    FROM public.users WHERE auth_user_id = :auth_user_id
+                # Use a direct SQL query with string formatting to avoid prepared statements
+                fresh_query = text(f"""
+                    SELECT id, auth_user_id, first_name, last_name, name, role, email, 
+                           virtual_paralegal_id, enterprise_id, created_at, updated_at
+                    FROM public.users WHERE auth_user_id = '{user_id_str}'::UUID
                 """).execution_options(
-                    no_parameters=True,  # Required for pgBouncer compatibility
-                    use_server_side_cursors=False  # Disable server-side cursors
+                    no_parameters=True,
+                    use_server_side_cursors=False
                 )
                 
-                # Execute the fresh query
-                # Convert the UUID string back to a UUID object for the parameter
-                result = await fresh_session.execute(fresh_query, {"auth_user_id": UUID(user_id_str)})
+                result = await fresh_session.execute(fresh_query)
                 user_row = result.fetchone()
                 
                 if not user_row:
-                    print(f"No user found with auth_user_id: {token_data.user_id}")
-                    raise credentials_exception
+                    logger.info(f"No user found with auth_user_id: {token_data.user_id}")
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="Authentication failed: User not found",
+                        headers={"WWW-Authenticate": "Bearer"},
+                    )
                 
-                print(f"Retry successful: Found user: {user_row[6]} (ID: {user_row[0]})")
+                logger.info(f"Retry successful: Found user: {user_row.email} (ID: {user_row.id})")
                 
-                # Create a User object from the row data
                 user = User(
-                    id=user_row[0],
-                    auth_user_id=user_row[1],
-                    first_name=user_row[2],
-                    last_name=user_row[3],
-                    name=user_row[4],
-                    role=user_row[5],
-                    email=user_row[6],
-                    virtual_paralegal_id=user_row[7],
-                    enterprise_id=user_row[8],
-                    created_at=user_row[9],
-                    updated_at=user_row[10]
+                    id=user_row.id,
+                    auth_user_id=user_row.auth_user_id,
+                    first_name=user_row.first_name,
+                    last_name=user_row.last_name,
+                    name=user_row.name,
+                    role=user_row.role,
+                    email=user_row.email,
+                    virtual_paralegal_id=user_row.virtual_paralegal_id,
+                    enterprise_id=user_row.enterprise_id,
+                    created_at=user_row.created_at,
+                    updated_at=user_row.updated_at
                 )
+                
+                # Close fresh session
+                await fresh_session.close()
                 
                 return user
             except Exception as retry_error:
-                print(f"Retry also failed: {retry_error}")
-                # If the retry error is also a prepared statement error, try one more approach
-                if ("prepared statement" in str(retry_error).lower() or 
-                    "duplicatepreparedstatementerror" in str(retry_error).lower() or 
-                    "invalidsqlstatementnameerror" in str(retry_error).lower()):
-                    try:
-                        # Try a final approach with a completely raw query and no parameters at all
-                        final_query = text(f"""
-                            SELECT id, auth_user_id, first_name, last_name, name, role, email, virtual_paralegal_id, enterprise_id, created_at, updated_at
-                            FROM public.users WHERE auth_user_id = '{user_id_str}'::UUID
-                        """).execution_options(
-                            no_parameters=True,
-                            use_server_side_cursors=False
-                        )
-                        result = await fresh_session.execute(final_query)
-                        user_row = result.fetchone()
-                        
-                        if not user_row:
-                            print(f"No user found with auth_user_id: {token_data.user_id}")
-                            raise credentials_exception
-                        
-                        print(f"Final retry successful: Found user: {user_row[6]} (ID: {user_row[0]})")
-                        
-                        # Create a User object from the row data
-                        user = User(
-                            id=user_row[0],
-                            auth_user_id=user_row[1],
-                            first_name=user_row[2],
-                            last_name=user_row[3],
-                            name=user_row[4],
-                            role=user_row[5],
-                            email=user_row[6],
-                            virtual_paralegal_id=user_row[7],
-                            enterprise_id=user_row[8],
-                            created_at=user_row[9],
-                            updated_at=user_row[10]
-                        )
-                        
-                        return user
-                    except Exception as final_error:
-                        print(f"Final retry also failed: {final_error}")
-                        raise HTTPException(
-                            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                            detail=f"Database connection error after multiple retries: {final_error}"
-                        )
-                else:
-                    raise HTTPException(
-                        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                        detail=f"Database connection error: {retry_error}"
-                    )
-            finally:
-                # Always close the fresh session
-                await fresh_session.close()
+                logger.error(f"Retry also failed: {retry_error}")
+                
+                if 'fresh_session' in locals() and fresh_session:
+                    await fresh_session.close()
+                
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail=f"Database connection error: {retry_error}"
+                )
         else:
-            # For non-pgBouncer errors, log and raise appropriate exception
-            print(f"Error getting user: {e}")
-            if "no user found" in error_message:
-                raise credentials_exception
+            logger.error(f"Error getting user: {e}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Error retrieving user: {e}"
@@ -211,13 +192,11 @@ async def get_user_permissions(
     """
     Get permissions for the current user based on their role.
     """
-    # Simple role-based permissions
     role_permissions = {
         "lawyer": ["read:all", "write:own"],
         "admin": ["read:all", "write:all", "admin:all"],
         "paralegal": ["read:all", "write:limited"],
     }
-    
     return role_permissions.get(user.role, [])
 
 async def require_admin(user: User = Depends(get_current_user)):
@@ -235,8 +214,6 @@ async def require_super_admin(user: User = Depends(get_current_user)):
     """
     Require the user to have super_admin role.
     """
-    # This would typically check the auth_user.is_super_admin flag
-    # For now, we'll just check the role
     if user.role != "super_admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

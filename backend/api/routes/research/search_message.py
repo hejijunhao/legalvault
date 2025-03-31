@@ -6,8 +6,9 @@ import asyncio
 from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime
+import logging
 
-from core.database import get_db
+from core.database import get_db, get_session_db  # Import get_session_db directly
 from core.auth import get_current_user, get_user_permissions
 from models.domain.research.search_operations import ResearchOperations
 from models.domain.research.search_message_operations import SearchMessageOperations
@@ -28,6 +29,7 @@ from models.dtos.research.search_message_dto import (
     SearchMessageListDTO
 )
 
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/research/messages",
@@ -97,7 +99,6 @@ async def get_message(
     if not message:
         raise HTTPException(status_code=404, detail="Message not found")
     
-    # Verify user has access to the search this message belongs to
     search_ops = ResearchOperations(db)
     search = await search_ops.get_search_by_id(
         message.search_id,
@@ -117,12 +118,7 @@ async def list_messages(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    List all messages for a specific search with pagination.
-    
-    Returns messages in sequence order (oldest first).
-    """
-    # Verify user has access to the search
+    """List all messages for a specific search with pagination."""
     search_ops = ResearchOperations(db)
     search = await search_ops.get_search_by_id(
         search_id,
@@ -132,7 +128,6 @@ async def list_messages(
     if not search or search.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Access denied")
     
-    # Get messages with pagination
     message_ops = SearchMessageOperations(db)
     messages = await message_ops.get_messages_list_response(
         search_id, 
@@ -151,7 +146,6 @@ async def create_message(
     db: AsyncSession = Depends(get_db)
 ):
     """Create a new message in a search."""
-    # Verify user has access to the search
     search_ops = ResearchOperations(db)
     search = await search_ops.get_search_by_id(
         search_id,
@@ -161,7 +155,6 @@ async def create_message(
     if not search or search.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Access denied")
     
-    # Create message
     message_ops = SearchMessageOperations(db)
     message_dto = SearchMessageCreateDTO(
         search_id=search_id,
@@ -188,12 +181,7 @@ async def update_message(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    Update a message's content.
-    
-    Note: This should generally be limited to user messages, not assistant responses.
-    """
-    # Verify message exists and user has access
+    """Update a message's content."""
     message_ops = SearchMessageOperations(db)
     message = await message_ops.get_message_by_id(
         message_id,
@@ -203,7 +191,6 @@ async def update_message(
     if not message:
         raise HTTPException(status_code=404, detail="Message not found")
     
-    # Verify user has access to the search this message belongs to
     search_ops = ResearchOperations(db)
     search = await search_ops.get_search_by_id(
         message.search_id,
@@ -213,14 +200,9 @@ async def update_message(
     if not search or search.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Access denied")
     
-    # Only allow updating user messages, not assistant responses
     if message.role != "user":
-        raise HTTPException(
-            status_code=403,
-            detail="Cannot update assistant messages"
-        )
+        raise HTTPException(status_code=403, detail="Cannot update assistant messages")
     
-    # Create update DTO and perform update
     update_dto = SearchMessageUpdateDTO(**data.model_dump(exclude_unset=True))
     success = await message_ops.update_message(
         message_id,
@@ -231,7 +213,6 @@ async def update_message(
     if not success:
         raise HTTPException(status_code=500, detail="Failed to update message")
     
-    # Return updated message
     updated_message = await message_ops.get_message_by_id(
         message_id,
         execution_options={"no_parameters": True, "use_server_side_cursors": False}
@@ -244,19 +225,13 @@ async def delete_message(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    Delete a specific message.
-    
-    Note: This should be used with caution as it may break conversation flow.
-    """
-    # Verify message exists
+    """Delete a specific message."""
     message_ops = SearchMessageOperations(db)
     message = await message_ops.get_message_by_id(message_id)
     
     if not message:
         raise HTTPException(status_code=404, detail="Message not found")
     
-    # Verify user has access to the search this message belongs to
     search_ops = ResearchOperations(db)
     search = await search_ops.get_search_by_id(
         message.search_id,
@@ -266,7 +241,6 @@ async def delete_message(
     if not search or search.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Access denied")
     
-    # Delete the message
     success = await message_ops.delete_message(
         message_id,
         execution_options={"no_parameters": True, "use_server_side_cursors": False}
@@ -277,94 +251,74 @@ async def delete_message(
     
     return None
 
-
-# WebSocket for real-time message updates
 @router.websocket("/ws/{search_id}")
 async def websocket_endpoint(
     websocket: WebSocket, 
     search_id: UUID, 
-    token: str = Query(..., description="Authentication token"),
-    db: AsyncSession = Depends(get_db)
+    token: str = Query(..., description="Authentication token")
 ):
     """
     WebSocket endpoint for real-time message updates.
     
     Allows clients to receive updates when new messages are added to a search.
-    Authentication is handled via token in the query parameters.
+    Authentication is handled via get_current_user for consistency with HTTP endpoints.
+    Uses short-lived sessions for each operation, compatible with transaction pooling.
     
     Features:
+    - Authentication via get_current_user with proper error handling
     - Heartbeat mechanism to detect stale connections
     - Command-based interaction (subscribe, get_latest, typing, ping)
-    - Authentication via token
+    - Short-lived database sessions for each operation
+    - Specific WebSocket close codes for different error scenarios
     """
     try:
-        print(f"WebSocket connection attempt for search {search_id}")
+        logger.info(f"WebSocket connection attempt for search {search_id}")
         await websocket.accept()
-        print(f"WebSocket connection accepted for search {search_id}")
+        logger.info(f"WebSocket connection accepted for search {search_id}")
         
-        # Authenticate user from token
-        try:
-            user_ops = UserOperations(db)
-            token_data = await user_ops.decode_token(token)
-            if not token_data:
-                print("WebSocket authentication failed: Invalid token")
+        # Authenticate user using get_current_user with a short-lived session
+        async with get_session_db() as db:
+            try:
+                current_user = await get_current_user(token, db)
+                logger.info(f"WebSocket authenticated for user {current_user.id}")
+            except HTTPException as e:
+                logger.info(f"WebSocket authentication failed: {e.detail}")
                 await websocket.send_json({
                     "type": "error",
-                    "message": "Authentication failed: Invalid or expired token"
+                    "message": e.detail
                 })
                 await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                 return
-            user_id = token_data.user_id
-            print(f"WebSocket authenticated for user {user_id}")
-        except Exception as e:
-            print(f"WebSocket authentication error: {str(e)}")
-            await websocket.send_json({
-                "type": "error",
-                "message": "Authentication error"
-            })
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-            return
         
-        # Verify user has access to the search
-        search_ops = ResearchOperations(db)
-        try:
-            # Add execution_options for pgBouncer compatibility
+        # Verify user has access to the search with a new session
+        async with get_session_db() as db:
+            search_ops = ResearchOperations(db)
             search = await search_ops.get_search_by_id(
                 search_id,
                 execution_options={"no_parameters": True, "use_server_side_cursors": False}
             )
             
-            # Check if search is an error dictionary
-            if isinstance(search, dict) and "error" in search:
-                print(f"WebSocket error: {search['error']}")
+            if not search:
+                logger.info(f"Search {search_id} not found")
                 await websocket.send_json({
                     "type": "error",
-                    "message": f"Search error: {search['error']}"
+                    "message": "Search not found"
                 })
                 await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                 return
             
-            # Now we know search is a SearchDTO object, check user access
-            if not search or search.user_id != user_id:
-                print(f"WebSocket access denied: User {user_id} does not have access to search {search_id}")
+            if search.user_id != current_user.id:
+                logger.info(f"Access denied: User {current_user.id} does not have access to search {search_id}")
                 await websocket.send_json({
                     "type": "error",
                     "message": "Access denied: You do not have permission to access this search"
                 })
                 await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                 return
-            
-            print(f"WebSocket access granted: User {user_id} has access to search {search_id}")
-        except Exception as e:
-            print(f"WebSocket error verifying search access: {e}")
-            await websocket.send_json({
-                "type": "error",
-                "message": "Failed to verify search access"
-            })
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-            return
         
-        # Send initial message
+        logger.info(f"Access granted for search {search_id}")
+        
+        # Send initial success message
         await websocket.send_json({
             "type": "connection_established",
             "search_id": str(search_id),
@@ -375,100 +329,70 @@ async def websocket_endpoint(
         heartbeat_interval = 30  # seconds
         last_heartbeat = asyncio.get_event_loop().time()
         
-        # Set up subscription for message updates
-        # This is a simplified example - in a real implementation, you would
-        # set up a proper subscription system using something like Redis pub/sub
-        # or a similar mechanism to notify this WebSocket when new messages are added
-        
-        # Create a task for sending periodic heartbeats
         async def send_heartbeat():
             nonlocal last_heartbeat
             while True:
                 await asyncio.sleep(heartbeat_interval)
                 current_time = asyncio.get_event_loop().time()
                 
-                # If we haven't received a ping in 2.5x the heartbeat interval, consider the connection stale
                 if current_time - last_heartbeat > (heartbeat_interval * 2.5):
-                    print(f"WebSocket connection for search {search_id} is stale. Closing.")
+                    logger.info(f"WebSocket connection for search {search_id} is stale. Closing.")
                     await websocket.close(code=status.WS_1000_NORMAL_CLOSURE)
                     return
                 
-                # Send a heartbeat
                 await websocket.send_json({
                     "type": "heartbeat",
                     "timestamp": current_time
                 })
         
-        # Start the heartbeat task
         heartbeat_task = asyncio.create_task(send_heartbeat())
         
         try:
             while True:
-                # Wait for commands from the client with a timeout
                 try:
-                    # Use a timeout to ensure we can check for stale connections
                     data = await asyncio.wait_for(
                         websocket.receive_json(),
                         timeout=heartbeat_interval * 3
                     )
                     
-                    # Update last heartbeat time whenever we receive any message
                     last_heartbeat = asyncio.get_event_loop().time()
-                    
                     command = data.get("command")
-                    print(f"Received command: {command} for search {search_id}")
+                    logger.info(f"Received command: {command} for search {search_id}")
                     
                     if command == "get_latest":
-                        # Fetch latest messages
-                        message_ops = SearchMessageOperations(db)
-                        try:
-                            # Add execution_options for pgBouncer compatibility
-                            messages = await message_ops.list_messages_by_search(
-                                search_id=search_id,
-                                limit=data.get("limit", 10),
-                                offset=data.get("offset", 0),
-                                execution_options={"no_parameters": True, "use_server_side_cursors": False}
-                            )
-                            
-                            # Convert to dict for JSON serialization
-                            messages_data = [m.model_dump() for m in messages.items]
-                            
-                            await websocket.send_json({
-                                "type": "messages",
-                                "data": messages_data,
-                                "total": messages.total,
-                                "offset": messages.offset,
-                                "limit": messages.limit
-                            })
-                        except Exception as e:
-                            error_message = str(e).lower()
-                            print(f"Error fetching latest messages: {e}")
-                            
-                            # Handle pgBouncer prepared statement errors
-                            if ("prepared statement" in error_message or 
-                                "duplicatepreparedstatementerror" in error_message or 
-                                "invalidsqlstatementnameerror" in error_message):
-                                print(f"pgBouncer prepared statement error encountered: {str(e)}")
-                                try:
-                                    # Try to create a fresh session and retry
-                                    from sqlalchemy.ext.asyncio import AsyncSession
-                                    from core.database import async_engine
-                                    
-                                    print("Creating fresh session to retry operation after pgBouncer error")
-                                    async with AsyncSession(async_engine) as fresh_db:
-                                        # Create a new instance with the fresh session
+                        async with get_session_db() as db:
+                            message_ops = SearchMessageOperations(db)
+                            try:
+                                messages = await message_ops.list_messages_by_search(
+                                    search_id=search_id,
+                                    limit=data.get("limit", 10),
+                                    offset=data.get("offset", 0),
+                                    execution_options={"no_parameters": True, "use_server_side_cursors": False}
+                                )
+                                messages_data = [m.model_dump() for m in messages.items]
+                                await websocket.send_json({
+                                    "type": "messages",
+                                    "data": messages_data,
+                                    "total": messages.total,
+                                    "offset": messages.offset,
+                                    "limit": messages.limit
+                                })
+                            except Exception as e:
+                                error_message = str(e).lower()
+                                logger.error(f"Error fetching latest messages: {e}")
+                                if ("prepared statement" in error_message or 
+                                    "duplicatepreparedstatementerror" in error_message or 
+                                    "invalidsqlstatementnameerror" in error_message):
+                                    logger.info(f"pgBouncer error: {e}. Retrying with fresh session...")
+                                    async with get_session_db() as fresh_db:
                                         fresh_ops = SearchMessageOperations(fresh_db)
-                                        # Retry the operation with explicit execution options
                                         messages = await fresh_ops.list_messages_by_search(
                                             search_id=search_id,
                                             limit=data.get("limit", 10),
                                             offset=data.get("offset", 0),
                                             execution_options={"no_parameters": True, "use_server_side_cursors": False}
                                         )
-                                        
-                                        # Convert to dict for JSON serialization
                                         messages_data = [m.model_dump() for m in messages.items]
-                                        
                                         await websocket.send_json({
                                             "type": "messages",
                                             "data": messages_data,
@@ -476,27 +400,16 @@ async def websocket_endpoint(
                                             "offset": messages.offset,
                                             "limit": messages.limit
                                         })
-                                        continue  # Skip the error response
-                                except Exception as retry_error:
-                                    print(f"Error in retry attempt after pgBouncer error: {str(retry_error)}")
+                                else:
                                     await websocket.send_json({
                                         "type": "error",
-                                        "message": "Database connection error. Please try again."
+                                        "message": "Failed to fetch latest messages"
                                     })
-                            else:
-                                await websocket.send_json({
-                                    "type": "error",
-                                    "message": "Failed to fetch latest messages"
-                                })
                     
                     elif command == "typing":
-                        # Client is typing - could broadcast to other connected clients
-                        # This would be used in a collaborative environment
-                        pass
+                        pass  # Placeholder for collaborative features
                     
                     elif command == "subscribe":
-                        # Subscribe to specific message types or events
-                        # This is a placeholder for a more sophisticated subscription system
                         message_types = data.get("message_types", ["user", "assistant"])
                         await websocket.send_json({
                             "type": "subscription",
@@ -505,32 +418,27 @@ async def websocket_endpoint(
                         })
                     
                     elif command == "ping":
-                        # Client sent a ping, respond with a pong
                         await websocket.send_json({
                             "type": "pong",
                             "timestamp": asyncio.get_event_loop().time()
                         })
                 
                 except asyncio.TimeoutError:
-                    # No message received within timeout, check if connection is still alive
                     current_time = asyncio.get_event_loop().time()
                     if current_time - last_heartbeat > (heartbeat_interval * 2.5):
-                        print(f"WebSocket connection for search {search_id} timed out. Closing.")
+                        logger.info(f"WebSocket connection for search {search_id} timed out. Closing.")
                         await websocket.close(code=status.WS_1000_NORMAL_CLOSURE)
                         break
         except WebSocketDisconnect:
-            # Handle disconnect
-            print(f"WebSocket disconnected for search {search_id}")
+            logger.info(f"WebSocket disconnected for search {search_id}")
         except Exception as e:
-            # Log the error
-            print(f"WebSocket error for search {search_id}: {str(e)}")
+            logger.error(f"WebSocket error for search {search_id}: {str(e)}")
             await websocket.send_json({
                 "type": "error",
                 "message": "Internal server error"
             })
             await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
         finally:
-            # Cancel the heartbeat task if it's still running
             if 'heartbeat_task' in locals() and not heartbeat_task.done():
                 heartbeat_task.cancel()
                 try:
@@ -538,8 +446,7 @@ async def websocket_endpoint(
                 except asyncio.CancelledError:
                     pass
     except Exception as e:
-        print(f"Unexpected WebSocket error: {str(e)}")
-        # Try to close the connection if possible
+        logger.error(f"Unexpected WebSocket error: {str(e)}")
         try:
             await websocket.send_json({
                 "type": "error",

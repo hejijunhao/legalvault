@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import logging
+import json
 
 # Set up logging
 logging.basicConfig(
@@ -42,17 +43,20 @@ app = FastAPI(
     openapi_url="/api/openapi.json"
 )
 
-# Configure CORS
-origins = settings.BACKEND_CORS_ORIGINS
-if not origins:
-    origins = [
-        "http://localhost:3000",      # Local development HTTP
-        "https://localhost:3000",     # Local development HTTPS
-        "http://127.0.0.1:3000",     # Alternative local development HTTP
-        "https://127.0.0.1:3000",    # Alternative local development HTTPS
-        "http://localhost:8000",     # Backend local development
-        "https://localhost:8000",    # Backend local development HTTPS
-    ]
+# Configure CORS with explicit origins
+origins = [
+    "http://localhost:3000",      # Local development HTTP
+    "https://localhost:3000",     # Local development HTTPS
+    "http://127.0.0.1:3000",      # Alternative local development HTTP
+    "https://127.0.0.1:3000",     # Alternative local development HTTPS
+    "http://localhost:8000",      # Backend local development
+    "https://localhost:8000",     # Backend local development HTTPS
+]
+
+# Add any custom origins from environment
+if settings.BACKEND_CORS_ORIGINS:
+    custom_origins = settings.BACKEND_CORS_ORIGINS.split(",")
+    origins.extend([origin.strip() for origin in custom_origins])
 
 # In production, add production domains
 if settings.ENV == "production":
@@ -61,17 +65,18 @@ if settings.ENV == "production":
     # origins.append("https://platform.legalvault.ai")
     pass
 
+# Log origins for debugging
+logger.info(f"Configured CORS origins: {', '.join(origins)}")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"] if settings.ENV == "development" else origins,  # Allow all origins in development
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],  # Allow all methods
     allow_headers=["*"],  # Allow all headers
     expose_headers=["Content-Length", "Content-Range"],
     max_age=600,  # Maximum time (in seconds) that results can be cached
 )
-
-logger.info(f"Configured CORS origins: {'*'}" if settings.ENV == "development" else f"{','.join(origins)}")
 
 # Include all routers
 app.include_router(api_router, prefix="/api")
@@ -136,3 +141,9 @@ async def general_exception_handler(request: Request, exc: Exception):
         status_code=500,
         content={"detail": "Internal server error"}
     )
+
+# Simple health check endpoint
+@app.get("/api/health")
+async def health_check():
+    return {"status": "ok", "version": settings.VERSION}
+
