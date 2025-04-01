@@ -29,16 +29,16 @@ export {
   fetchMessage,
   fetchMessagesForSearch,
   updateMessage,
-  deleteMessage,
-  forwardMessage
+  deleteMessage
+  // forwardMessage // TODO: Uncomment when backend implements POST /research/messages/{message_id}/forward
 } from './research-api-messages';
 
-// Re-export WebSocket-related functions
-export {
-  connectToMessageUpdates,
-  requestLatestMessages,
-  sendTypingNotification
-} from './research-api-websocket';
+// Re-export WebSocket-related functions (disabled for HTTP-only Beta)
+// export {
+//   connectToMessageUpdates,
+//   requestLatestMessages,
+//   sendTypingNotification
+// } from './research-api-websocket';
 
 // Export cache interface
 import { researchCache } from './research-cache';

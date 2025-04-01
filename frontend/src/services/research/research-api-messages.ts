@@ -185,29 +185,24 @@ export async function deleteMessage(messageId: string, searchId?: string): Promi
   }
 }
 
-/**
- * Forward a message
-     * @param messageId The ID of the message to forward
-     * @param destination The destination to forward the message to
-     * @param destinationType The type of destination (email, user, workspace)
- */
-export async function forwardMessage(
-  messageId: string,
-  destination: string,
-  destinationType: 'email' | 'user' | 'workspace'
-): Promise<any> {
-  const headers = await getAuthHeader();
-  const response = await withRetry(() => 
-    fetchWithSelfSignedCert(`/api/research/messages/${messageId}/forward`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        destination,
-        destination_type: destinationType
-      })
-    })
-  );
-  
-  if (!response.ok) return handleApiError(response);
-  return await response.json();
-}
+// TODO: Implement backend endpoint POST /research/messages/{message_id}/forward
+// export async function forwardMessage(
+//   messageId: string,
+//   destination: string,
+//   destinationType: 'email' | 'user' | 'workspace'
+// ): Promise<any> {
+//   const headers = await getAuthHeader();
+//   const response = await withRetry(() => 
+//     fetchWithSelfSignedCert(`/api/research/messages/${messageId}/forward`, {
+//       method: 'POST',
+//       headers,
+//       body: JSON.stringify({
+//         destination,
+//         destination_type: destinationType
+//       })
+//     })
+//   );
+//   
+//   if (!response.ok) return handleApiError(response);
+//   return await response.json();
+// }

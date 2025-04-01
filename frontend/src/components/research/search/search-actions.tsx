@@ -21,30 +21,33 @@ export function SearchActions({ sessionId }: SearchActionsProps) {
     currentSession?.status === QueryStatus.NEEDS_CLARIFICATION
 
   const handleRetry = async () => {
-    if (!currentSession) return
+    if (!currentSession?.messages) {
+      toast.error("No messages to retry")
+      return
+    }
     
     try {
-      // Get the last user message to retry
-      const userMessages = currentSession.messages.filter(m => m.role === "user")
-      if (userMessages.length === 0) {
-        toast.error("No message to retry")
+      const failedMessage = currentSession.messages.find(m => 
+        m.role === "user" && m.status === QueryStatus.FAILED
+      )
+      
+      if (!failedMessage?.content?.text) {
+        toast.error("No failed message to retry")
         return
       }
       
-      const lastUserMessage = userMessages[userMessages.length - 1]
-      await sendMessage(sessionId, lastUserMessage.content.text)
+      await sendMessage(sessionId, failedMessage.content.text)
       toast.success("Message resent successfully")
     } catch (error) {
-      // Error is already handled by the context provider
       console.error("Error retrying message:", error)
     }
   }
 
   // Get citations from the current session if available
   const citations = currentSession?.messages
-    .filter(m => m.role === "assistant" && Array.isArray(m.content.citations) && m.content.citations.length > 0)
-    .flatMap(m => m.content.citations || [])
-    .map((citation, index) => ({
+    ?.filter(m => m.role === "assistant" && Array.isArray(m.content?.citations) && m.content.citations.length > 0)
+    ?.flatMap(m => m.content.citations || [])
+    ?.map((citation, index) => ({
       id: String(index),
       title: citation.text.substring(0, 50) + (citation.text.length > 50 ? "..." : ""),
       url: citation.url,

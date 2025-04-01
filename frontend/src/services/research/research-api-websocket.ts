@@ -1,5 +1,11 @@
 // src/services/research/research-api-websocket.ts
 
+/**
+ * This file contains WebSocket-related functions for real-time updates.
+ * It is disabled for the Beta release, which uses an HTTP-only approach.
+ * To re-enable, uncomment exports in research-api.ts and ensure backend WebSocket endpoints are active.
+ */
+
 import { supabase } from "@/lib/supabase";
 import { WebSocketConnection, WebSocketMessage } from "./research-api-types";
 import { getAuthHeader } from "./research-api-core";

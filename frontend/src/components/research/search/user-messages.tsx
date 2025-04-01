@@ -14,27 +14,23 @@ import { toast } from "sonner"
 
 interface UserMessagesProps {
   messages: Message[]
-  isStreaming?: boolean
-  streamingMessageId?: string
   userAvatar?: string
   userName?: string
 }
 
 export function UserMessages({ 
   messages, 
-  isStreaming = false,
-  streamingMessageId,
   userAvatar, 
   userName = "You" 
 }: UserMessagesProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
-  // Scroll to bottom when new messages arrive or during streaming
+  // Scroll to bottom when new messages arrive
   useEffect(() => {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: "smooth" })
     }
-  }, [messages, isStreaming, streamingMessageId])
+  }, [messages])
 
   const handleCopyMessage = async (content: string) => {
     try {
@@ -49,13 +45,12 @@ export function UserMessages({
     <div className="space-y-6 mb-8">
       {messages.map((message, index) => (
         <motion.div
-          key={`message-${message.id || `index-${index}`}`}
+          key={message.id || index}
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: messages.indexOf(message) * 0.1 }}
           className={cn(
-            "flex items-start gap-3",
-            message.role === "user" ? "justify-end" : "justify-start"
+            "group relative flex gap-3 px-4 py-3 rounded-lg",
+            message.role === "assistant" ? "bg-secondary" : "bg-background"
           )}
         >
           {/* Assistant Avatar */}
@@ -66,20 +61,19 @@ export function UserMessages({
           )}
 
           {/* Message Content */}
-          <div className={cn(
-            "group relative max-w-[80%] rounded-2xl px-4 py-3",
-            message.role === "user" 
-              ? "bg-[#9FE870]/20 text-[#1C1C1C]" 
-              : "bg-white text-[#1C1C1C] shadow-sm",
-            // Add a red border for failed messages
-            message.status === "failed" || message.status === "needs_clarification"
-              ? "border-2 border-red-400"
-              : ""
-          )}>
-            {/* Status indicator for failed messages */}
-            {(message.status === "failed" || message.status === "needs_clarification") && (
-              <div className="absolute -top-2 -left-2 rounded-full bg-red-500 p-1" title="Message failed or needs clarification">
-                <AlertCircle className="h-3 w-3 text-white" />
+          <div className="flex-1 space-y-2">
+            {/* Message Status */}
+            {message.status === QueryStatus.PENDING && (
+              <div className="mb-2 flex items-center gap-2 text-muted-foreground">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                <span className="text-xs">Processing...</span>
+              </div>
+            )}
+            
+            {message.status === QueryStatus.FAILED && (
+              <div className="mb-2 flex items-center gap-2 text-destructive">
+                <AlertCircle className="h-3 w-3" />
+                <span className="text-xs">Failed to process message</span>
               </div>
             )}
             
@@ -87,9 +81,6 @@ export function UserMessages({
             <div className="prose prose-sm max-w-none">
               <p className="text-sm leading-relaxed whitespace-pre-wrap">
                 {message.content?.text || 'No content available'}
-                {message.id === streamingMessageId && isStreaming && (
-                  <Loader2 className="ml-2 inline h-3 w-3 animate-spin" />
-                )}
               </p>
             </div>
 

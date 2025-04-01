@@ -9,7 +9,7 @@ import { SearchActions } from "@/components/research/search/search-actions"
 import { ResearchInput } from "@/components/research/search/research-input"
 import { BackButton } from "@/components/ui/back-button"
 import { UserMessages } from "@/components/research/search/user-messages"
-import { useResearch, QueryStatus } from "@/contexts/research/research-context"
+import { useResearch } from "@/contexts/research/research-context"
 import { Loader2, AlertCircle } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
@@ -23,13 +23,11 @@ export default function ResearchPage() {
     isLoading, 
     error, 
     sendMessage, 
-    clearError, 
-    connectToWebSocket, 
-    disconnectWebSocket
+    clearError 
   } = useResearch()
   const [isMounted, setIsMounted] = useState(true)
 
-  // Clear context error when component mounts or unmounts
+  // Clear context error on mount/unmount
   useEffect(() => {
     clearError()
     return () => {
@@ -38,20 +36,17 @@ export default function ResearchPage() {
     }
   }, [clearError])
 
-  // Fetch the session when the component mounts
+  // Fetch session on mount
   useEffect(() => {
     if (!searchId?.trim() || !isMounted) return
     
-    // Don't fetch if we're already loading or have the current session
     if (isLoading) {
       console.log('Already loading, skipping fetch')
       return
     }
     
     if (currentSession?.id === searchId) {
-      console.log('Session already loaded, connecting to WebSocket')
-      connectToWebSocket(searchId)
-        .catch(err => console.error('Failed to connect to WebSocket:', err))
+      console.log('Session already loaded')
       return
     }
     
@@ -60,13 +55,7 @@ export default function ResearchPage() {
     getSession(searchId)
       .then(session => {
         if (!isMounted) return
-        
-        if (session) {
-          console.log('Session data fetched successfully')
-          // Connect to WebSocket after session is loaded
-          connectToWebSocket(searchId)
-            .catch(err => console.error('Failed to connect to WebSocket:', err))
-        } else {
+        if (!session) {
           console.error('No session data returned')
           router.push('/research')
         }
@@ -76,15 +65,7 @@ export default function ResearchPage() {
         console.error('Error fetching session:', err)
         router.push('/research')
       })
-  }, [searchId, getSession, currentSession, isLoading, connectToWebSocket, router, isMounted])
-
-  // Cleanup WebSocket connection when component unmounts
-  useEffect(() => {
-    return () => {
-      console.log('ResearchPage unmounting, disconnecting WebSocket')
-      disconnectWebSocket()
-    }
-  }, [disconnectWebSocket])
+  }, [searchId, getSession, currentSession, isLoading, router, isMounted])
 
   const handleSendMessage = async (content: string) => {
     if (!searchId || !content.trim()) return
@@ -92,7 +73,6 @@ export default function ResearchPage() {
     try {
       await sendMessage(searchId, content)
     } catch (err) {
-      // Error is already handled by the context provider
       console.error("Error sending message:", err)
     }
   }
@@ -155,11 +135,7 @@ export default function ResearchPage() {
                   <AlertDescription>{error.message}</AlertDescription>
                 </Alert>
               )}
-              <UserMessages 
-                messages={currentSession.messages || []} 
-                isStreaming={currentSession.status === QueryStatus.PENDING}
-                streamingMessageId={currentSession.messages?.find(m => m.status === QueryStatus.PENDING)?.id}
-              />
+              <UserMessages messages={currentSession.messages || []} />
             </>
           )}
         </div>

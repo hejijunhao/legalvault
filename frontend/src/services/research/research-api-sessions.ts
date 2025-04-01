@@ -45,7 +45,7 @@ export async function fetchSessions(
   if (options?.offset) params.append('offset', options.offset.toString());
   
   const queryString = params.toString() ? `?${params.toString()}` : '';
-  const url = `/api/research/searches/${queryString}`;
+  const url = `/api/research/searches${queryString}`;  // Removed trailing slash
   
   const response = await withRetry(() => fetchWithSelfSignedCert(url, { headers }));
   
@@ -72,7 +72,7 @@ export async function fetchSession(sessionId: string): Promise<ResearchSession> 
   
   const headers = await getAuthHeader();
   const response = await withRetry(() => 
-    fetchWithSelfSignedCert(`/api/research/searches/${sessionId}/`, { headers })
+    fetchWithSelfSignedCert(`/api/research/searches/${sessionId}`, { headers })  // Removed trailing slash
   );
   
   if (!response.ok) return handleApiError(response);
@@ -95,7 +95,7 @@ export async function createNewSession(
   searchParams?: SearchParams
 ): Promise<ResearchSession> {
   const headers = await getAuthHeader();
-  const response = await withRetry(() => fetchWithSelfSignedCert('/api/research/searches/', {
+  const response = await withRetry(() => fetchWithSelfSignedCert('/api/research/searches', {  // Removed trailing slash
     method: 'POST',
     headers,
     body: JSON.stringify({
@@ -128,23 +128,15 @@ export async function sendSessionMessage(
 ): Promise<ResearchSession> {
   const headers = await getAuthHeader();
   const response = await withRetry(
-    () => fetchWithSelfSignedCert(`/api/research/searches/${sessionId}/messages/`, {
+    () => fetchWithSelfSignedCert(`/api/research/searches/${sessionId}/continue`, {  // Changed to /continue
       method: 'POST',
       headers,
-      body: JSON.stringify({ content: { text: content } })
+      body: JSON.stringify({ follow_up_query: content })  // Adjusted payload
     }),
     3,
-    (error, retryCount) => {
-      // Retry on rate limit errors
-      if (error && 
-          ((error as { status: number }).status === 429 || 
-           (error as { code: string }).code === 'PERPLEXITY_RATE_LIMITED' || 
-           (error as { code: string }).code === 'RATE_LIMITED')) {
-        return true;
-      }
-      
-      return false;
-    }
+    (error) => error?.status === 429 || 
+               error?.code === 'PERPLEXITY_RATE_LIMITED' || 
+               error?.code === 'RATE_LIMITED'
   );
   
   if (!response.ok) return handleApiError(response);
@@ -188,16 +180,9 @@ export async function continueSession(
       })
     }),
     3,
-    (error, retryCount) => {
-      // Retry on rate limit errors
-      if (error && 
-          ((error as { status: number }).status === 429 || 
-           (error as { code: string }).code === 'PERPLEXITY_RATE_LIMITED' || 
-           (error as { code: string }).code === 'RATE_LIMITED')) {
-        return true;
-      }
-      return false;
-    }
+    (error) => error?.status === 429 || 
+               error?.code === 'PERPLEXITY_RATE_LIMITED' || 
+               error?.code === 'RATE_LIMITED'
   );
 
   if (!response.ok) return handleApiError(response);
@@ -231,7 +216,7 @@ export async function updateSessionMetadata(
   }
 ): Promise<ResearchSession> {
   const headers = await getAuthHeader();
-  const response = await withRetry(() => fetchWithSelfSignedCert(`/api/research/searches/${sessionId}/`, {
+  const response = await withRetry(() => fetchWithSelfSignedCert(`/api/research/searches/${sessionId}`, {  // Removed trailing slash
     method: 'PATCH',
     headers,
     body: JSON.stringify(updates)
@@ -255,7 +240,7 @@ export async function updateSessionMetadata(
  */
 export async function deleteSession(sessionId: string): Promise<void> {
   const headers = await getAuthHeader();
-  const response = await withRetry(() => fetchWithSelfSignedCert(`/api/research/searches/${sessionId}/`, {
+  const response = await withRetry(() => fetchWithSelfSignedCert(`/api/research/searches/${sessionId}`, {  // Removed trailing slash
     method: 'DELETE',
     headers
   }));
