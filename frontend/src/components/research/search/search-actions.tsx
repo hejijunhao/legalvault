@@ -7,6 +7,7 @@ import { Bookmark, Share2, FolderPlus, FileText, RefreshCw } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { useResearch, QueryStatus } from "@/contexts/research/research-context"
 import { toast } from "sonner"
+import { cn } from "@/lib/utils"
 
 interface SearchActionsProps {
   sessionId: string
@@ -16,7 +17,6 @@ export function SearchActions({ sessionId }: SearchActionsProps) {
   const [showCitations, setShowCitations] = useState(false)
   const { currentSession, sendMessage, isLoading } = useResearch()
   
-  // Check if the session has failed or needs clarification
   const hasFailedStatus = currentSession?.status === QueryStatus.FAILED ||
     currentSession?.status === QueryStatus.NEEDS_CLARIFICATION
 
@@ -43,53 +43,69 @@ export function SearchActions({ sessionId }: SearchActionsProps) {
     }
   }
 
-  // Get citations from the current session if available
   const citations = currentSession?.messages
     ?.filter(m => m.role === "assistant" && Array.isArray(m.content?.citations) && m.content.citations.length > 0)
     ?.flatMap(m => m.content.citations || [])
     ?.map((citation, index) => ({
       id: String(index),
-      title: citation.text.substring(0, 50) + (citation.text.length > 50 ? "..." : ""),
-      url: citation.url,
-      publisher: citation.metadata?.publisher || "Source",
-      date: citation.metadata?.date || new Date().getFullYear().toString()
+      ...citation
     })) || []
 
+  const baseButtonClasses = "flex items-center gap-[6px] px-2 py-1 rounded-[12px] bg-[rgba(137,146,169,0.30)] text-[#1C1C1C]"
+
   return (
-    <div className="mb-6">
-      <div className="flex justify-center gap-2">
-        {hasFailedStatus && (
-          <button 
-            className="flex items-center gap-[6px] rounded-[12px] bg-[rgba(239,68,68,0.15)] px-2 py-1 hover:bg-[rgba(239,68,68,0.25)]"
-            onClick={handleRetry}
-            disabled={isLoading}
-            aria-label="Retry failed message"
-          >
-            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-            <span className="text-sm text-[#1C1C1C]">Retry</span>
-          </button>
+    <div className="flex items-center gap-2">
+      <button
+        onClick={() => setShowCitations(!showCitations)}
+        className={cn(
+          "flex items-center gap-[6px] px-2 py-1 rounded-[12px] text-[#1C1C1C]",
+          showCitations ? "bg-[#9FE870]" : "bg-[rgba(159,232,112,0.20)] hover:bg-[rgba(159,232,112,0.30)]"
         )}
-        <button className="flex items-center gap-[6px] rounded-[12px] bg-[rgba(137,146,169,0.30)] px-2 py-1">
-          <Bookmark className="h-4 w-4" />
-          <span className="text-sm text-[#1C1C1C]">Bookmark</span>
-        </button>
-        <button className="flex items-center gap-[6px] rounded-[12px] bg-[rgba(137,146,169,0.30)] px-2 py-1">
-          <FolderPlus className="h-4 w-4" />
-          <span className="text-sm text-[#1C1C1C]">Add to Workspace</span>
-        </button>
-        <button className="flex items-center gap-[6px] rounded-[12px] bg-[rgba(137,146,169,0.30)] px-2 py-1">
-          <Share2 className="h-4 w-4" />
-          <span className="text-sm text-[#1C1C1C]">Share</span>
-        </button>
+      >
+        <FileText className="h-4 w-4" />
+        <span className="text-sm">Citations</span>
+      </button>
+
+      <button
+        onClick={() => {
+          toast.info("Share feature coming soon")
+        }}
+        className={baseButtonClasses}
+      >
+        <Share2 className="h-4 w-4" />
+        <span className="text-sm">Share</span>
+      </button>
+
+      <button
+        onClick={() => {
+          toast.info("Add to workspace feature coming soon")
+        }}
+        className={baseButtonClasses}
+      >
+        <FolderPlus className="h-4 w-4" />
+        <span className="text-sm">Add to Workspace</span>
+      </button>
+
+      <button
+        onClick={() => {
+          toast.info("Bookmark feature coming soon")
+        }}
+        className={baseButtonClasses}
+      >
+        <Bookmark className="h-4 w-4" />
+        <span className="text-sm">Bookmark</span>
+      </button>
+
+      {hasFailedStatus && (
         <button
-          className="flex items-center gap-[6px] rounded-[12px] bg-[rgba(159,232,112,0.20)] px-2 py-1 hover:bg-[rgba(159,232,112,0.30)]"
-          onClick={() => setShowCitations(!showCitations)}
-          disabled={citations.length === 0}
+          onClick={handleRetry}
+          disabled={isLoading}
+          className={cn(baseButtonClasses, "bg-[rgba(239,68,68,0.15)] hover:bg-[rgba(239,68,68,0.25)]")}
         >
-          <FileText className="h-4 w-4" />
-          <span className="text-sm text-[#1C1C1C]">Citations</span>
+          <RefreshCw className={cn("h-4 w-4", isLoading && "animate-spin")} />
+          <span className="text-sm">Retry</span>
         </button>
-      </div>
+      )}
 
       <AnimatePresence>
         {showCitations && citations.length > 0 && (
@@ -113,9 +129,7 @@ export function SearchActions({ sessionId }: SearchActionsProps) {
                     >
                       {citation.title}
                     </a>
-                    <p className="text-xs text-gray-500">
-                      {citation.publisher}, {citation.date}
-                    </p>
+                    <p className="text-xs text-gray-500">{citation.url}</p>
                   </div>
                 ))}
               </div>

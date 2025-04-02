@@ -4,11 +4,9 @@
 
 import { useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { ResearchHeader } from "@/components/research/search/research-header"
-import { SearchActions } from "@/components/research/search/search-actions"
 import { ResearchInput } from "@/components/research/search/research-input"
 import { BackButton } from "@/components/ui/back-button"
-import { UserMessages } from "@/components/research/search/user-messages"
+import { ResearchTabs } from "@/components/research/search/research-tabs"
 import { useResearch } from "@/contexts/research/research-context"
 import { Loader2, AlertCircle } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -27,7 +25,6 @@ export default function ResearchPage() {
   } = useResearch()
   const [isMounted, setIsMounted] = useState(true)
 
-  // Clear context error on mount/unmount
   useEffect(() => {
     clearError()
     return () => {
@@ -36,7 +33,6 @@ export default function ResearchPage() {
     }
   }, [clearError])
 
-  // Fetch session on mount
   useEffect(() => {
     if (!searchId?.trim() || !isMounted) return
     
@@ -115,29 +111,33 @@ export default function ResearchPage() {
 
   return (
     <div className="min-h-screen pb-20" aria-live="polite">
-      <div className="mx-auto max-w-[1440px] px-4">
-        <div className="flex items-center pt-6">
+      <div className="mx-auto max-w-[1440px] px-8">
+        <div className="flex flex-col gap-6 pt-8">
           <BackButton 
             customText="Back to Research" 
             onClick={handleBackClick}
             aria-label="Return to research page"
+            className="w-fit"
           />
-        </div>
 
-        <div className="mx-auto max-w-3xl">
-          {currentSession && (
-            <>
-              <ResearchHeader query={currentSession.query} />
-              <SearchActions sessionId={searchId} />
-              {error && (
-                <Alert variant="destructive" className="my-4">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>{error.message}</AlertDescription>
-                </Alert>
-              )}
-              <UserMessages messages={currentSession.messages || []} />
-            </>
-          )}
+          <div className="mx-auto max-w-3xl w-full">
+            {currentSession && (
+              <>
+                <h1 className="text-title font-baskerville text-2xl leading-8 text-left italic mb-6">
+                  {currentSession.query}
+                </h1>
+                
+                {error && (
+                  <Alert variant="destructive" className="my-4">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>{error.message}</AlertDescription>
+                  </Alert>
+                )}
+                
+                <ResearchTabs messages={currentSession.messages || []} />
+              </>
+            )}
+          </div>
         </div>
       </div>
       <ResearchInput 

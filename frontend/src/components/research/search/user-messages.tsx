@@ -25,7 +25,6 @@ export function UserMessages({
 }: UserMessagesProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
-  // Scroll to bottom when new messages arrive
   useEffect(() => {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: "smooth" })
@@ -42,108 +41,101 @@ export function UserMessages({
   }
 
   return (
-    <div className="space-y-6 mb-8">
+    <div className="space-y-4 mb-8 px-4">
       {messages.map((message, index) => (
         <motion.div
           key={message.id || index}
-          initial={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.2 }}
           className={cn(
-            "group relative flex gap-3 px-4 py-3 rounded-lg",
-            message.role === "assistant" ? "bg-secondary" : "bg-background"
+            "group relative flex gap-3 items-end",
+            message.role === "assistant" ? "flex-row" : "flex-row-reverse"
           )}
         >
           {/* Assistant Avatar */}
           {message.role === "assistant" && (
-            <Avatar className="mt-1 h-8 w-8 border border-white/20">
+            <Avatar className="mb-1 h-8 w-8 ring-1 ring-primary/5 ring-offset-1">
               <AvatarImage src="/vp-avatar.png" alt="Virtual Paralegal" />
             </Avatar>
           )}
 
           {/* Message Content */}
-          <div className="flex-1 space-y-2">
+          <div className={cn(
+            "relative max-w-[75%] space-y-2",
+            message.role === "assistant" ? "mr-12" : "ml-12"
+          )}>
             {/* Message Status */}
             {message.status === QueryStatus.PENDING && (
-              <div className="mb-2 flex items-center gap-2 text-muted-foreground">
+              <div className="absolute -top-6 left-0 flex items-center gap-2 text-muted-foreground">
                 <Loader2 className="h-3 w-3 animate-spin" />
-                <span className="text-xs">Processing...</span>
+                <span className="text-xs font-medium">Processing...</span>
               </div>
             )}
             
             {message.status === QueryStatus.FAILED && (
-              <div className="mb-2 flex items-center gap-2 text-destructive">
+              <div className="absolute -top-6 left-0 flex items-center gap-2 text-destructive">
                 <AlertCircle className="h-3 w-3" />
-                <span className="text-xs">Failed to process message</span>
+                <span className="text-xs font-medium">Failed to process message</span>
               </div>
             )}
             
-            {/* Message Text */}
-            <div className="prose prose-sm max-w-none">
-              <p className="text-sm leading-relaxed whitespace-pre-wrap">
-                {message.content?.text || 'No content available'}
-              </p>
-            </div>
-
-            {/* Citations */}
-            {message.content?.citations && message.content.citations.length > 0 && (
-              <div className="mt-2">
-                <SourceCitations sources={message.content.citations} />
+            {/* Message Bubble */}
+            <div className={cn(
+              "relative rounded-[20px] px-4 py-2.5 shadow-sm",
+              message.role === "assistant" 
+                ? "bg-[#e9e9eb] text-[#000000] rounded-bl-md" 
+                : "bg-[#007AFF] text-white rounded-br-md"
+            )}>
+              {/* Message Text */}
+              <div className="prose prose-sm max-w-none">
+                <p className="text-[15px] leading-[1.35] m-0 break-words font-system">
+                  {message.content?.text || 'No content available'}
+                </p>
               </div>
-            )}
 
-            {/* Message Actions Dropdown - Only show for assistant messages */}
-            {message.role === "assistant" && (
-              <div className="absolute -top-2 -right-2 opacity-0 transition-opacity group-hover:opacity-100">
+              {/* Citations */}
+              {message.content?.citations && message.content.citations.length > 0 && (
+                <div className={cn(
+                  "mt-2 pt-2 border-t",
+                  message.role === "assistant" 
+                    ? "border-black/10" 
+                    : "border-white/10"
+                )}>
+                  <SourceCitations sources={message.content.citations} />
+                </div>
+              )}
+
+              {/* Message Actions */}
+              <div className={cn(
+                "absolute top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity",
+                message.role === "assistant" ? "-right-10" : "-left-10"
+              )}>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <button className="rounded-full bg-white p-1 shadow-md hover:bg-gray-100">
-                      <ChevronDown className="h-4 w-4 text-gray-600" />
+                    <button className="rounded-full p-1.5 hover:bg-accent">
+                      <ChevronDown className="h-4 w-4 text-muted-foreground" />
                     </button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-72">
-                    <DropdownMenuItem onSelect={() => handleCopyMessage(message.content?.text || '')}>
+                  <DropdownMenuContent align={message.role === "assistant" ? "end" : "start"}>
+                    <DropdownMenuItem onClick={() => handleCopyMessage(message.content?.text || '')}>
                       <Copy className="mr-2 h-4 w-4" />
-                      <span>Copy</span>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem disabled>
-                      <Reply className="mr-2 h-4 w-4" />
-                      <span>Reply</span>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem disabled>
-                      <Forward className="mr-2 h-4 w-4" />
-                      <span>Forward</span>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem disabled>
-                      <FolderPlus className="mr-2 h-4 w-4 flex-shrink-0" />
-                      <span className="flex-grow">Add to Workspace</span>
-                      <span className="ml-2 flex-shrink-0 text-xs text-muted-foreground">Coming Soon</span>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem disabled>
-                      <Bell className="mr-2 h-4 w-4 flex-shrink-0" />
-                      <span className="flex-grow">Create Reminder</span>
-                      <span className="ml-2 flex-shrink-0 text-xs text-muted-foreground">Coming Soon</span>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem disabled>
-                      <CheckSquare className="mr-2 h-4 w-4 flex-shrink-0" />
-                      <span className="flex-grow">Create Task</span>
-                      <span className="ml-2 flex-shrink-0 text-xs text-muted-foreground">Coming Soon</span>
+                      Copy message
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
-            )}
+            </div>
           </div>
 
           {/* User Avatar */}
           {message.role === "user" && (
-            <Avatar className="mt-1 h-8 w-8">
+            <Avatar className="mb-1 h-8 w-8">
               <AvatarImage src={userAvatar || "/user-avatar.png"} alt={userName} />
             </Avatar>
           )}
         </motion.div>
       ))}
-
-      {/* Auto-scroll anchor */}
       <div ref={messagesEndRef} />
     </div>
   )
