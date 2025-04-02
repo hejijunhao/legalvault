@@ -5,12 +5,18 @@
 import { useEffect, useRef } from "react"
 import { motion } from "framer-motion"
 import { Avatar, AvatarImage } from "@/components/ui/avatar"
-import { ChevronDown, Copy, ThumbsUp, ThumbsDown, RefreshCw, Loader2, AlertCircle } from "lucide-react"
+import { ChevronDown, Copy, ThumbsUp, ThumbsDown, RefreshCw, Loader2, AlertCircle, ArrowRight, Share2, FolderPlus, Brain, Library } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 import { Message, Citation, QueryStatus } from "@/contexts/research/research-context"
 import { toast } from "sonner"
 import ReactMarkdown from "react-markdown"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 
 interface UserMessagesProps {
   messages: Message[]
@@ -115,7 +121,7 @@ export function UserMessages({
             )}>
               {/* Message Bubble */}
               <div className={cn(
-                "relative rounded-[20px] px-4 py-2.5 shadow-sm",
+                "relative rounded-[20px] px-4 py-2.5 shadow-sm mb-3",
                 message.role === "assistant" 
                   ? "bg-[#FAFAFA] text-[#000000] rounded-bl-md border border-[#E8E8E8]" 
                   : "bg-[#BFEF9C] text-[#1A2E0D] rounded-br-md"
@@ -137,95 +143,176 @@ export function UserMessages({
                   </div>
                 </div>
 
-                {/* Message Actions Dropdown (hidden by default, shown on hover) */}
-                <div className={cn(
-                  "absolute top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity",
-                  message.role === "assistant" ? "-right-10" : "-left-10"
-                )}>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <button className="rounded-full p-1.5 hover:bg-accent">
-                        <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align={message.role === "assistant" ? "end" : "start"}>
-                      <DropdownMenuItem onClick={() => handleCopyMessage(message.content?.text || '')}>
-                        <Copy className="mr-2 h-4 w-4" />
-                        Copy message
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
+                {/* Status indicator for user messages only */}
+                {message.role === "user" && message.status && (
+                  <div className="flex justify-end">
+                    <div className={cn(
+                      "text-xs px-1",
+                      message.status === QueryStatus.PENDING 
+                        ? "text-gray-500" 
+                        : message.status === QueryStatus.FAILED 
+                          ? "text-red-500" 
+                          : "text-gray-500"
+                    )}>
+                      {message.status === QueryStatus.PENDING && (
+                        <span className="flex items-center gap-1">
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                          {getStatusText(message.status)}
+                        </span>
+                      )}
+                      {message.status === QueryStatus.FAILED && (
+                        <span className="flex items-center gap-1">
+                          <AlertCircle className="h-3 w-3" />
+                          {getStatusText(message.status)}
+                        </span>
+                      )}
+                      {message.status !== QueryStatus.PENDING && message.status !== QueryStatus.FAILED && (
+                        <span>{getStatusText(message.status)}</span>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
-              {/* Quick Action Buttons for Assistant Messages */}
+              {/* Message Actions */}
               {message.role === "assistant" && (
-                <div className="flex items-center justify-start space-x-2 pt-1">
-                  <button 
-                    onClick={() => handleCopyMessage(message.content?.text || '')}
-                    className="rounded-full p-1.5 hover:bg-gray-100 transition-colors text-gray-500 hover:text-gray-700"
-                    title="Copy message"
-                  >
-                    <Copy className="h-4 w-4" />
-                  </button>
-                  {onRegenerateMessage && (
-                    <button 
-                      onClick={() => onRegenerateMessage(message.id || '')}
-                      className="rounded-full p-1.5 hover:bg-gray-100 transition-colors text-gray-500 hover:text-gray-700"
-                      title="Regenerate response"
-                    >
-                      <RefreshCw className="h-4 w-4" />
-                    </button>
-                  )}
-                  {onRateMessage && (
-                    <>
-                      <button 
-                        onClick={() => onRateMessage(message.id || '', 'positive')}
-                        className="rounded-full p-1.5 hover:bg-gray-100 transition-colors text-gray-500 hover:text-green-600"
-                        title="Helpful"
-                      >
-                        <ThumbsUp className="h-4 w-4" />
-                      </button>
-                      <button 
-                        onClick={() => onRateMessage(message.id || '', 'negative')}
-                        className="rounded-full p-1.5 hover:bg-gray-100 transition-colors text-gray-500 hover:text-red-600"
-                        title="Not helpful"
-                      >
-                        <ThumbsDown className="h-4 w-4" />
-                      </button>
-                    </>
-                  )}
+                <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
+                  <TooltipProvider delayDuration={300}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          onClick={() => handleCopyMessage(message.content?.text || '')}
+                          className="flex items-center gap-1.5 text-gray-500 hover:text-gray-900 transition-all hover:scale-105"
+                        >
+                          <Copy className="h-4 w-4" />
+                          <span>Copy</span>
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="bg-gray-900 text-white text-xs px-2 py-1">
+                        Copy this message to your clipboard
+                      </TooltipContent>
+                    </Tooltip>
+
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          className="flex items-center gap-1.5 text-gray-500 hover:text-gray-900 transition-all hover:scale-105"
+                        >
+                          <ArrowRight className="h-4 w-4" />
+                          <span>Share</span>
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="bg-gray-900 text-white text-xs px-2 py-1">
+                        Share this response with colleagues
+                      </TooltipContent>
+                    </Tooltip>
+
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          className="flex items-center gap-1.5 text-gray-500 hover:text-gray-900 transition-all hover:scale-105"
+                        >
+                          <svg 
+                            className="h-4 w-4" 
+                            viewBox="0 0 24 24" 
+                            fill="none" 
+                            stroke="currentColor" 
+                            strokeWidth="1.5" 
+                            strokeLinecap="round" 
+                            strokeLinejoin="round"
+                          >
+                            <path d="M4 10V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v4M4 10h16M4 10v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8M12 7v10M9 14h6" />
+                          </svg>
+                          <span>Workspace</span>
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="bg-gray-900 text-white text-xs px-2 py-1">
+                        Save to your workspace for later reference
+                      </TooltipContent>
+                    </Tooltip>
+
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          className="flex items-center gap-1.5 text-gray-500 hover:text-gray-900 transition-all hover:scale-105"
+                        >
+                          <svg 
+                            className="h-4 w-4" 
+                            viewBox="0 0 24 24" 
+                            fill="none" 
+                            stroke="currentColor" 
+                            strokeWidth="1.5" 
+                            strokeLinecap="round" 
+                            strokeLinejoin="round"
+                          >
+                            <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2h11A2.5 2.5 0 0 1 20 4.5v15a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 19.5z" />
+                            <path d="M8 7h8M8 11h8M8 15h5" />
+                          </svg>
+                          <span>Library</span>
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="bg-gray-900 text-white text-xs px-2 py-1">
+                        Add to your knowledge library
+                      </TooltipContent>
+                    </Tooltip>
+
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          className="flex items-center gap-1.5 text-gray-500 hover:text-gray-900 transition-all hover:scale-105"
+                        >
+                          <svg 
+                            className="h-4 w-4" 
+                            viewBox="0 0 24 24" 
+                            fill="none" 
+                            stroke="currentColor" 
+                            strokeWidth="1.5" 
+                            strokeLinecap="round" 
+                            strokeLinejoin="round"
+                          >
+                            <path d="M12 3.5c-4.2 0-7.5 2.5-9 6 1.5 3.5 4.8 6 9 6s7.5-2.5 9-6c-1.5-3.5-4.8-6-9-6z" />
+                            <circle cx="12" cy="9.5" r="3" />
+                            <path d="M6 17.5l2-2m8 2l-2-2M9 20.5l1.5-1.5m3 0l1.5 1.5" />
+                          </svg>
+                          <span>Learn</span>
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="bg-gray-900 text-white text-xs px-2 py-1">
+                        Train your VP with this information
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 </div>
               )}
-
-              {/* Status indicator for user messages only */}
-              {message.role === "user" && message.status && (
-                <div className="flex justify-end">
-                  <div className={cn(
-                    "text-xs px-1",
-                    message.status === QueryStatus.PENDING 
-                      ? "text-gray-500" 
-                      : message.status === QueryStatus.FAILED 
-                        ? "text-red-500" 
-                        : "text-gray-500"
-                  )}>
-                    {message.status === QueryStatus.PENDING && (
-                      <span className="flex items-center gap-1">
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                        {getStatusText(message.status)}
-                      </span>
-                    )}
-                    {message.status === QueryStatus.FAILED && (
-                      <span className="flex items-center gap-1">
-                        <AlertCircle className="h-3 w-3" />
-                        {getStatusText(message.status)}
-                      </span>
-                    )}
-                    {message.status !== QueryStatus.PENDING && message.status !== QueryStatus.FAILED && (
-                      <span>{getStatusText(message.status)}</span>
-                    )}
-                  </div>
-                </div>
+              {message.role === "assistant" && onRegenerateMessage && (
+                <button
+                  onClick={() => onRegenerateMessage(message.id)}
+                  className="flex items-center gap-1.5 text-gray-500 hover:text-gray-900 transition-all hover:scale-105"
+                  title="Regenerate response"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  <span>Regenerate</span>
+                </button>
+              )}
+              {message.role === "assistant" && onRateMessage && (
+                <>
+                  <button
+                    onClick={() => onRateMessage(message.id, 'positive')}
+                    className="flex items-center gap-1.5 text-gray-500 hover:text-gray-900 transition-all hover:scale-105"
+                    title="Rate positively"
+                  >
+                    <ThumbsUp className="h-4 w-4" />
+                    <span>Like</span>
+                  </button>
+                  <button
+                    onClick={() => onRateMessage(message.id, 'negative')}
+                    className="flex items-center gap-1.5 text-gray-500 hover:text-gray-900 transition-all hover:scale-105"
+                    title="Rate negatively"
+                  >
+                    <ThumbsDown className="h-4 w-4" />
+                    <span>Dislike</span>
+                  </button>
+                </>
               )}
             </div>
           </div>
