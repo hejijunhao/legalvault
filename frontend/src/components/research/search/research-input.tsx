@@ -3,14 +3,14 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
-import { Loader2, Send, Bold, Italic, List } from "lucide-react"
+import { Loader2, Send, Gavel, BookText, Building2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
+import { QueryType } from "@/contexts/research/research-context"
 
 interface ResearchInputProps {
-  onSendMessage: (content: string) => Promise<void>
+  onSendMessage: (content: string, queryType?: QueryType | null) => Promise<void>
   isLoading: boolean
   maxLength?: number
   placeholder?: string
@@ -25,15 +25,14 @@ export function ResearchInput({
   disabled = false
 }: ResearchInputProps) {
   const [input, setInput] = useState("")
-  const [charCount, setCharCount] = useState(0)
   const [isAtLimit, setIsAtLimit] = useState(false)
   const [isFocused, setIsFocused] = useState(false)
+  const [selectedType, setSelectedType] = useState<QueryType | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  // Update character count and limit status when input changes
+  // Update character limit status when input changes
   useEffect(() => {
     const trimmedLength = input.trim().length
-    setCharCount(trimmedLength)
     setIsAtLimit(trimmedLength >= maxLength)
 
     if (isAtLimit && trimmedLength >= maxLength) {
@@ -55,6 +54,10 @@ export function ResearchInput({
     setInput(e.target.value)
   }
 
+  const toggleQueryType = (type: QueryType) => {
+    setSelectedType(selectedType === type ? null : type)
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     const trimmedInput = input.trim()
@@ -67,7 +70,7 @@ export function ResearchInput({
     }
     
     try {
-      await onSendMessage(trimmedInput)
+      await onSendMessage(trimmedInput, selectedType)
       setInput("") // Clear input after successful send
       // Reset textarea height and refocus
       if (textareaRef.current) {
@@ -93,102 +96,24 @@ export function ResearchInput({
     }
   }
 
-  const insertMarkdown = (syntax: string) => {
-    const textarea = textareaRef.current
-    if (!textarea) return
-
-    const start = textarea.selectionStart
-    const end = textarea.selectionEnd
-    const text = textarea.value
-
-    // If text is selected, wrap it with syntax
-    if (start !== end) {
-      const selectedText = text.substring(start, end)
-      const newText = text.substring(0, start) + syntax + selectedText + syntax + text.substring(end)
-      setInput(newText)
-      // Set cursor position after formatting
-      setTimeout(() => {
-        textarea.selectionStart = start + syntax.length
-        textarea.selectionEnd = end + syntax.length
-      }, 0)
-    } else {
-      // If no text is selected, just insert syntax
-      const newText = text.substring(0, start) + syntax + text.substring(end)
-      setInput(newText)
-      // Set cursor position between syntax
-      setTimeout(() => {
-        textarea.selectionStart = start + syntax.length
-        textarea.selectionEnd = start + syntax.length
-      }, 0)
-    }
-  }
-
   return (
     <div className={cn(
-      "fixed bottom-0 left-0 right-0 bg-white py-4 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]",
+      "fixed bottom-0 left-0 right-0 py-4 z-10",
       "transition-transform duration-200",
       disabled && "translate-y-full"
     )}>
       <form 
         onSubmit={handleSubmit} 
-        className="mx-auto flex max-w-3xl flex-col gap-2 px-4"
+        className="mx-auto max-w-3xl px-4"
         aria-label="Research message form"
       >
-        {/* Formatting Toolbar */}
-        <div className="flex items-center gap-1 px-2">
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 w-8 p-0"
-                  onClick={() => insertMarkdown("**")}
-                  disabled={isLoading || disabled}
-                >
-                  <Bold className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Bold (Ctrl+B)</TooltipContent>
-            </Tooltip>
-
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 w-8 p-0"
-                  onClick={() => insertMarkdown("*")}
-                  disabled={isLoading || disabled}
-                >
-                  <Italic className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Italic (Ctrl+I)</TooltipContent>
-            </Tooltip>
-
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 w-8 p-0"
-                  onClick={() => insertMarkdown("- ")}
-                  disabled={isLoading || disabled}
-                >
-                  <List className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Bullet List</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        </div>
-
-        <div className="flex items-end gap-2">
-          <div className="relative flex-1">
+        <div 
+          className={cn(
+            "flex flex-col rounded-2xl border bg-white p-4 shadow-[0_0_10px_rgba(0,0,0,0.05)] transition-all",
+            isFocused ? "border-gray-300" : "border-gray-200"
+          )}
+        >
+          <div className="relative">
             <textarea
               ref={textareaRef}
               value={input}
@@ -198,56 +123,99 @@ export function ResearchInput({
               onBlur={() => setIsFocused(false)}
               placeholder={placeholder}
               className={cn(
-                "min-h-[52px] w-full resize-none rounded-md border p-3 pr-10",
-                "focus:outline-none focus:ring-1",
-                "transition-colors duration-200",
-                isFocused
-                  ? "border-[#95C066] ring-[#95C066]"
-                  : "border-gray-300",
-                isAtLimit && "border-red-500 ring-red-500",
-                (isLoading || disabled) && "bg-gray-50 text-gray-500"
+                "mb-3 w-full resize-none border-0 bg-transparent text-lg text-gray-900",
+                "placeholder:text-gray-500 focus:outline-none focus:ring-0",
+                isAtLimit && "text-red-500",
+                (isLoading || disabled) && "text-gray-500"
               )}
+              style={{ minHeight: "24px", maxHeight: "200px" }}
               disabled={isLoading || disabled}
               aria-label="Research message input"
               aria-invalid={isAtLimit}
-              aria-describedby="char-count"
               maxLength={maxLength}
             />
-            <div 
-              id="char-count"
-              className={cn(
-                "absolute bottom-1 right-2 text-xs transition-colors",
-                isAtLimit ? "text-red-500 font-bold" : "text-gray-400"
-              )}
-              aria-live="polite"
-            >
-              {charCount}/{maxLength}
-            </div>
           </div>
-          <Button
-            type="submit"
-            disabled={!input.trim() || isLoading || isAtLimit || disabled}
-            className={cn(
-              "h-10 w-10 rounded-full p-2",
-              "bg-[#95C066] text-white",
-              "hover:bg-[#85b056]",
-              "disabled:bg-gray-300",
-              "transition-all duration-200"
-            )}
-            aria-label={isLoading ? "Sending message" : "Send message"}
-          >
-            {isLoading ? (
-              <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
-            ) : (
-              <Send className="h-5 w-5" aria-hidden="true" />
-            )}
-          </Button>
+
+          <div className="flex items-center justify-between">
+            {/* Query type toggles */}
+            <div className="flex items-center gap-2 overflow-x-auto pb-1">
+              {/* Courts Toggle */}
+              <button
+                type="button"
+                onClick={() => toggleQueryType(QueryType.COURT_CASE)}
+                className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-sm transition-colors ${
+                  selectedType === QueryType.COURT_CASE
+                    ? "bg-[#95C066] text-white"
+                    : "bg-gray-50 text-gray-600 hover:bg-gray-100"
+                }`}
+                aria-pressed={selectedType === QueryType.COURT_CASE}
+                title="Search court cases and legal precedents"
+                disabled={isLoading || disabled}
+              >
+                <Gavel className="h-4 w-4" />
+                <span>Courts</span>
+              </button>
+
+              {/* Legislative Toggle */}
+              <button
+                type="button"
+                onClick={() => toggleQueryType(QueryType.LEGISLATIVE)}
+                className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-sm transition-colors ${
+                  selectedType === QueryType.LEGISLATIVE
+                    ? "bg-[#95C066] text-white"
+                    : "bg-gray-50 text-gray-600 hover:bg-gray-100"
+                }`}
+                aria-pressed={selectedType === QueryType.LEGISLATIVE}
+                title="Search legislation, statutes and regulations"
+                disabled={isLoading || disabled}
+              >
+                <BookText className="h-4 w-4" />
+                <span>Legislative</span>
+              </button>
+
+              {/* Commercial Toggle */}
+              <button
+                type="button"
+                onClick={() => toggleQueryType(QueryType.COMMERCIAL)}
+                className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-sm transition-colors ${
+                  selectedType === QueryType.COMMERCIAL
+                    ? "bg-[#95C066] text-white"
+                    : "bg-gray-50 text-gray-600 hover:bg-gray-100"
+                }`}
+                aria-pressed={selectedType === QueryType.COMMERCIAL}
+                title="Search commercial law and business regulations"
+                disabled={isLoading || disabled}
+              >
+                <Building2 className="h-4 w-4" />
+                <span>Commercial</span>
+              </button>
+            </div>
+
+            {/* Send button */}
+            <Button
+              type="submit"
+              disabled={!input.trim() || isLoading || isAtLimit || disabled}
+              className={cn(
+                "rounded-full p-2 transition-colors",
+                input.trim() && !isLoading && !isAtLimit && !disabled
+                  ? "bg-[#95C066] text-white hover:bg-[#85b056] cursor-pointer"
+                  : "bg-gray-100 text-gray-400 cursor-not-allowed"
+              )}
+              aria-label={isLoading ? "Sending message" : "Send message"}
+            >
+              {isLoading ? (
+                <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
+              ) : (
+                <Send className="h-5 w-5" aria-hidden="true" />
+              )}
+            </Button>
+          </div>
         </div>
       </form>
 
       {isLoading && (
         <div 
-          className="mx-auto mt-2 max-w-3xl px-4 text-sm text-gray-500"
+          className="mx-auto mt-2 max-w-3xl px-4 text-xs text-gray-500"
           aria-live="polite"
         >
           Processing your request...

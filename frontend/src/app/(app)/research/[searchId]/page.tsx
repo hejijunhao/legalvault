@@ -111,22 +111,23 @@ export default function ResearchPage() {
 
   return (
     <div className="min-h-screen pb-20" aria-live="polite">
-      <div className="mx-auto max-w-[1440px] px-8">
-        <div className="flex flex-col gap-6 pt-8">
-          <BackButton 
-            customText="Back to Research" 
-            onClick={handleBackClick}
-            aria-label="Return to research page"
-            className="w-fit"
-          />
+      <div className="mx-auto max-w-[1440px] px-2"> 
+        <div className="flex flex-col gap-6 pt-16">
+          <div className="flex items-center">
+            <BackButton 
+              customText="Back to Research" 
+              onClick={handleBackClick}
+              aria-label="Return to research page"
+              className="w-fit"
+            />
+          </div>
 
-          <div className="mx-auto max-w-3xl w-full">
+          <div className="mx-auto max-w-3xl w-full -mt-11">
             {currentSession && (
               <>
-                <h1 className="text-title font-baskerville text-2xl leading-8 text-left italic mb-6">
-                  {currentSession.query}
+                <h1 className="text-left text-[32px] font-normal italic leading-10 text-[#111827] font-['Libre_Baskerville'] mb-6">
+                  {currentSession.title || currentSession.query}
                 </h1>
-                
                 {error && (
                   <Alert variant="destructive" className="my-4">
                     <AlertCircle className="h-4 w-4" />
