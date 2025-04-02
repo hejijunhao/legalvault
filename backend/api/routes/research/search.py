@@ -190,11 +190,11 @@ async def create_search(
         
         # Execute search using workflow - now handles persistence internally
         result = await workflow.execute_search(create_dto)
-        if not result or not result.get("search_id"):
+        if not result or not result.metadata.get("search_id"):
             raise HTTPException(status_code=500, detail="Failed to create search")
             
         # Get created search and return response
-        search_id = UUID(result["search_id"])
+        search_id = UUID(result.metadata["search_id"])
         search_dto = await workflow.research_operations.get_search_by_id(
             search_id,
             execution_options={"no_parameters": True, "use_server_side_cursors": False}

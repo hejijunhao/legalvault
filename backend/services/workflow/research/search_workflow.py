@@ -24,7 +24,7 @@ from models.domain.research.search_operations import ResearchOperations
 from models.domain.research.search_message_operations import SearchMessageOperations
 
 # Import DTOs
-from models.dtos.research.search_dto import SearchDTO, SearchResultDTO
+from models.dtos.research.search_dto import SearchDTO, SearchResultDTO, SearchCreateDTO
 
 # Import centralized enums
 from models.enums.research_enums import QueryCategory, QueryType, QueryStatus
@@ -173,6 +173,7 @@ class ResearchSearchWorkflow:
 
         Return your answer in JSON format with keys: relevance, clarity, type, complexity, clarifications (list or empty).
         """
+        
         if search_params and "type" in search_params:
             prompt += f"\n\nNote: The user specified the query type as '{search_params['type']}'."
 
@@ -203,7 +204,7 @@ class ResearchSearchWorkflow:
 
         return {
             "category": category,
-            "query_type": QueryType(analysis["type"]),
+            "query_type": QueryType(analysis["type"].lower()),
             "complexity_score": analysis["complexity"],
             "clarity_score": analysis["clarity"],
             "is_legal_query": analysis["relevance"].lower() == "yes",
@@ -503,25 +504,28 @@ class ResearchSearchWorkflow:
 
     async def execute_search(
         self, 
-        user_id: UUID, 
-        query: str,
-        enterprise_id: Optional[UUID] = None, 
-        search_params: Optional[Dict] = None,
-        search_domain: Optional[ResearchSearch] = None
+        create_dto: SearchCreateDTO
     ) -> SearchResultDTO:
         """
         Execute a new search query, orchestrating domain models and API calls.
         
         Args:
-            user_id: UUID of the user initiating the search
-            query: The search query
-            enterprise_id: Optional UUID of the user's enterprise
-            search_params: Optional parameters for the search
-            search_domain: Optional ResearchSearch domain model
+            create_dto: SearchCreateDTO containing all required search parameters including:
+                - user_id: UUID of the user initiating the search
+                - query: The search query text
+                - enterprise_id: Optional UUID of the user's enterprise
+                - search_params: Optional parameters for the search
+                - title, description, tags, etc.: Additional metadata
             
         Returns:
             SearchResultDTO containing the search results or error information
         """
+        # Extract required fields from the DTO
+        user_id = create_dto.user_id
+        query = create_dto.query
+        enterprise_id = create_dto.enterprise_id
+        search_params = create_dto.search_params
+        
         context = {
             "user_id": str(user_id),
             "timestamp": datetime.utcnow().isoformat(),
@@ -535,12 +539,13 @@ class ResearchSearchWorkflow:
         
         start_time = datetime.utcnow()
         
-        if not search_domain:
-            search_domain = ResearchSearch(
-                title=query,  # Use the query as initial title
-                user_id=user_id,
-                enterprise_id=enterprise_id if enterprise_id else None
-            )
+        # Create search domain object from DTO fields
+        search_domain = ResearchSearch(
+            title=create_dto.title or query,  # Use provided title or query as fallback
+            user_id=user_id,
+            enterprise_id=enterprise_id if enterprise_id else None,
+            description=create_dto.description
+        )
         
         if not search_domain.validate_query(query):
             logger.warning("Invalid query rejected", extra=context)

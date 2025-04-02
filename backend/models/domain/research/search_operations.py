@@ -200,8 +200,8 @@ class ResearchOperations:
                 
                 # Add and commit the search with pgBouncer compatibility settings
                 self.db_session.add(db_search)
-                await self.db_session.commit(execution_options=_execution_options)
-                await self.db_session.refresh(db_search, execution_options=_execution_options)
+                await self.db_session.commit()
+                await self.db_session.refresh(db_search)
                 
                 # If response provided, add initial messages
                 if response:
@@ -228,7 +228,7 @@ class ResearchOperations:
                         )
                         
                         # Refresh search to get messages
-                        await self.db_session.refresh(db_search, execution_options=_execution_options)
+                        await self.db_session.refresh(db_search)
                         
                     except Exception as msg_error:
                         logger.error(f"Error creating initial messages: {str(msg_error)}")
@@ -335,7 +335,7 @@ class ResearchOperations:
                         }
                     )
                 
-                await self.db_session.commit(execution_options=execution_options)
+                await self.db_session.commit()
                 return True
                 
             except Exception as e:
@@ -581,8 +581,8 @@ class ResearchOperations:
                 for field, value in updates.dict(exclude_unset=True).items():
                     setattr(db_search, field, value)
                 
-                await self.db_session.commit(execution_options=execution_options)
-                await self.db_session.refresh(db_search, execution_options=execution_options)
+                await self.db_session.commit()
+                await self.db_session.refresh(db_search)
                 
                 return to_search_dto(db_search)
                 
@@ -664,7 +664,7 @@ class ResearchOperations:
                 else:
                     await self._execute_query(search_query)
                 
-                await self.db_session.commit(execution_options=execution_options)
+                await self.db_session.commit()
                 return True
                 
             except Exception as e:
