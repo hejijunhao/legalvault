@@ -10,6 +10,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { cn } from "@/lib/utils"
 import { Message, Citation, QueryStatus } from "@/contexts/research/research-context"
 import { toast } from "sonner"
+import ReactMarkdown from "react-markdown"
 
 interface UserMessagesProps {
   messages: Message[]
@@ -121,9 +122,19 @@ export function UserMessages({
               )}>
                 {/* Message Text */}
                 <div className="prose prose-sm max-w-none">
-                  <p className="text-[15px] leading-[1.35] m-0 break-words font-system">
-                    {typeof message.content === 'object' && message.content?.text ? message.content.text : 'No content available'}
-                  </p>
+                  <div className="text-[15px] leading-[1.6] m-0 break-words font-inter 
+                    [&>h1]:text-xl [&>h1]:font-bold [&>h1]:mb-4 [&>h1]:mt-2 [&>h1]:font-inter
+                    [&>h2]:text-lg [&>h2]:font-bold [&>h2]:mb-3 [&>h2]:mt-2 [&>h2]:font-inter
+                    [&>h3]:font-bold [&>h3]:mb-2 [&>h3]:mt-1 [&>h3]:font-inter
+                    [&>p]:mb-3 [&>p]:leading-[1.7] [&>p]:font-inter
+                    [&>ul]:mb-3 [&>ul]:pl-4 [&>ul>li]:mb-2 [&>ul>li]:leading-[1.6] [&>ul>li]:font-inter
+                    [&>ol]:mb-3 [&>ol]:pl-4 [&>ol>li]:mb-2 [&>ol>li]:leading-[1.6] [&>ol>li]:font-inter
+                    [&>*:last-child]:mb-0
+                    [&>p:first-child]:mt-0 [&>h1:first-child]:mt-0 [&>h2:first-child]:mt-0">
+                    <ReactMarkdown>
+                      {typeof message.content === 'object' && message.content?.text ? message.content.text : 'No content available'}
+                    </ReactMarkdown>
+                  </div>
                 </div>
 
                 {/* Message Actions Dropdown (hidden by default, shown on hover) */}
