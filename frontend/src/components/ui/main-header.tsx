@@ -2,10 +2,11 @@
 
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import Image from "next/image"
+import { cn } from "@/lib/utils"
 import { ChatOverlay } from "@/components/chat/chat-overlay"
 import { DropdownProfileMenu } from "@/components/ui/dropdown-profile-menu"
 
@@ -21,10 +22,36 @@ export function MainHeader() {
   const pathname = usePathname()
   const [isChatOpen, setIsChatOpen] = useState(false)
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false)
+  const [isScrolled, setIsScrolled] = useState(false)
+  
+  // Check if we're on a research page
+  const isResearchPage = pathname.startsWith('/research/') && pathname !== '/research'
+  
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 10)
+    }
+    
+    if (isResearchPage) {
+      window.addEventListener('scroll', handleScroll)
+      handleScroll() // Check initial scroll position
+    }
+    
+    return () => {
+      window.removeEventListener('scroll', handleScroll)
+    }
+  }, [isResearchPage])
 
   return (
     <>
-      <header className="sticky top-0 z-50 w-full bg-transparent">
+      <header 
+        className={cn(
+          "sticky top-0 z-50 w-full transition-all duration-300",
+          isResearchPage && isScrolled
+            ? "bg-white/70 backdrop-blur-[12px] border-b border-white/20 shadow-[0_8px_32px_rgba(0,0,0,0.04)]"
+            : "bg-transparent"
+        )}
+      >
         <div className="mx-auto flex h-16 max-w-[1440px] items-center justify-between px-4">
           <div className="flex items-center">
             <Link href="/" className="flex items-center space-x-2">
@@ -178,5 +205,3 @@ export function MainHeader() {
     </>
   )
 }
-
-
