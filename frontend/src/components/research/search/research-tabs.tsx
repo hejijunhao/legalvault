@@ -2,17 +2,37 @@
 
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { cn } from "@/lib/utils"
 import { UserMessages } from "./user-messages"
 import { Message, Citation } from "@/contexts/research/research-context"
 
 interface ResearchTabsProps {
   messages: Message[]
+  activeTab?: "answer" | "sources"
+  onTabChange?: (tab: "answer" | "sources") => void
 }
 
-export function ResearchTabs({ messages }: ResearchTabsProps) {
-  const [activeTab, setActiveTab] = useState<"answer" | "sources">("answer")
+export function ResearchTabs({ messages, activeTab: externalActiveTab, onTabChange }: ResearchTabsProps) {
+  const [internalActiveTab, setInternalActiveTab] = useState<"answer" | "sources">("answer")
+  
+  // Determine which active tab state to use (internal or external)
+  const activeTab = externalActiveTab !== undefined ? externalActiveTab : internalActiveTab
+
+  // Sync internal state with external state when provided
+  useEffect(() => {
+    if (externalActiveTab !== undefined) {
+      setInternalActiveTab(externalActiveTab)
+    }
+  }, [externalActiveTab])
+
+  // Handle tab change
+  const handleTabChange = (tab: "answer" | "sources") => {
+    setInternalActiveTab(tab)
+    if (onTabChange) {
+      onTabChange(tab)
+    }
+  }
 
   // Extract citations from assistant messages
   const citations = messages
@@ -27,7 +47,7 @@ export function ResearchTabs({ messages }: ResearchTabsProps) {
     <div className="w-full">
       <div className="flex border-b border-gray-200 mb-4">
         <button
-          onClick={() => setActiveTab("answer")}
+          onClick={() => handleTabChange("answer")}
           className={cn(
             "py-2 px-4 text-sm font-medium",
             activeTab === "answer" 
@@ -40,7 +60,7 @@ export function ResearchTabs({ messages }: ResearchTabsProps) {
           Answer
         </button>
         <button
-          onClick={() => setActiveTab("sources")}
+          onClick={() => handleTabChange("sources")}
           className={cn(
             "py-2 px-4 text-sm font-medium flex items-center gap-2",
             activeTab === "sources" 

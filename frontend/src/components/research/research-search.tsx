@@ -84,7 +84,7 @@ export function ResearchSearch({
               onClick={() => toggleQueryType(QueryType.COURT_CASE)}
               className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-sm transition-colors ${
                 selectedType === QueryType.COURT_CASE
-                  ? "bg-[#95C066] text-white"
+                  ? "bg-[#9FE870] text-[#1A2E0D]"
                   : "bg-gray-50 text-gray-600 hover:bg-gray-100"
               }`}
               aria-pressed={selectedType === QueryType.COURT_CASE}
@@ -99,7 +99,7 @@ export function ResearchSearch({
               onClick={() => toggleQueryType(QueryType.LEGISLATIVE)}
               className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-sm transition-colors ${
                 selectedType === QueryType.LEGISLATIVE
-                  ? "bg-[#95C066] text-white"
+                  ? "bg-[#9FE870] text-[#1A2E0D]"
                   : "bg-gray-50 text-gray-600 hover:bg-gray-100"
               }`}
               aria-pressed={selectedType === QueryType.LEGISLATIVE}
@@ -114,7 +114,7 @@ export function ResearchSearch({
               onClick={() => toggleQueryType(QueryType.COMMERCIAL)}
               className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-sm transition-colors ${
                 selectedType === QueryType.COMMERCIAL
-                  ? "bg-[#95C066] text-white"
+                  ? "bg-[#9FE870] text-[#1A2E0D]"
                   : "bg-gray-50 text-gray-600 hover:bg-gray-100"
               }`}
               aria-pressed={selectedType === QueryType.COMMERCIAL}
@@ -131,7 +131,7 @@ export function ResearchSearch({
               disabled={!isValidQuery || isLoading}
               className={`rounded-full p-2 transition-colors ${
                 isValidQuery && !isLoading
-                  ? "bg-[#95C066] text-white hover:bg-[#85b056] cursor-pointer"
+                  ? "bg-[#9FE870] text-[#1A2E0D] hover:bg-[#8ad460] cursor-pointer"
                   : "bg-gray-100 text-gray-400 cursor-not-allowed"
               }`}
               aria-label="Search for legal insights"

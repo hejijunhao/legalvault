@@ -2,14 +2,15 @@
 
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { ResearchInput } from "@/components/research/search/research-input"
 import { BackButton } from "@/components/ui/back-button"
 import { ResearchTabs } from "@/components/research/search/research-tabs"
 import { useResearch } from "@/contexts/research/research-context"
-import { Loader2, AlertCircle } from "lucide-react"
+import { Loader2, AlertCircle, ArrowLeft } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { UserMessages } from "@/components/research/search/user-messages"
 
 export default function ResearchPage() {
   const params = useParams()
@@ -24,6 +25,9 @@ export default function ResearchPage() {
     clearError 
   } = useResearch()
   const [isMounted, setIsMounted] = useState(true)
+  const [activeTab, setActiveTab] = useState<"answer" | "sources">("answer")
+  const [showJointHeader, setShowJointHeader] = useState(false)
+  const searchHeaderRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     clearError()
@@ -63,6 +67,20 @@ export default function ResearchPage() {
       })
   }, [searchId, getSession, currentSession, isLoading, router, isMounted])
 
+  // Handle scroll to detect when search header reaches top of viewport
+  useEffect(() => {
+    const handleScroll = () => {
+      if (searchHeaderRef.current) {
+        const headerRect = searchHeaderRef.current.getBoundingClientRect()
+        // Show joint header when the original header is about to go out of view
+        setShowJointHeader(headerRect.top <= 64) // 64px is the height of the main header
+      }
+    }
+
+    window.addEventListener('scroll', handleScroll)
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [])
+
   const handleSendMessage = async (content: string) => {
     if (!searchId || !content.trim()) return
     
@@ -75,6 +93,10 @@ export default function ResearchPage() {
 
   const handleBackClick = () => {
     router.push("/research")
+  }
+
+  const handleTabChange = (tab: "answer" | "sources") => {
+    setActiveTab(tab)
   }
 
   if (isLoading && !currentSession) {
@@ -109,10 +131,73 @@ export default function ResearchPage() {
     )
   }
 
+  // Get citations for the sources tab
+  const citations = currentSession?.messages
+    ?.filter(m => m.role === "assistant" && Array.isArray(m.content?.citations) && m.content.citations.length > 0)
+    ?.flatMap(m => m.content.citations || [])
+    ?.map((citation, index) => ({
+      id: String(index),
+      ...citation
+    })) || []
+
   return (
     <div className="min-h-screen pb-20" aria-live="polite">
+      {/* Joint Header - appears when scrolling past the original header */}
+      {showJointHeader && (
+        <div className="fixed top-16 left-0 right-0 z-40 backdrop-blur-md bg-white/80 border-b border-gray-200 shadow-sm">
+          <div className="mx-auto max-w-[1440px] px-4 py-3">
+            <div className="flex flex-col items-center">
+              <div className="flex items-center justify-between w-full">
+                <button
+                  onClick={handleBackClick}
+                  className="inline-flex items-center text-sm text-[#525766] transition-colors hover:text-[#1c1c1c]"
+                  aria-label="Return to research page"
+                >
+                  <ArrowLeft className="mr-1 h-4 w-4" />
+                  Back to Research
+                </button>
+              </div>
+              <h2 className="text-center text-xl font-normal italic text-[#111827] font-['Libre_Baskerville'] truncate max-w-lg">
+                {currentSession?.title || currentSession?.query}
+              </h2>
+              <div className="flex border-b border-gray-200 mt-2">
+                <button
+                  onClick={() => handleTabChange("answer")}
+                  className={`py-2 px-4 text-sm font-medium ${
+                    activeTab === "answer" 
+                      ? "border-b-2 border-black text-black" 
+                      : "text-gray-500 hover:text-gray-700"
+                  }`}
+                  aria-selected={activeTab === "answer"}
+                  role="tab"
+                >
+                  Answer
+                </button>
+                <button
+                  onClick={() => handleTabChange("sources")}
+                  className={`py-2 px-4 text-sm font-medium flex items-center gap-2 ${
+                    activeTab === "sources" 
+                      ? "border-b-2 border-black text-black" 
+                      : "text-gray-500 hover:text-gray-700"
+                  }`}
+                  aria-selected={activeTab === "sources"}
+                  role="tab"
+                >
+                  Sources
+                  {citations.length > 0 && (
+                    <span className="inline-flex items-center justify-center w-5 h-5 text-xs font-medium rounded-full bg-gray-200">
+                      {citations.length}
+                    </span>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="mx-auto max-w-[1440px] px-2"> 
-        <div className="flex flex-col gap-6 pt-16">
+        <div className="flex flex-col gap-6 pt-16" ref={searchHeaderRef}>
           <div className="flex items-center">
             <BackButton 
               customText="Back to Research" 
@@ -135,7 +220,56 @@ export default function ResearchPage() {
                   </Alert>
                 )}
                 
-                <ResearchTabs messages={currentSession.messages || []} />
+                {/* Only show tabs when joint header is not visible */}
+                {!showJointHeader && (
+                  <div className="mb-4">
+                    <ResearchTabs 
+                      messages={currentSession.messages || []} 
+                      activeTab={activeTab}
+                      onTabChange={handleTabChange}
+                    />
+                  </div>
+                )}
+                
+                {/* Tab content is always visible */}
+                <div className="tab-content">
+                  {activeTab === "answer" && (
+                    <div role="tabpanel" aria-labelledby="answer-tab">
+                      <UserMessages messages={currentSession.messages || []} />
+                    </div>
+                  )}
+
+                  {activeTab === "sources" && (
+                    <div role="tabpanel" aria-labelledby="sources-tab" className="p-2">
+                      {citations.length > 0 ? (
+                        <div className="space-y-4">
+                          {citations.map((citation, index) => (
+                            <div key={citation.id} className="flex items-start p-3 border-b border-gray-100 last:border-0">
+                              <div className="flex-shrink-0 flex items-center justify-center w-6 h-6 rounded-full bg-gray-200 text-xs font-medium mr-3">
+                                {index + 1}
+                              </div>
+                              <div className="flex-1">
+                                <a 
+                                  href={citation.url} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="text-sm font-medium text-blue-600 hover:underline"
+                                >
+                                  {citation.text}
+                                </a>
+                                <p className="text-xs text-gray-500 mt-1 break-all">{citation.url}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-center py-8 text-gray-500">
+                          <p>No sources available for this research.</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </>
             )}
           </div>

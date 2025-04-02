@@ -89,18 +89,20 @@ export function PastSearchesGrid() {
             className="group relative cursor-pointer"
             onClick={() => handleSearchClick(search.id)}
           >
-            <div className="overflow-hidden rounded-lg border border-gray-200 bg-white p-4 shadow-sm transition-all duration-300 hover:border-gray-300 hover:shadow-md">
-              <div className="mb-2 flex items-center justify-between">
-                <span className="text-xs text-gray-500">
-                  {new Date(search.created_at).toLocaleDateString()}
-                </span>
-                {search.is_featured && (
-                  <BookmarkIcon className="h-4 w-4 text-[#95C066]" />
-                )}
+            <div className="overflow-hidden rounded-lg border border-gray-200 bg-white p-4 shadow-sm transition-all duration-300 hover:border-gray-300 hover:shadow-md h-[160px] flex flex-col justify-between">
+              <div>
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-xs text-gray-500">
+                    {new Date(search.created_at).toLocaleDateString()}
+                  </span>
+                  {search.is_featured && (
+                    <BookmarkIcon className="h-4 w-4 text-[#95C066]" />
+                  )}
+                </div>
+                <p className="mb-3 line-clamp-2 text-sm text-gray-800">{search.query}</p>
               </div>
-              <p className="mb-3 line-clamp-2 text-sm text-gray-800">{search.query}</p>
               <div className="flex items-center justify-end">
-                <div className="rounded-full bg-gray-50 p-1.5 transition-colors group-hover:bg-[#95C066] group-hover:text-white">
+                <div className="rounded-full bg-gray-50 p-1.5 transition-colors group-hover:bg-[#9FE870] group-hover:text-white">
                   <ArrowUpRight className="h-3.5 w-3.5" />
                 </div>
               </div>
