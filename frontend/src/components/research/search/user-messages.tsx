@@ -11,12 +11,14 @@ import { cn } from "@/lib/utils"
 import { Message, Citation, QueryStatus } from "@/contexts/research/research-context"
 import { toast } from "sonner"
 import ReactMarkdown from "react-markdown"
+import rehypeRaw from "rehype-raw"
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { CitationHovercard } from "./citation-hovercard"
 
 interface UserMessagesProps {
   messages: Message[]
@@ -24,6 +26,7 @@ interface UserMessagesProps {
   userName?: string
   onRegenerateMessage?: (messageId: string) => void
   onRateMessage?: (messageId: string, rating: 'positive' | 'negative') => void
+  onCopyMessage?: (messageId: string) => void
 }
 
 export function UserMessages({ 
@@ -31,7 +34,8 @@ export function UserMessages({
   userAvatar, 
   userName = "You",
   onRegenerateMessage,
-  onRateMessage
+  onRateMessage,
+  onCopyMessage
 }: UserMessagesProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -73,6 +77,17 @@ export function UserMessages({
     if (index === 0) return true
     if (index > 0 && messages[index].role !== messages[index - 1].role) return true
     return false
+  }
+
+  // Process citations in text, replacing [n] with span elements
+  const processCitations = (text: string, citations: Citation[]) => {
+    return text.replace(/\[(\d+)\]/g, (match, number) => {
+      const index = parseInt(number, 10) - 1
+      if (index >= 0 && index < citations.length) {
+        return `<span data-citation="${index}"></span>`
+      }
+      return match
+    })
   }
 
   return (
@@ -137,8 +152,24 @@ export function UserMessages({
                     [&>ol]:mb-3 [&>ol]:pl-4 [&>ol>li]:mb-2 [&>ol>li]:leading-[1.6] [&>ol>li]:font-inter
                     [&>*:last-child]:mb-0
                     [&>p:first-child]:mt-0 [&>h1:first-child]:mt-0 [&>h2:first-child]:mt-0">
-                    <ReactMarkdown>
-                      {typeof message.content === 'object' && message.content?.text ? message.content.text : 'No content available'}
+                    <ReactMarkdown
+                      rehypePlugins={[rehypeRaw]}
+                      components={{
+                        span: ({ node, ...props }) => {
+                          if ('data-citation' in props) {
+                            const index = parseInt(props['data-citation'] as string, 10)
+                            const citation = message.content?.citations?.[index]
+                            if (!citation) return <span>[{index + 1}]</span>
+                            return <CitationHovercard index={index + 1} citation={citation} />
+                          }
+                          return <span {...props} />
+                        }
+                      }}
+                    >
+                      {typeof message.content === 'object' && message.content?.text 
+                        ? processCitations(message.content.text, message.content.citations || [])
+                        : 'No content available'
+                      }
                     </ReactMarkdown>
                   </div>
                 </div>
