@@ -46,7 +46,7 @@ export function MainHeader() {
     <>
       <header 
         className={cn(
-          "sticky top-0 z-50 w-full transition-all duration-300",
+          "sticky top-0 z-50 w-full transition-all duration-300 overflow-x-clip",
           isResearchPage && isScrolled
             ? "bg-white/70 backdrop-blur-[12px] border-b border-white/20 shadow-[0_8px_32px_rgba(0,0,0,0.04)]"
             : "bg-transparent"

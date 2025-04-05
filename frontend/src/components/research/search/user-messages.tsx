@@ -136,25 +136,35 @@ export function UserMessages({
             )}>
               {/* Message Bubble */}
               <div className={cn(
-                "relative rounded-[20px] px-4 py-2.5 shadow-sm mb-3",
+                "relative rounded-[20px] px-5 py-3.5 shadow-sm mb-3",
                 message.role === "assistant" 
                   ? "bg-[#FAFAFA] text-[#000000] rounded-bl-md border border-[#E8E8E8]" 
                   : "bg-[#BFEF9C] text-[#1A2E0D] rounded-br-md"
               )}>
                 {/* Message Text */}
                 <div className="prose prose-sm max-w-none">
-                  <div className="text-[15px] leading-[1.6] m-0 break-words font-inter 
-                    [&>h1]:text-xl [&>h1]:font-bold [&>h1]:mb-4 [&>h1]:mt-2 [&>h1]:font-inter
-                    [&>h2]:text-lg [&>h2]:font-bold [&>h2]:mb-3 [&>h2]:mt-2 [&>h2]:font-inter
-                    [&>h3]:font-bold [&>h3]:mb-2 [&>h3]:mt-1 [&>h3]:font-inter
-                    [&>p]:mb-3 [&>p]:leading-[1.7] [&>p]:font-inter
-                    [&>ul]:mb-3 [&>ul]:pl-4 [&>ul>li]:mb-2 [&>ul>li]:leading-[1.6] [&>ul>li]:font-inter
-                    [&>ol]:mb-3 [&>ol]:pl-4 [&>ol>li]:mb-2 [&>ol>li]:leading-[1.6] [&>ol>li]:font-inter
+                  <div className="text-[16px] leading-[1.75] m-0 break-words font-inter tracking-[-0.01em]
+                    [&>h1]:text-2xl [&>h1]:font-semibold [&>h1]:mb-5 [&>h1]:mt-3 [&>h1]:font-inter [&>h1]:leading-[1.3]
+                    [&>h2]:text-xl [&>h2]:font-semibold [&>h2]:mb-4 [&>h2]:mt-3 [&>h2]:font-inter [&>h2]:leading-[1.35]
+                    [&>h3]:text-lg [&>h3]:font-semibold [&>h3]:mb-3 [&>h3]:mt-2 [&>h3]:font-inter [&>h3]:leading-[1.4]
+                    [&>p]:mb-4 [&>p]:leading-[1.75] [&>p]:font-inter
+                    [&>ul]:mb-4 [&>ul]:pl-5 [&>ul>li]:mb-2.5 [&>ul>li]:leading-[1.75] [&>ul>li]:font-inter
+                    [&>ol]:mb-4 [&>ol]:pl-5 [&>ol>li]:mb-2.5 [&>ol>li]:leading-[1.75] [&>ol>li]:font-inter
                     [&>*:last-child]:mb-0
                     [&>p:first-child]:mt-0 [&>h1:first-child]:mt-0 [&>h2:first-child]:mt-0">
                     <ReactMarkdown
                       rehypePlugins={[rehypeRaw]}
                       components={{
+                        p: ({ node, children, ...props }) => {
+                          // If the paragraph contains a div, render as div instead
+                          if (node?.children?.some((child: any) => 
+                            child.type === 'element' && 
+                            (child.tagName === 'div' || child.tagName === 'p')
+                          )) {
+                            return <div {...props}>{children}</div>;
+                          }
+                          return <p {...props}>{children}</p>;
+                        },
                         span: ({ node, ...props }) => {
                           if ('data-citation' in props) {
                             const index = parseInt(props['data-citation'] as string, 10)
@@ -173,37 +183,37 @@ export function UserMessages({
                     </ReactMarkdown>
                   </div>
                 </div>
-
-                {/* Status indicator for user messages only */}
-                {message.role === "user" && message.status && (
-                  <div className="flex justify-end">
-                    <div className={cn(
-                      "text-xs px-1",
-                      message.status === QueryStatus.PENDING 
-                        ? "text-gray-500" 
-                        : message.status === QueryStatus.FAILED 
-                          ? "text-red-500" 
-                          : "text-gray-500"
-                    )}>
-                      {message.status === QueryStatus.PENDING && (
-                        <span className="flex items-center gap-1">
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                          {getStatusText(message.status)}
-                        </span>
-                      )}
-                      {message.status === QueryStatus.FAILED && (
-                        <span className="flex items-center gap-1">
-                          <AlertCircle className="h-3 w-3" />
-                          {getStatusText(message.status)}
-                        </span>
-                      )}
-                      {message.status !== QueryStatus.PENDING && message.status !== QueryStatus.FAILED && (
-                        <span>{getStatusText(message.status)}</span>
-                      )}
-                    </div>
-                  </div>
-                )}
               </div>
+
+              {/* Status indicator for user messages */}
+              {message.role === "user" && message.status && (
+                <div className="flex justify-end -mt-1 mb-2">
+                  <div className={cn(
+                    "text-[13px] px-1.5 py-0.5 text-gray-500",
+                    message.status === QueryStatus.PENDING 
+                      ? "text-gray-500" 
+                      : message.status === QueryStatus.FAILED 
+                        ? "text-red-500" 
+                        : "text-gray-500"
+                  )}>
+                    {message.status === QueryStatus.PENDING && (
+                      <span className="flex items-center gap-1.5">
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        {getStatusText(message.status)}
+                      </span>
+                    )}
+                    {message.status === QueryStatus.FAILED && (
+                      <span className="flex items-center gap-1.5">
+                        <AlertCircle className="h-3 w-3" />
+                        {getStatusText(message.status)}
+                      </span>
+                    )}
+                    {message.status !== QueryStatus.PENDING && message.status !== QueryStatus.FAILED && (
+                      <span>{getStatusText(message.status)}</span>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Message Actions */}
               {message.role === "assistant" && (

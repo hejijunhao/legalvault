@@ -15,9 +15,9 @@ export function CitationHovercard({ index, citation }: CitationHovercardProps) {
     <HoverCard openDelay={0} closeDelay={0}>
       <HoverCardTrigger asChild>
         <button
-          className="inline-flex h-[18px] min-w-[18px] select-none items-center justify-center rounded-[4px] bg-blue-50 px-1.5 text-xs font-medium text-gray-900 hover:bg-blue-100 transition-colors"
+          className="inline-flex h-[20px] min-w-[20px] select-none items-center justify-center rounded-[6px] bg-gray-100 px-1.5 text-xs font-medium text-gray-900 hover:bg-[#BFEF9C] transition-colors"
         >
-          ({index})
+          {index}
         </button>
       </HoverCardTrigger>
       <HoverCardContent 

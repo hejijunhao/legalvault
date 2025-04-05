@@ -31,9 +31,16 @@ export class ResearchCache {
   }
   
   /**
-   * Load cache from localStorage
+   * Load cache from localStorage (client-side only)
    */
   loadFromStorage(): void {
+    // Skip during SSR (server-side rendering)
+    if (typeof window === 'undefined') {
+      this.sessionCache = new Map();
+      this.messageCache = new Map();
+      return;
+    }
+
     try {
       const storedData = localStorage.getItem(this.config.storageKey);
       if (!storedData) return;
@@ -64,9 +71,14 @@ export class ResearchCache {
   }
   
   /**
-   * Save cache to localStorage
+   * Save cache to localStorage (client-side only)
    */
   saveToStorage(): void {
+    // Skip during SSR (server-side rendering)
+    if (typeof window === 'undefined') {
+      return;
+    }
+
     try {
       // Convert Maps to objects for storage
       const sessionsObj: Record<string, CacheEntry<ResearchSession>> = {};
@@ -344,7 +356,9 @@ export class ResearchCache {
     this.sessionListCache.clear();
     this.messageCache.clear();
     this.messageListCache.clear();
-    localStorage.removeItem(this.config.storageKey);
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(this.config.storageKey);
+    }
   }
   
   /**
