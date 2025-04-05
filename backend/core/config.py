@@ -6,8 +6,12 @@ from pydantic_settings import BaseSettings
 from functools import lru_cache
 import os
 from logging import getLogger
+from dotenv import load_dotenv  # Add this import
 
 logger = getLogger(__name__)
+
+# Load .env file explicitly
+load_dotenv()
 
 class Settings(BaseSettings):
     # Environment
@@ -36,7 +40,7 @@ class Settings(BaseSettings):
     HUGGINGFACE_API_TOKEN: Optional[str] = None
 
     # Database Settings
-    DATABASE_URL: PostgresDsn
+    DATABASE_URL: Optional[PostgresDsn] = os.getenv("DATABASE_URL", os.getenv("DATABASE_URL_SESSION"))  # Default to session pooling
     SQLALCHEMY_DATABASE_URI: Optional[PostgresDsn] = None
 
     @field_validator("SQLALCHEMY_DATABASE_URI", mode="before")
@@ -44,26 +48,22 @@ class Settings(BaseSettings):
     def assemble_db_connection(cls, v: Optional[str], info) -> Any:
         if isinstance(v, str):
             return v
-        
         values = info.data
         if values.get("DATABASE_URL"):
             return values.get("DATABASE_URL")
-        
         return None
     
     # Config for Pydantic v2
     model_config = {
         "case_sensitive": True,
-        "env_file": ".env",
+        "env_file": ".env",  # Still specify env file, but load_dotenv ensures it’s read
         "extra": "allow"  # Allow extra fields from env file
     }
-
 
 @lru_cache()
 def get_settings() -> Settings:
     """Get cached settings instance"""
     return Settings()
-
 
 # Create a global settings instance
 settings = get_settings()
