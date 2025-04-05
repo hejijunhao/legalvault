@@ -11,9 +11,6 @@ from pathlib import Path
 from typing import AsyncGenerator, Optional, Dict, Any
 import logging
 from contextlib import asynccontextmanager
-import asyncio
-from functools import wraps
-import asyncpg.exceptions
 
 from fastapi import HTTPException
 from sqlalchemy import text, Table, MetaData
@@ -96,106 +93,89 @@ logger.info(f"  - Statement timeout set to: 60 seconds")
 async_session_factory = sessionmaker(
     bind=async_engine,
     class_=AsyncSession,
-    expire_on_commit=False,
-    autocommit=False,
-    autoflush=False
+    expire_on_commit=False
 )
 
-# Retry decorator for handling transient pgBouncer errors
-def retry_on_pgbouncer_error(max_retries=3, delay=1):
-    def decorator(func):
-        @wraps(func)
-        async def wrapper(*args, **kwargs):
-            last_error = None
-            for attempt in range(max_retries):
-                try:
-                    return await func(*args, **kwargs)
-                except asyncpg.exceptions.InvalidSQLStatementNameError as e:
-                    last_error = e
-                    logger.warning(f"pgBouncer error on attempt {attempt + 1}/{max_retries}: {str(e)}")
-                    if attempt < max_retries - 1:
-                        await asyncio.sleep(delay)
-                        continue
-                    raise HTTPException(
-                        status_code=503,
-                        detail=f"Database connection failed after {max_retries} retries: {str(e)}"
-                    ) from e
-            raise last_error  # Should never reach here, but for safety
-        return wrapper
-    return decorator
-
+# Helper to handle pgBouncer errors
 async def handle_pgbouncer_error(session: AsyncSession, error: Exception) -> Optional[AsyncSession]:
-    """Handle pgBouncer-related errors by creating a fresh session if needed.
-    
-    Args:
-        session: The current session that encountered an error
-        error: The exception that was raised
-        
-    Returns:
-        Optional[AsyncSession]: A fresh session if recovery was successful, None otherwise
+    """
+    Handle pgBouncer related errors by creating a fresh session.
+    Returns a new session if successful, None if failed.
     """
     error_message = str(error).lower()
-    is_pgbouncer_error = any(err in error_message for err in [
+    if any(err_type in error_message for err_type in [
+        "duplicatepreparedstatementerror", 
         "prepared statement",
-        "duplicatepreparedstatementerror",
         "invalidsqlstatementnameerror"
-    ])
-    
-    if not is_pgbouncer_error:
-        return None
-        
-    logger.info(f"pgBouncer error encountered: {error}. Attempting recovery with fresh session...")
-    
-    try:
-        # Create fresh session
-        fresh_session = async_session_factory()
-        
-        # Test the connection
-        test_query = text("SELECT 1").execution_options(
-            no_parameters=True,
-            use_server_side_cursors=False
-        )
-        await fresh_session.execute(test_query)
-        
-        logger.info("Successfully created fresh session")
-        return fresh_session
-        
-    except Exception as retry_error:
-        logger.error(f"Fresh session creation failed: {retry_error}")
-        if 'fresh_session' in locals():
-            await fresh_session.close()
-        return None
+    ]):
+        logger.warning(f"pgBouncer prepared statement warning detected: {error_message[:100]}...")
+        try:
+            # Close the problematic session
+            if session:
+                await session.close()
+            
+            # Create a fresh session
+            fresh_session = async_session_factory()
+            
+            # Test the connection with a simple query
+            test_query = text("SELECT 1").execution_options(
+                no_parameters=True, 
+                use_server_side_cursors=False
+            )
+            await fresh_session.execute(test_query)
+            
+            return fresh_session
+        except Exception as inner_e:
+            logger.error(f"Failed to create replacement session: {str(inner_e)}")
+            if fresh_session:
+                await fresh_session.close()
+            return None
+    return None
 
-@retry_on_pgbouncer_error(max_retries=3, delay=1)
-async def get_db() -> AsyncSession:
-    """Get a database session for use in FastAPI dependency injection.
-    
-    Returns:
-        AsyncSession: Database session with pgBouncer compatibility settings
-        
-    Raises:
-        HTTPException: If database connection fails
-    """
-    logger.debug("Creating new database session")
-    session = async_session_factory()
-    
+# Dependency for FastAPI HTTP requests
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
+    logger.info("Entering get_db")
+    session = None
     try:
-        # Verify connection with test query
+        logger.info("Creating session")
+        session = async_session_factory()
+        logger.info("Session created successfully")
+        
+        logger.info("Executing test query: SELECT 1")
         test_query = text("SELECT 1").execution_options(
-            no_parameters=True,
+            no_parameters=True, 
             use_server_side_cursors=False
         )
         await session.execute(test_query)
-        return session
+        logger.info("Test query succeeded")
         
+        yield session
     except Exception as e:
-        await session.rollback()
-        logger.error(f"Database error: {type(e).__name__}: {str(e)}", exc_info=True)
+        logger.info(f"Exception caught in get_db: {type(e).__name__}: {str(e)}")
+        if session:
+            await session.rollback()
+        
+        # Handle pgBouncer errors
+        fresh_session = await handle_pgbouncer_error(session, e)
+        if fresh_session:
+            yield fresh_session
+            return
+        
+        # If we couldn't recover, raise a helpful error
+        logger.error(f"Database connection error: {str(e)}")
+        logger.error(f"Error type: {type(e).__name__}")
+        logger.error("Error traceback:", exc_info=True)
         raise HTTPException(
             status_code=503,
-            detail=f"Database connection failed: {type(e).__name__}"
-        ) from e
+            detail=f"Database connection failed. Please try again later. ({type(e).__name__})"
+        )
+    finally:
+        if session:
+            logger.info("Closing session")
+            await session.close()
+            logger.info("Session closed")
 
+# Dependency for WebSocket connections
 @asynccontextmanager
 async def get_session_db():
     """
@@ -223,9 +203,9 @@ async def get_session_db():
             logger.error(f"JSON serialization error in WebSocket session: {e}")
             # This might be an issue with UUID serialization
             raise ValueError(f"JSON serialization error: {str(e)}")
-        elif any(err_type in error_message for err in [
+        elif any(err_type in error_message for err_type in [
+            "duplicatepreparedstatementerror", 
             "prepared statement",
-            "duplicatepreparedstatementerror",
             "invalidsqlstatementnameerror"
         ]):
             logger.warning(f"pgBouncer error in WebSocket session: {e}")
@@ -237,6 +217,7 @@ async def get_session_db():
     finally:
         await session.close()
 
+# Database initialization function
 async def init_db() -> bool:
     """
     Initialize the database with required schemas and tables.
@@ -269,9 +250,9 @@ async def init_db() -> bool:
         logger.error(f"Error type: {type(e).__name__}")
         
         # Handle pgBouncer errors specially
-        if any(err_type in str(e).lower() for err in [
+        if any(err_type in str(e).lower() for err_type in [
+            "duplicatepreparedstatementerror", 
             "prepared statement",
-            "duplicatepreparedstatementerror",
             "invalidsqlstatementnameerror"
         ]):
             logger.warning("Detected pgBouncer prepared statement issue - expected during reloads")
@@ -284,6 +265,7 @@ async def init_db() -> bool:
             
         return False
 
+# Function to get pgBouncer-compatible execution options
 def get_pgbouncer_execution_options():
     """Return standard execution options for pgBouncer compatibility"""
     return {
