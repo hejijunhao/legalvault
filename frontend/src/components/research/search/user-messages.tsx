@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils"
 import { Message, Citation, QueryStatus } from "@/contexts/research/research-context"
 import { toast } from "sonner"
 import ReactMarkdown from "react-markdown"
+import type { Components } from "react-markdown"
 import rehypeRaw from "rehype-raw"
 import {
   Tooltip,
@@ -156,16 +157,29 @@ export function UserMessages({
                       rehypePlugins={[rehypeRaw]}
                       components={{
                         p: ({ node, children, ...props }) => {
+                          // Check if this paragraph is nested inside another paragraph
+                          const checkParentTag = (node: any): boolean => {
+                            if (!node?.parent) return false;
+                            if (node.parent.tagName === 'p') return true;
+                            return checkParentTag(node.parent);
+                          };
+
+                          // If nested inside a paragraph, render as span
+                          if (checkParentTag(node)) {
+                            return <span className="inline-block mb-4 leading-[1.75] font-inter" {...props}>{children}</span>;
+                          }
+
                           // Check if this paragraph contains block-level elements
                           const hasBlockElements = node?.children?.some((child: any) => 
                             child.type === 'element' && 
                             ['div', 'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'pre', 'table'].includes(child.tagName)
                           );
                           
-                          // If it contains block elements, render as div to avoid invalid nesting
+                          // If it contains block elements, render as div
                           if (hasBlockElements) {
                             return <div className="mb-4 leading-[1.75] font-inter" {...props}>{children}</div>;
                           }
+                          
                           return <p {...props}>{children}</p>;
                         },
                         span: ({ node, ...props }) => {

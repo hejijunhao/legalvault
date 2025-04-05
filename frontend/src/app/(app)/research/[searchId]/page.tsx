@@ -85,10 +85,25 @@ export default function ResearchPage() {
 
   if (isLoading && !currentSession) {
     return (
-      <div className="flex min-h-screen items-center justify-center" aria-live="polite" aria-busy="true">
-        <div className="flex flex-col items-center">
-          <Loader2 className="h-8 w-8 animate-spin text-[#95C066]" aria-hidden="true" />
-          <p className="mt-4 text-gray-600">Loading research session...</p>
+      <div className="container mx-auto px-4 py-6 space-y-6">
+        <div className="flex items-center space-x-4">
+          <div className="w-8 h-8 rounded bg-gray-200 animate-pulse" />
+          <div className="h-8 w-64 rounded bg-gray-200 animate-pulse" />
+        </div>
+        
+        <div className="space-y-4">
+          <div className="h-12 w-3/4 rounded bg-gray-200 animate-pulse" />
+          <div className="space-y-3">
+            <div className="h-20 w-full rounded bg-gray-200 animate-pulse" />
+            <div className="h-20 w-11/12 rounded bg-gray-200 animate-pulse" />
+            <div className="h-20 w-10/12 rounded bg-gray-200 animate-pulse" />
+          </div>
+        </div>
+        
+        <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t">
+          <div className="container mx-auto">
+            <div className="h-12 w-full rounded bg-gray-200 animate-pulse" />
+          </div>
         </div>
       </div>
     )
@@ -131,9 +146,17 @@ export default function ResearchPage() {
           <div className="mx-auto max-w-3xl w-full -mt-11">
             {currentSession && (
               <>
-                <h1 className="text-left text-[32px] font-normal italic leading-10 text-[#111827] font-['Libre_Baskerville'] mb-6">
-                  {currentSession.title || currentSession.query}
-                </h1>
+                <div className="max-w-full break-words">
+                  <h1 
+                    className="text-left text-[32px] font-normal italic break-words whitespace-pre-wrap leading-[1.3] text-[#111827] font-['Libre_Baskerville'] mb-6" 
+                    style={{ 
+                      overflowWrap: 'break-word',
+                      wordBreak: 'break-word'
+                    }}
+                  >
+                    {currentSession.title || currentSession.query}
+                  </h1>
+                </div>
                 {error && (
                   <Alert variant="destructive" className="my-4">
                     <AlertCircle className="h-4 w-4" />
