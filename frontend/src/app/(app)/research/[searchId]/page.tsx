@@ -115,15 +115,6 @@ export default function ResearchPage() {
     )
   }
 
-  // Get citations for the sources tab
-  const citations = currentSession?.messages
-    ?.filter(m => m.role === "assistant" && Array.isArray(m.content?.citations) && m.content.citations.length > 0)
-    ?.flatMap(m => m.content.citations || [])
-    ?.map((citation, index) => ({
-      id: String(index),
-      ...citation
-    })) || []
-
   return (
     <div className="min-h-screen pb-20" aria-live="polite">
       <div className="mx-auto max-w-[1440px] px-2"> 
@@ -158,43 +149,13 @@ export default function ResearchPage() {
                   />
                 </div>
                 
-                {/* Tab content is always visible */}
                 <div className="tab-content mb-32">
                   {activeTab === "answer" && (
-                    <div role="tabpanel" aria-labelledby="answer-tab">
-                      {/* Removed duplicate UserMessages */}
-                    </div>
+                    <div role="tabpanel" aria-labelledby="answer-tab" />
                   )}
 
                   {activeTab === "sources" && (
-                    <div role="tabpanel" aria-labelledby="sources-tab" className="p-2">
-                      {citations.length > 0 ? (
-                        <div className="space-y-4">
-                          {citations.map((citation, index) => (
-                            <div key={citation.id} className="flex items-start p-3 border-b border-gray-100 last:border-0">
-                              <div className="flex-shrink-0 flex items-center justify-center w-6 h-6 rounded-full bg-gray-200 text-xs font-medium mr-3">
-                                {index + 1}
-                              </div>
-                              <div className="flex-1">
-                                <a 
-                                  href={citation.url} 
-                                  target="_blank" 
-                                  rel="noopener noreferrer"
-                                  className="text-sm font-medium text-blue-600 hover:underline"
-                                >
-                                  {citation.text}
-                                </a>
-                                <p className="text-xs text-gray-500 mt-1 break-all">{citation.url}</p>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="text-center py-8 text-gray-500">
-                          <p>No sources available for this research.</p>
-                        </div>
-                      )}
-                    </div>
+                    <div role="tabpanel" aria-labelledby="sources-tab" />
                   )}
                 </div>
               </>

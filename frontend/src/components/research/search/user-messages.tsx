@@ -132,7 +132,7 @@ export function UserMessages({
           )}>
             {/* Message Content */}
             <div className={cn(
-              "relative max-w-[75%] space-y-2"
+              "relative max-w-[85%] space-y-2"
             )}>
               {/* Message Bubble */}
               <div className={cn(
@@ -156,12 +156,15 @@ export function UserMessages({
                       rehypePlugins={[rehypeRaw]}
                       components={{
                         p: ({ node, children, ...props }) => {
-                          // If the paragraph contains a div, render as div instead
-                          if (node?.children?.some((child: any) => 
+                          // Check if this paragraph contains block-level elements
+                          const hasBlockElements = node?.children?.some((child: any) => 
                             child.type === 'element' && 
-                            (child.tagName === 'div' || child.tagName === 'p')
-                          )) {
-                            return <div {...props}>{children}</div>;
+                            ['div', 'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'pre', 'table'].includes(child.tagName)
+                          );
+                          
+                          // If it contains block elements, render as div to avoid invalid nesting
+                          if (hasBlockElements) {
+                            return <div className="mb-4 leading-[1.75] font-inter" {...props}>{children}</div>;
                           }
                           return <p {...props}>{children}</p>;
                         },

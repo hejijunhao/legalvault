@@ -87,30 +87,48 @@ export function ResearchTabs({ messages, activeTab: externalActiveTab, onTabChan
         )}
 
         {activeTab === "sources" && (
-          <div role="tabpanel" aria-labelledby="sources-tab" className="p-2">
+          <div role="tabpanel" aria-labelledby="sources-tab" className="px-1">
             {citations.length > 0 ? (
               <div className="space-y-4">
                 {citations.map((citation, index) => (
-                  <div key={citation.id} className="flex items-start p-3 border-b border-gray-100 last:border-0">
-                    <div className="flex-shrink-0 flex items-center justify-center w-6 h-6 rounded-full bg-gray-200 text-xs font-medium mr-3">
+                  <div key={citation.id} className="group flex items-start gap-3 py-2 px-3 -mx-3 rounded hover:bg-gray-50/50 transition-colors">
+                    <div className="flex-shrink-0 flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 text-xs font-medium text-gray-600 mt-0.5">
                       {index + 1}
                     </div>
-                    <div className="flex-1">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <img 
+                          src={`https://www.google.com/s2/favicons?domain=${new URL(citation.url).hostname}&sz=32`}
+                          alt=""
+                          className="w-3.5 h-3.5"
+                          onError={(e) => {
+                            e.currentTarget.src = '/fallback-favicon.png'
+                            e.currentTarget.onerror = null
+                          }}
+                        />
+                        <span className="text-xs text-gray-500 truncate">
+                          {new URL(citation.url).hostname.replace('www.', '')}
+                        </span>
+                      </div>
                       <a 
                         href={citation.url} 
                         target="_blank" 
                         rel="noopener noreferrer"
-                        className="text-sm font-medium text-blue-600 hover:underline"
+                        className="block"
                       >
-                        {citation.text}
+                        <h3 className="text-sm font-medium text-gray-900 group-hover:text-blue-600 mb-1 line-clamp-2">
+                          {citation.text}
+                        </h3>
+                        <p className="text-xs text-gray-600 line-clamp-2">
+                          {citation.metadata?.snippet || 'No preview available'}
+                        </p>
                       </a>
-                      <p className="text-xs text-gray-500 mt-1 break-all">{citation.url}</p>
                     </div>
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="text-center py-8 text-gray-500">
+              <div className="text-center py-6 text-sm text-gray-500">
                 <p>No sources available for this research.</p>
               </div>
             )}
