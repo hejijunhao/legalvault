@@ -157,28 +157,22 @@ export function UserMessages({
                       rehypePlugins={[rehypeRaw]}
                       components={{
                         p: ({ node, children, ...props }) => {
-                          // Enhanced check for block elements and citations
+                          // Check if this paragraph contains block-level elements
                           const hasBlockElements = node?.children?.some((child: any) => {
                             if (child.type === 'element') {
-                              // Check for any HTML element that's not inline
                               return !['a', 'em', 'strong', 'code', 'br', 'span'].includes(child.tagName);
-                            }
-                            // Check for citation markers or other special content
-                            if (child.type === 'text') {
-                              return /\[[0-9]+\]/.test(child.value) || child.value.includes('div');
                             }
                             return false;
                           });
                           
-                          // Always render as div if there are block elements
+                          // If it contains block elements, render as a fragment instead of p
                           if (hasBlockElements) {
-                            return <div className="mb-4 leading-[1.75] font-inter last:mb-0" {...props}>{children}</div>;
+                            return <>{children}</>;
                           }
                           
-                          // Regular paragraphs
                           return <p className="mb-4 leading-[1.75] font-inter last:mb-0" {...props}>{children}</p>;
                         },
-                        // Add specific handlers for other block elements
+                        // Handle div elements separately
                         div: ({ children, ...props }) => (
                           <div className="mb-4 leading-[1.75] font-inter last:mb-0" {...props}>{children}</div>
                         ),

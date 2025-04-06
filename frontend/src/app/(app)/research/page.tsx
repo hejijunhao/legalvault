@@ -55,7 +55,7 @@ export default function ResearchPage() {
   }
 
   return (
-    <div className="flex min-h-[calc(100vh-4rem)] flex-col items-center justify-start px-4 py-16">
+    <div className="flex min-h-[calc(100vh-4rem)] flex-col items-center justify-start py-16">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}

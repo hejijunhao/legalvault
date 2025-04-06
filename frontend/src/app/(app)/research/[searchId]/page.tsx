@@ -132,61 +132,59 @@ export default function ResearchPage() {
 
   return (
     <div className="min-h-screen pb-20" aria-live="polite">
-      <div className="mx-auto max-w-[1440px] px-2"> 
-        <div className="flex flex-col gap-6 pt-16">
-          <div className="flex items-center">
-            <BackButton 
-              customText="Back to Research" 
-              onClick={handleBackClick}
-              aria-label="Return to research page"
-              className="w-fit"
-            />
-          </div>
+      <div className="flex flex-col gap-6 pt-12"> 
+        <div className="flex items-center">
+          <BackButton 
+            customText="Back to Research" 
+            onClick={handleBackClick}
+            aria-label="Return to research page"
+            className="w-fit"
+          />
+        </div>
 
-          <div className="mx-auto max-w-3xl w-full -mt-11">
-            {currentSession && (
-              <>
-                <div className="relative">
-                  <h1 
-                    className="w-full text-left text-[32px] font-normal italic hyphens-auto break-words whitespace-pre-line leading-[1.3] text-[#111827] font-['Libre_Baskerville'] mb-6" 
-                    style={{
-                      wordWrap: 'break-word',
-                      overflowWrap: 'break-word',
-                      maxWidth: '100%'
-                    }}
-                  >
-                    {(currentSession.title || currentSession.query)
-                      .replace(/[\u00A0\s]+/g, ' ')
-                      .trim()}
-                  </h1>
-                </div>
-                {error && (
-                  <Alert variant="destructive" className="my-4">
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertDescription>{error.message}</AlertDescription>
-                  </Alert>
+        <div className="mx-auto max-w-3xl w-full -mt-11">
+          {currentSession && (
+            <>
+              <div className="relative">
+                <h1 
+                  className="w-full text-left text-[32px] font-normal italic hyphens-auto break-words whitespace-pre-line leading-[1.3] text-[#111827] font-['Libre_Baskerville'] mb-6" 
+                  style={{
+                    wordWrap: 'break-word',
+                    overflowWrap: 'break-word',
+                    maxWidth: '100%'
+                  }}
+                >
+                  {(currentSession.title || currentSession.query)
+                    .replace(/[\u00A0\s]+/g, ' ')
+                    .trim()}
+                </h1>
+              </div>
+              {error && (
+                <Alert variant="destructive" className="my-4">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>{error.message}</AlertDescription>
+                </Alert>
+              )}
+              
+              <div className="mb-4">
+                <ResearchTabs 
+                  messages={currentSession.messages || []} 
+                  activeTab={activeTab}
+                  onTabChange={handleTabChange}
+                />
+              </div>
+              
+              <div className="tab-content mb-32">
+                {activeTab === "answer" && (
+                  <div role="tabpanel" aria-labelledby="answer-tab" />
                 )}
-                
-                <div className="mb-4">
-                  <ResearchTabs 
-                    messages={currentSession.messages || []} 
-                    activeTab={activeTab}
-                    onTabChange={handleTabChange}
-                  />
-                </div>
-                
-                <div className="tab-content mb-32">
-                  {activeTab === "answer" && (
-                    <div role="tabpanel" aria-labelledby="answer-tab" />
-                  )}
 
-                  {activeTab === "sources" && (
-                    <div role="tabpanel" aria-labelledby="sources-tab" />
-                  )}
-                </div>
-              </>
-            )}
-          </div>
+                {activeTab === "sources" && (
+                  <div role="tabpanel" aria-labelledby="sources-tab" />
+                )}
+              </div>
+            </>
+          )}
         </div>
       </div>
       <ResearchInput 

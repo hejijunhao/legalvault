@@ -3,7 +3,7 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
-import { Loader2, Send, Gavel, BookText, Building2 } from "lucide-react"
+import { Loader2, ArrowUp, Gavel, BookText, Building2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
@@ -206,7 +206,7 @@ export function ResearchInput({
               {isLoading ? (
                 <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
               ) : (
-                <Send className="h-5 w-5" aria-hidden="true" />
+                <ArrowUp className="h-5 w-5" aria-hidden="true" />
               )}
             </Button>
           </div>
