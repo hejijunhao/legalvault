@@ -176,7 +176,7 @@ class ResearchOperations:
         try:
             # Create domain model for validation
             search = ResearchSearch(
-                title=query[:50],  # Use first 50 chars as title
+                title=query[:500],  # Use first 50 chars as title
                 description=query,
                 user_id=user_id,
                 enterprise_id=enterprise_id
