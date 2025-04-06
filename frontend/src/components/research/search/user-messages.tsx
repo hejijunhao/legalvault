@@ -157,31 +157,31 @@ export function UserMessages({
                       rehypePlugins={[rehypeRaw]}
                       components={{
                         p: ({ node, children, ...props }) => {
-                          // Check if this paragraph is nested inside another paragraph
-                          const checkParentTag = (node: any): boolean => {
-                            if (!node?.parent) return false;
-                            if (node.parent.tagName === 'p') return true;
-                            return checkParentTag(node.parent);
-                          };
-
-                          // If nested inside a paragraph, render as span
-                          if (checkParentTag(node)) {
-                            return <span className="inline-block mb-4 leading-[1.75] font-inter" {...props}>{children}</span>;
-                          }
-
-                          // Check if this paragraph contains block-level elements
-                          const hasBlockElements = node?.children?.some((child: any) => 
-                            child.type === 'element' && 
-                            ['div', 'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'pre', 'table'].includes(child.tagName)
-                          );
+                          // Enhanced check for block elements and citations
+                          const hasBlockElements = node?.children?.some((child: any) => {
+                            if (child.type === 'element') {
+                              // Check for any HTML element that's not inline
+                              return !['a', 'em', 'strong', 'code', 'br', 'span'].includes(child.tagName);
+                            }
+                            // Check for citation markers or other special content
+                            if (child.type === 'text') {
+                              return /\[[0-9]+\]/.test(child.value) || child.value.includes('div');
+                            }
+                            return false;
+                          });
                           
-                          // If it contains block elements, render as div
+                          // Always render as div if there are block elements
                           if (hasBlockElements) {
-                            return <div className="mb-4 leading-[1.75] font-inter" {...props}>{children}</div>;
+                            return <div className="mb-4 leading-[1.75] font-inter last:mb-0" {...props}>{children}</div>;
                           }
                           
-                          return <p {...props}>{children}</p>;
+                          // Regular paragraphs
+                          return <p className="mb-4 leading-[1.75] font-inter last:mb-0" {...props}>{children}</p>;
                         },
+                        // Add specific handlers for other block elements
+                        div: ({ children, ...props }) => (
+                          <div className="mb-4 leading-[1.75] font-inter last:mb-0" {...props}>{children}</div>
+                        ),
                         span: ({ node, ...props }) => {
                           if ('data-citation' in props) {
                             const index = parseInt(props['data-citation'] as string, 10)

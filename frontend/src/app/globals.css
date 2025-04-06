@@ -64,6 +64,22 @@ body {
   font-family: Inter, Arial, Helvetica, sans-serif;
 }
 
+/* Add styles for better text wrapping */
+h1, h2, h3, h4, h5, h6 {
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+  word-break: break-word;
+  hyphens: auto;
+}
+
+/* Specific styles for Libre Baskerville headings */
+h1.font-[\'Libre_Baskerville\'] {
+  word-break: break-word;
+  overflow-wrap: break-word;
+  hyphens: auto;
+  max-width: 100%;
+}
+
 /* Add styles to make ReactFlow completely static */
 .react-flow__renderer {
   cursor: default !important;

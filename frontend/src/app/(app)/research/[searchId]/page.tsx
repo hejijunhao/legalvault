@@ -146,15 +146,18 @@ export default function ResearchPage() {
           <div className="mx-auto max-w-3xl w-full -mt-11">
             {currentSession && (
               <>
-                <div className="max-w-full break-words">
+                <div className="relative">
                   <h1 
-                    className="text-left text-[32px] font-normal italic break-words whitespace-pre-wrap leading-[1.3] text-[#111827] font-['Libre_Baskerville'] mb-6" 
-                    style={{ 
+                    className="w-full text-left text-[32px] font-normal italic hyphens-auto break-words whitespace-pre-line leading-[1.3] text-[#111827] font-['Libre_Baskerville'] mb-6" 
+                    style={{
+                      wordWrap: 'break-word',
                       overflowWrap: 'break-word',
-                      wordBreak: 'break-word'
+                      maxWidth: '100%'
                     }}
                   >
-                    {currentSession.title || currentSession.query}
+                    {(currentSession.title || currentSession.query)
+                      .replace(/[\u00A0\s]+/g, ' ')
+                      .trim()}
                   </h1>
                 </div>
                 {error && (
