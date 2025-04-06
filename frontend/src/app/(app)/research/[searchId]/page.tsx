@@ -132,7 +132,7 @@ export default function ResearchPage() {
 
   return (
     <div className="min-h-screen pb-20" aria-live="polite">
-      <div className="flex flex-col gap-6 pt-12"> 
+      <div className="sticky top-0 z-50 bg-white/80 backdrop-blur-sm transition-colors duration-200 -mx-4 px-4 py-6 flex items-center">
         <div className="flex items-center">
           <BackButton 
             customText="Back to Research" 
@@ -142,15 +142,15 @@ export default function ResearchPage() {
           />
         </div>
 
-        <div className="mx-auto max-w-3xl w-full -mt-11">
+        <div className="mx-auto max-w-3xl w-full">
           {currentSession && (
             <>
               {console.log('Rendering title:', (currentSession.title || currentSession.query))}
               <div className="relative">
                 <h1 
-                  className="w-full text-left text-[32px] font-normal italic break-words whitespace-normal leading-10 text-[#111827] font-['Libre_Baskerville'] mb-6" 
+                  className="w-full text-center text-[24px] font-normal italic break-words whitespace-normal leading-10 text-[#111827] font-['Libre_Baskerville']" 
                 >
-                  {(currentSession.title || currentSession.query).replace(/\u00A0/g, ' ')}
+                  {(currentSession.title || currentSession.query || '').replace(/\u00A0/g, ' ')}
                 </h1>
               </div>
               {error && (
@@ -159,27 +159,33 @@ export default function ResearchPage() {
                   <AlertDescription>{error.message}</AlertDescription>
                 </Alert>
               )}
-              
-              <div className="mb-4">
-                <ResearchTabs 
-                  messages={currentSession.messages || []} 
-                  activeTab={activeTab}
-                  onTabChange={handleTabChange}
-                />
-              </div>
-              
-              <div className="tab-content mb-32">
-                {activeTab === "answer" && (
-                  <div role="tabpanel" aria-labelledby="answer-tab" />
-                )}
-
-                {activeTab === "sources" && (
-                  <div role="tabpanel" aria-labelledby="sources-tab" />
-                )}
-              </div>
             </>
           )}
         </div>
+      </div>
+
+      <div className="mx-auto max-w-3xl w-full">
+        {currentSession && (
+          <>
+            <div className="mb-4">
+              <ResearchTabs 
+                messages={currentSession.messages || []} 
+                activeTab={activeTab}
+                onTabChange={handleTabChange}
+              />
+            </div>
+            
+            <div className="tab-content mb-32">
+              {activeTab === "answer" && (
+                <div role="tabpanel" aria-labelledby="answer-tab" />
+              )}
+
+              {activeTab === "sources" && (
+                <div role="tabpanel" aria-labelledby="sources-tab" />
+              )}
+            </div>
+          </>
+        )}
       </div>
       <ResearchInput 
         onSendMessage={handleSendMessage} 
