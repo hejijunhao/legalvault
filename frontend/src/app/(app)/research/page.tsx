@@ -40,9 +40,10 @@ export default function ResearchPage() {
         temperature: 0.7, // Default temperature for balanced responses
         max_tokens: 2048, // Reasonable length limit
         top_p: 0.95, // High value for more focused responses
-        top_k: 50 // Standard value for diverse but relevant results
+        top_k: 50, // Standard value for diverse but relevant results
+        query_type: queryType || QueryType.GENERAL // Pass queryType if provided
       })
-      router.push(`/research/${sessionId}`)
+      router.push(`/research/${sessionId}?initialQuery=${encodeURIComponent(trimmedQuery)}&queryType=${queryType || QueryType.GENERAL}`)
     } catch (err) {
       // Error is already handled by the context provider
       console.error("Failed to create research session:", err)

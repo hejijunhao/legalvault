@@ -22,7 +22,7 @@ export default function RootLayout({
   return (
     <ProtectedRoute>
       <ResearchProvider>
-        <div className={`${inter.className} min-h-screen flex flex-col`}>
+        <div className={`${inter.className} min-h-screen flex flex-col bg-gradient-to-b from-[#EFF2F5] via-[#E3E7EB] to-[#D9DEE3]`}>
           <MainHeader />
           <main className="flex-1 w-full">{children}</main>
         </div>
@@ -30,3 +30,4 @@ export default function RootLayout({
     </ProtectedRoute>
   )
 }
+

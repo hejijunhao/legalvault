@@ -2,97 +2,117 @@
 
 "use client"
 
-import { useState, useRef, useEffect } from "react"
-import { Loader2, ArrowUp, Gavel, BookText, Building2 } from "lucide-react"
+import { useState, useRef, useEffect, useCallback } from "react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { toast } from "sonner"
+import { Textarea } from "@/components/ui/textarea"
+import { ArrowUp, Loader2, Sparkles, Building2 } from "lucide-react"
+import { useResearch, QueryType } from "@/contexts/research/research-context"
+import { useAuth } from "@/contexts/auth-context"
 import { cn } from "@/lib/utils"
-import { QueryType } from "@/contexts/research/research-context"
 
 interface ResearchInputProps {
-  onSendMessage: (content: string, queryType?: QueryType | null) => Promise<void>
+  onSubmit: (content: string, type: QueryType) => Promise<void>
   isLoading: boolean
-  maxLength?: number
-  placeholder?: string
+  searchId?: string
   disabled?: boolean
+  isInitialQuery?: boolean
 }
 
 export function ResearchInput({
-  onSendMessage,
-  isLoading,
-  maxLength = 2000,
-  placeholder = "Type your legal question here...",
-  disabled = false
+  onSubmit,
+  isLoading: isLoadingProp,
+  searchId,
+  disabled = false,
+  isInitialQuery = false,
 }: ResearchInputProps) {
   const [input, setInput] = useState("")
-  const [isAtLimit, setIsAtLimit] = useState(false)
+  const [selectedType, setSelectedType] = useState<QueryType>(QueryType.GENERAL)
   const [isFocused, setIsFocused] = useState(false)
-  const [selectedType, setSelectedType] = useState<QueryType | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const router = useRouter()
+  const { user } = useAuth()
+  const { createSession } = useResearch()
+  const [isCreating, setIsCreating] = useState(false)
 
-  // Update character limit status when input changes
-  useEffect(() => {
-    const trimmedLength = input.trim().length
-    setIsAtLimit(trimmedLength >= maxLength)
+  const MAX_LENGTH = 500
 
-    if (isAtLimit && trimmedLength >= maxLength) {
-      toast.warning("You've reached the maximum character limit")
-    }
-  }, [input, maxLength, isAtLimit])
+  const isLoading = isLoadingProp || isCreating
 
-  // Auto-adjust textarea height
-  useEffect(() => {
+  const adjustTextareaHeight = useCallback(() => {
     const textarea = textareaRef.current
     if (textarea) {
       textarea.style.height = "auto"
-      const newHeight = Math.min(textarea.scrollHeight, 200) // Cap at 200px
+      const newHeight = Math.min(textarea.scrollHeight, 200)
       textarea.style.height = `${newHeight}px`
     }
-  }, [input])
+  }, [])
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setInput(e.target.value)
-  }
+  useEffect(() => {
+    adjustTextareaHeight()
+  }, [input, adjustTextareaHeight])
+
+  useEffect(() => {
+    window.addEventListener("resize", adjustTextareaHeight)
+    return () => window.removeEventListener("resize", adjustTextareaHeight)
+  }, [adjustTextareaHeight])
+
+  const isAtLimit = input.length >= MAX_LENGTH
 
   const toggleQueryType = (type: QueryType) => {
-    setSelectedType(selectedType === type ? null : type)
+    setSelectedType(selectedType === type ? QueryType.GENERAL : type)
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    const trimmedInput = input.trim()
-    
-    if (!trimmedInput || isLoading || disabled) return
-    
-    if (trimmedInput.length < 3) {
-      toast.error("Message must be at least 3 characters long")
-      return
-    }
-    
-    try {
-      await onSendMessage(trimmedInput, selectedType)
-      setInput("") // Clear input after successful send
-      // Reset textarea height and refocus
-      if (textareaRef.current) {
-        textareaRef.current.style.height = "auto"
-        textareaRef.current.focus()
+  const handleInputChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setInput(event.target.value)
+  }
+
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const content = input.trim()
+    if (!content || isLoading || isAtLimit || disabled) return
+
+    if (isInitialQuery) {
+      setIsCreating(true)
+      try {
+        const newSession = await createSession(content, { query_type: selectedType })
+        if (newSession) {
+          setInput("")
+          setSelectedType(QueryType.GENERAL)
+          router.push(
+            `/research/${newSession}?initialQuery=${encodeURIComponent(content)}&queryType=${selectedType}`
+          )
+        } else {
+          console.error("Failed to create research session.")
+        }
+      } catch (error) {
+        console.error("Error creating research session:", error)
+      } finally {
+        setIsCreating(false)
       }
-    } catch (error) {
-      // Error is already handled by the context provider
-      console.error("Error sending message:", error)
+    } else if (searchId) {
+      try {
+        await onSubmit(content, selectedType)
+        setInput("")
+      } catch (error) {
+        console.error("Error sending message:", error)
+      }
+    } else {
+      console.warn("handleSubmit called without searchId and not as initial query.")
     }
   }
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    // Submit on Ctrl/Cmd+Enter
-    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
-      e.preventDefault()
-      handleSubmit(e)
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+      event.preventDefault()
+      const form = event.currentTarget.form
+      if (form) {
+        form.requestSubmit()
+      }
     }
 
-    // New line on Shift+Enter
-    if (e.shiftKey && e.key === "Enter") {
-      return // Allow default behavior
+    if (event.shiftKey && event.key === "Enter") {
+      return
     }
   }
 
@@ -102,26 +122,20 @@ export function ResearchInput({
       "transition-transform duration-200",
       disabled && "translate-y-full"
     )}>
-      <form 
-        onSubmit={handleSubmit} 
-        className="mx-auto max-w-3xl px-4"
-        aria-label="Research message form"
-      >
-        <div 
-          className={cn(
-            "flex flex-col rounded-2xl border bg-white p-4 shadow-[0_0_10px_rgba(0,0,0,0.05)] transition-all",
-            isFocused ? "border-gray-300" : "border-gray-200"
-          )}
-        >
+      <form onSubmit={handleSubmit} className="mx-auto max-w-3xl px-4" aria-label="Research message form">
+        <div className={cn(
+          "flex flex-col rounded-2xl border bg-white p-4 shadow-[0_0_10px_rgba(0,0,0,0.05)] transition-all",
+          isFocused ? "border-gray-300" : "border-gray-200"
+        )}>
           <div className="relative">
-            <textarea
+            <Textarea
               ref={textareaRef}
               value={input}
               onChange={handleInputChange}
               onKeyDown={handleKeyDown}
               onFocus={() => setIsFocused(true)}
               onBlur={() => setIsFocused(false)}
-              placeholder={placeholder}
+              placeholder="Type your legal question here..."
               className={cn(
                 "mb-3 w-full resize-none border-0 bg-transparent text-lg text-gray-900",
                 "placeholder:text-gray-500 focus:outline-none focus:ring-0",
@@ -132,54 +146,36 @@ export function ResearchInput({
               disabled={isLoading || disabled}
               aria-label="Research message input"
               aria-invalid={isAtLimit}
-              maxLength={maxLength}
+              maxLength={MAX_LENGTH}
             />
+            <span className="absolute bottom-1 right-1 text-xs text-gray-400">
+              {input.length}/{MAX_LENGTH}
+            </span>
           </div>
 
-          <div className="flex items-center justify-between">
-            {/* Query type toggles */}
-            <div className="flex items-center gap-2 overflow-x-auto pb-1">
-              {/* Courts Toggle */}
+          <div className="flex items-center justify-between gap-2 pt-2">
+            <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => toggleQueryType(QueryType.COURT_CASE)}
+                onClick={() => toggleQueryType(QueryType.GENERAL)}
                 className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-sm transition-colors ${
-                  selectedType === QueryType.COURT_CASE
-                    ? "bg-[#9FE870] text-[#1A2E0D]"
+                  selectedType === QueryType.GENERAL
+                    ? "bg-[#E0F2FE] text-[#0C547A]"
                     : "bg-gray-50 text-gray-600 hover:bg-gray-100"
                 }`}
-                aria-pressed={selectedType === QueryType.COURT_CASE}
-                title="Search court cases and legal precedents"
+                aria-pressed={selectedType === QueryType.GENERAL}
+                title="Search general legal information"
                 disabled={isLoading || disabled}
               >
-                <Gavel className="h-4 w-4" />
-                <span>Courts</span>
+                <Sparkles className="h-4 w-4" />
+                <span>General</span>
               </button>
-
-              {/* Legislative Toggle */}
-              <button
-                type="button"
-                onClick={() => toggleQueryType(QueryType.LEGISLATIVE)}
-                className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-sm transition-colors ${
-                  selectedType === QueryType.LEGISLATIVE
-                    ? "bg-[#9FE870] text-[#1A2E0D]"
-                    : "bg-gray-50 text-gray-600 hover:bg-gray-100"
-                }`}
-                aria-pressed={selectedType === QueryType.LEGISLATIVE}
-                title="Search legislation, statutes and regulations"
-                disabled={isLoading || disabled}
-              >
-                <BookText className="h-4 w-4" />
-                <span>Legislative</span>
-              </button>
-
-              {/* Commercial Toggle */}
               <button
                 type="button"
                 onClick={() => toggleQueryType(QueryType.COMMERCIAL)}
                 className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-sm transition-colors ${
                   selectedType === QueryType.COMMERCIAL
-                    ? "bg-[#9FE870] text-[#1A2E0D]"
+                    ? "bg-[#DCFCE7] text-[#166534]"
                     : "bg-gray-50 text-gray-600 hover:bg-gray-100"
                 }`}
                 aria-pressed={selectedType === QueryType.COMMERCIAL}
@@ -191,7 +187,6 @@ export function ResearchInput({
               </button>
             </div>
 
-            {/* Send button */}
             <Button
               type="submit"
               disabled={!input.trim() || isLoading || isAtLimit || disabled}
@@ -214,10 +209,7 @@ export function ResearchInput({
       </form>
 
       {isLoading && (
-        <div 
-          className="mx-auto mt-2 max-w-3xl px-4 text-xs text-gray-500"
-          aria-live="polite"
-        >
+        <div className="mx-auto mt-2 max-w-3xl px-4 text-xs text-gray-500" aria-live="polite">
           Processing your request...
         </div>
       )}
