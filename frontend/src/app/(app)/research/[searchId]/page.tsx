@@ -40,12 +40,7 @@ export default function ResearchPage() {
 
   useEffect(() => {
     const handleScroll = () => {
-      if (headerRef.current) {
-        // Get the header's position relative to the viewport
-        const headerRect = headerRef.current.getBoundingClientRect()
-        // Consider scrolled only when the content has moved up significantly past the header
-        setIsScrolled(headerRect.top < 0)
-      }
+      setIsScrolled(window.scrollY > 10)
     }
     
     window.addEventListener('scroll', handleScroll)
@@ -158,12 +153,12 @@ export default function ResearchPage() {
         className={cn(
           "sticky top-16 z-40 w-full transition-all duration-300",
           isScrolled
-            ? "bg-white/25 backdrop-blur-2xl backdrop-saturate-150 border-b border-white/5 shadow-[0_8px_32px_rgba(0,0,0,0.02)] bg-gradient-to-b from-white/30 to-white/20"
+            ? "bg-white/25 backdrop-blur-3xl backdrop-saturate-150 border-b border-white/5 shadow-[0_8px_32px_rgba(0,0,0,0.02)] bg-gradient-to-b from-white/30 to-white/20"
             : "bg-transparent"
         )}
       >
-        <div className="mx-auto w-full max-w-[1440px] px-4 py-2 bg-transparent">
-          <div className="flex items-center">
+        <div className="flex items-center mx-auto w-full max-w-[1440px] px-4 py-2">
+          <div className="">
             <BackButton 
               customText="Back to Research" 
               onClick={handleBackClick}
@@ -177,7 +172,7 @@ export default function ResearchPage() {
               <>
                 <div className="relative">
                   <h1 
-                    className="w-full text-center text-[24px] font-normal italic break-words whitespace-normal leading-10 text-[#111827] font-['Libre_Baskerville']" 
+                    className="w-full text-left text-[24px] font-normal italic break-words whitespace-normal leading-10 text-[#111827] font-['Libre_Baskerville']" 
                   >
                     {(currentSession.title || currentSession.query || '').replace(/\u00A0/g, ' ')}
                   </h1>

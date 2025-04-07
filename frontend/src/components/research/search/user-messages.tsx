@@ -198,7 +198,7 @@ export function UserMessages({
 
               {/* Status indicator for user messages */}
               {message.role === "user" && message.status && (
-                <div className="flex justify-end -mt-1 mb-2">
+                <div className="flex justify-end -mt-10 mb-2">
                   <div className={cn(
                     "text-[13px] px-1.5 py-0.5 text-gray-500",
                     message.status === QueryStatus.PENDING 
