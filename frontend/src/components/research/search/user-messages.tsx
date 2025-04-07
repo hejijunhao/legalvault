@@ -144,39 +144,62 @@ export function UserMessages({
               )}>
                 {/* Message Text */}
                 <div className="prose prose-sm max-w-none">
-                  <div className="text-[16px] leading-[1.75] m-0 break-words font-inter tracking-[-0.01em]
-                    [&>h1]:text-2xl [&>h1]:font-semibold [&>h1]:mb-5 [&>h1]:mt-3 [&>h1]:font-inter [&>h1]:leading-[1.3]
-                    [&>h2]:text-xl [&>h2]:font-semibold [&>h2]:mb-4 [&>h2]:mt-3 [&>h2]:font-inter [&>h2]:leading-[1.35]
-                    [&>h3]:text-lg [&>h3]:font-semibold [&>h3]:mb-3 [&>h3]:mt-2 [&>h3]:font-inter [&>h3]:leading-[1.4]
-                    [&>p]:mb-4 [&>p]:leading-[1.75] [&>p]:font-inter
-                    [&>ul]:mb-4 [&>ul]:pl-5 [&>ul>li]:mb-2.5 [&>ul>li]:leading-[1.75] [&>ul>li]:font-inter
-                    [&>ol]:mb-4 [&>ol]:pl-5 [&>ol>li]:mb-2.5 [&>ol>li]:leading-[1.75] [&>ol>li]:font-inter
-                    [&>*:last-child]:mb-0
-                    [&>p:first-child]:mt-0 [&>h1:first-child]:mt-0 [&>h2:first-child]:mt-0">
+                  <div className="text-[15px] leading-[1.65] m-0 break-words font-inter tracking-[-0.01em]
+                    /* Adjusted heading styles for elegance */
+                    [&>h1]:text-xl [&>h1]:font-semibold [&>h1]:mb-4 [&>h1]:mt-2 [&>h1]:font-inter [&>h1]:leading-[1.35]
+                    [&>h2]:text-lg [&>h2]:font-semibold [&>h2]:mb-3 [&>h2]:mt-2 [&>h2]:font-inter [&>h2]:leading-[1.4]
+                    [&>h3]:text-base [&>h3]:font-semibold [&>h3]:mb-2.5 [&>h3]:mt-1.5 [&>h3]:font-inter [&>h3]:leading-[1.45]
+                    /* Refined paragraph and list spacing */
+                    [&>p]:mb-3 [&>p]:leading-[1.65] [&>p]:font-inter
+                    [&>ul]:mb-3 [&>ul]:pl-4 [&>ul>li]:mb-1.5 [&>ul>li]:leading-[1.65] [&>ul>li]:font-inter
+                    [&>ol]:mb-3 [&>ol]:pl-4 [&>ol>li]:mb-1.5 [&>ol>li]:leading-[1.65] [&>ol>li]:font-inter
+                    /* Ensure last element has no bottom margin */
+                    [&>*:last-child]:mb-0 
+                    /* Ensure first element has no top margin */
+                    [&>*:first-child]:mt-0">
                     <ReactMarkdown
                       rehypePlugins={[rehypeRaw]}
                       components={{
                         p: ({ node, children, ...props }) => {
-                          // Check if this paragraph contains block-level elements
-                          const hasBlockElements = node?.children?.some((child: any) => {
-                            if (child.type === 'element') {
-                              return !['a', 'em', 'strong', 'code', 'br', 'span'].includes(child.tagName);
+                          // Check if the direct children consist ONLY of whitespace text nodes
+                          // and exactly one specific citation span element.
+                          let isOnlyCitationSpan = false;
+                          if (node && node.children) {
+                            const significantChildren = node.children.filter((child: any) => {
+                              // Ignore pure whitespace text nodes
+                              if (child.type === 'text' && child.value.trim() === '') {
+                                return false;
+                              }
+                              return true;
+                            });
+
+                            // Check if there's exactly one significant child, and it's our citation span
+                            if (significantChildren.length === 1) {
+                              const child = significantChildren[0];
+                              if (
+                                child.type === 'element' &&
+                                child.tagName === 'span' &&
+                                child.properties?.['data-citation'] !== undefined
+                              ) {
+                                isOnlyCitationSpan = true;
+                              }
                             }
-                            return false;
-                          });
-                          
-                          // If it contains block elements, render as a fragment instead of p
-                          if (hasBlockElements) {
-                            return <>{children}</>;
                           }
-                          
-                          return <p className="mb-4 leading-[1.75] font-inter last:mb-0" {...props}>{children}</p>;
+
+                          // If it's effectively just the citation span, render as a div
+                          if (isOnlyCitationSpan) {
+                            return <div className="mb-3 leading-[1.65] font-inter last:mb-0" {...props}>{children}</div>;
+                          }
+
+                          // Otherwise, render as a standard paragraph
+                          return <p className="mb-3 leading-[1.65] font-inter last:mb-0" {...props}>{children}</p>;
                         },
-                        // Handle div elements separately
+                        // Keep div handling for direct divs in markdown
                         div: ({ children, ...props }) => (
-                          <div className="mb-4 leading-[1.75] font-inter last:mb-0" {...props}>{children}</div>
+                          <div className="mb-3 leading-[1.65] font-inter last:mb-0" {...props}>{children}</div>
                         ),
                         span: ({ node, ...props }) => {
+                          // Keep the simplified span override (render CitationHovercard directly)
                           if ('data-citation' in props) {
                             const index = parseInt(props['data-citation'] as string, 10)
                             const citation = message.content?.citations?.[index]
@@ -189,6 +212,8 @@ export function UserMessages({
                     >
                       {typeof message.content === 'object' && message.content?.text 
                         ? processCitations(message.content.text, message.content.citations || [])
+                        : typeof message.content === 'string' // Handle plain string content too
+                        ? message.content 
                         : 'No content available'
                       }
                     </ReactMarkdown>

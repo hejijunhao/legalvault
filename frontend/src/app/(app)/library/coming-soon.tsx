@@ -1,5 +1,3 @@
-// src/app/(app)/library/coming-soon.tsx
-
 "use client"
 
 import { useEffect, useState } from "react"
@@ -82,19 +80,19 @@ export default function ComingSoon() {
       })}
 
       {/* Main content */}
-      <div className="relative z-10 flex min-h-screen flex-col items-center justify-center px-4 text-center">
+      <div className="relative z-10 flex min-h-screen flex-col items-center justify-start pt-64 px-4">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8 }}
-          className="max-w-4xl"
+          className="max-w-4xl text-center"
         >
           <h2 className="mb-2 text-sm font-normal uppercase tracking-wide text-gray-500">Your Library</h2>
-          <h1 className="mb-4 font-['Libre_Baskerville'] text-4xl font-bold italic text-gray-900 md:text-5xl">
+          <h1 className="mb-6 font-['Libre_Baskerville'] text-4xl font-bold italic text-gray-900 md:text-5xl">
             Where Information turns to Knowledge
           </h1>
-          <p className="mb-8 mx-auto max-w-3xl text-xl text-gray-600">
-            Imagine a legal knowledge hub that doesn&apos;t just store files, but understands them - connecting concepts,
+          <p className="mb-12 mx-auto max-w-3xl text-xl text-gray-600">
+            Imagine a legal knowledge hub that doesn't just store files, but understands them - connecting concepts,
             uncovering relationships, and delivering instant, context-aware insights.
           </p>
           <div className="mx-auto max-w-lg space-y-2">
@@ -109,8 +107,5 @@ export default function ComingSoon() {
     </div>
   )
 }
-
-
-
 
 
