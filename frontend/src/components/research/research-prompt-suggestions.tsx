@@ -57,7 +57,7 @@ export function ResearchPromptSuggestions({ onSelectPrompt }: ResearchPromptSugg
           <div
             key={index}
             onClick={() => onSelectPrompt(suggestion.text)}
-            className="cursor-pointer rounded-lg border border-gray-200 bg-white p-3 transition-all hover:border-gray-300 hover:shadow-sm"
+            className="cursor-pointer rounded-lg border border-gray-200/50 bg-white/70 backdrop-blur-[2px] p-3 transition-all hover:border-gray-300/70 hover:shadow-md hover:bg-white/80"
           >
             <div className="mb-1.5">
               <span className="text-xs font-medium text-gray-500">

@@ -6,7 +6,6 @@ import { useEffect, useState } from "react"
 import { motion } from "framer-motion"
 import { useRouter } from "next/navigation"
 import { ResearchSearch } from "@/components/research/research-search"
-import { ResearchBanner } from "@/components/research/research-banner"
 import { ResearchPromptSuggestions } from "@/components/research/research-prompt-suggestions"
 import { PastSearchesGrid } from "@/components/research/past-searches-grid"
 import { useResearch, QueryType } from "@/contexts/research/research-context"
@@ -98,14 +97,6 @@ export default function ResearchPage() {
           
           {/* Past searches grid will handle its own loading and error states */}
           <PastSearchesGrid />
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.3 }}
-        >
-          <ResearchBanner />
         </motion.div>
       </motion.div>
     </div>
