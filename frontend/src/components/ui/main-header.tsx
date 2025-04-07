@@ -46,14 +46,14 @@ export function MainHeader() {
     <>
       <header 
         className={cn(
-          "sticky top-0 z-50 w-full transition-all duration-300 overflow-x-clip",
+          "sticky top-0 z-50 w-full transition-all duration-300",
           isResearchPage && isScrolled
             ? "bg-white/25 backdrop-blur-2xl backdrop-saturate-150 border-b border-white/5 shadow-[0_8px_32px_rgba(0,0,0,0.02)] bg-gradient-to-b from-white/30 to-white/20"
             : "bg-transparent"
         )}
       >
-        <div className="fixed-wrapper w-full">
-          <div className="flex h-16 items-center justify-between px-4 mx-auto max-w-[1440px]" style={{ position: 'relative', margin: '0 auto' }}>
+        <div className="mx-auto w-full max-w-[1440px] px-4">
+          <div className="flex h-16 items-center justify-between" style={{ position: 'relative' }}>
             <div className="flex items-center">
               <Link href="/" className="flex items-center space-x-2">
                 <Image

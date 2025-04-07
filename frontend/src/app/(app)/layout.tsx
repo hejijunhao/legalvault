@@ -20,17 +20,13 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en">
-      <body>
-        <ProtectedRoute>
-          <ResearchProvider>
-            <div className={inter.className}>
-              <MainHeader />
-              <main className="mx-auto max-w-[1440px] px-4">{children}</main>
-            </div>
-          </ResearchProvider>
-        </ProtectedRoute>
-      </body>
-    </html>
+    <ProtectedRoute>
+      <ResearchProvider>
+        <div className={`${inter.className} min-h-screen flex flex-col`}>
+          <MainHeader />
+          <main className="flex-1 w-full">{children}</main>
+        </div>
+      </ResearchProvider>
+    </ProtectedRoute>
   )
 }

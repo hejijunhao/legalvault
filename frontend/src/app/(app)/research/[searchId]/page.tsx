@@ -2,7 +2,7 @@
 
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { ResearchInput } from "@/components/research/search/research-input"
 import { BackButton } from "@/components/ui/back-button"
@@ -11,6 +11,7 @@ import { useResearch } from "@/contexts/research/research-context"
 import { Loader2, AlertCircle, ArrowLeft } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { UserMessages } from "@/components/research/search/user-messages"
+import { cn } from "@/lib/utils"
 
 export default function ResearchPage() {
   const params = useParams()
@@ -26,6 +27,8 @@ export default function ResearchPage() {
   } = useResearch()
   const [isMounted, setIsMounted] = useState(true)
   const [activeTab, setActiveTab] = useState<"answer" | "sources">("answer")
+  const headerRef = useRef<HTMLDivElement>(null)
+  const [isScrolled, setIsScrolled] = useState(false)
 
   useEffect(() => {
     clearError()
@@ -34,6 +37,24 @@ export default function ResearchPage() {
       setIsMounted(false)
     }
   }, [clearError])
+
+  useEffect(() => {
+    const handleScroll = () => {
+      if (headerRef.current) {
+        // Get the header's position relative to the viewport
+        const headerRect = headerRef.current.getBoundingClientRect()
+        // Consider scrolled only when the content has moved up significantly past the header
+        setIsScrolled(headerRect.top < 0)
+      }
+    }
+    
+    window.addEventListener('scroll', handleScroll)
+    handleScroll() // Check initial scroll position
+    
+    return () => {
+      window.removeEventListener('scroll', handleScroll)
+    }
+  }, [])
 
   useEffect(() => {
     if (!searchId?.trim() || !isMounted) return
@@ -132,60 +153,71 @@ export default function ResearchPage() {
 
   return (
     <div className="min-h-screen pb-20" aria-live="polite">
-      <div className="sticky top-0 z-50 bg-white/80 backdrop-blur-sm transition-colors duration-200 -mx-4 px-4 py-6 flex items-center">
-        <div className="flex items-center">
-          <BackButton 
-            customText="Back to Research" 
-            onClick={handleBackClick}
-            aria-label="Return to research page"
-            className="w-fit"
-          />
-        </div>
+      <div 
+        ref={headerRef}
+        className={cn(
+          "sticky top-16 z-40 w-full transition-all duration-300",
+          isScrolled
+            ? "bg-white/25 backdrop-blur-2xl backdrop-saturate-150 border-b border-white/5 shadow-[0_8px_32px_rgba(0,0,0,0.02)] bg-gradient-to-b from-white/30 to-white/20"
+            : "bg-transparent"
+        )}
+      >
+        <div className="mx-auto w-full max-w-[1440px] px-4 py-2 bg-transparent">
+          <div className="flex items-center">
+            <BackButton 
+              customText="Back to Research" 
+              onClick={handleBackClick}
+              aria-label="Return to research page"
+              className="w-fit"
+            />
+          </div>
 
-        <div className="mx-auto max-w-3xl w-full">
-          {currentSession && (
-            <>
-              {console.log('Rendering title:', (currentSession.title || currentSession.query))}
-              <div className="relative">
-                <h1 
-                  className="w-full text-center text-[24px] font-normal italic break-words whitespace-normal leading-10 text-[#111827] font-['Libre_Baskerville']" 
-                >
-                  {(currentSession.title || currentSession.query || '').replace(/\u00A0/g, ' ')}
-                </h1>
-              </div>
-              {error && (
-                <Alert variant="destructive" className="my-4">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>{error.message}</AlertDescription>
-                </Alert>
-              )}
-            </>
-          )}
+          <div className="mx-auto max-w-3xl w-full">
+            {currentSession && (
+              <>
+                <div className="relative">
+                  <h1 
+                    className="w-full text-center text-[24px] font-normal italic break-words whitespace-normal leading-10 text-[#111827] font-['Libre_Baskerville']" 
+                  >
+                    {(currentSession.title || currentSession.query || '').replace(/\u00A0/g, ' ')}
+                  </h1>
+                </div>
+                {error && (
+                  <Alert variant="destructive" className="my-4">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>{error.message}</AlertDescription>
+                  </Alert>
+                )}
+              </>
+            )}
+          </div>
         </div>
       </div>
 
-      <div className="mx-auto max-w-3xl w-full">
-        {currentSession && (
-          <>
-            <div className="mb-4">
-              <ResearchTabs 
-                messages={currentSession.messages || []} 
-                activeTab={activeTab}
-                onTabChange={handleTabChange}
-              />
-            </div>
-            
-            <div className="tab-content mb-32">
-              {activeTab === "answer" && (
-                <div role="tabpanel" aria-labelledby="answer-tab" />
-              )}
+      <div className="mx-auto w-full max-w-[1440px] px-4">
+        <div className="mx-auto max-w-3xl w-full">
+          {currentSession && (
+            <>
+              <div className="mb-4">
+                <ResearchTabs 
+                  messages={currentSession.messages || []} 
+                  activeTab={activeTab}
+                  onTabChange={handleTabChange}
+                />
+              </div>
+              
+              <div className="tab-content mb-32">
+                {activeTab === "answer" && (
+                  <div role="tabpanel" aria-labelledby="answer-tab" />
+                )}
 
-              {activeTab === "sources" && (
-                <div role="tabpanel" aria-labelledby="sources-tab" />
-              )}
-            </div>
-          </>
-        )}
+                {activeTab === "sources" && (
+                  <div role="tabpanel" aria-labelledby="sources-tab" />
+                )}
+              </div>
+            </>
+          )}
+        </div>
       </div>
       <ResearchInput 
         onSendMessage={handleSendMessage} 
