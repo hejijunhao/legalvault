@@ -15,7 +15,7 @@ load_dotenv()
 
 class Settings(BaseSettings):
     # Environment
-    ENV: str = "production"  # Options: development, staging, production
+    # ENV: str = "production"  # Options: development, staging, production
     
     # API Settings
     PROJECT_NAME: str = "LegalVault"

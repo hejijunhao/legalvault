@@ -6,3 +6,9 @@ build-backend = "setuptools.build_meta"
 name = "legalvault"
 version = "0.1.0"
 description = "LegalVault Backend"
+authors = [
+    { name = "Philip Holke", email = "phil@crimsonsuntechnologies.com" }
+]
+
+[project.urls]
+homepage = "https://legalvault.ai"

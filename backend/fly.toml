@@ -1,0 +1,13 @@
+app = "legalvault"
+primary_region = "sin"  # Adjust to your Supabase region
+
+[build]
+  builder = "docker"
+  dockerfile = "Dockerfile"
+
+[http_service]
+  internal_port = 8080  # Matches your Dockerfile's EXPOSE
+  force_https = true    # Redirects HTTP to HTTPS
+  auto_stop_machines = "stop"  # Stops idle machines
+  auto_start_machines = true   # Starts on demand
+  min_machines_running = 0     # Scales to zero
