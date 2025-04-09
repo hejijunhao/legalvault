@@ -26,8 +26,8 @@ export function LoginForm() {
       const success = await login(email, password)
       
       if (success) {
-        // Redirect to workspace on successful login
-        router.push("/workspace")
+        // Redirect to research page on successful login
+        router.push("/research")
       } else {
         setError("Invalid email or password")
       }
