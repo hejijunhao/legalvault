@@ -1,6 +1,17 @@
 # Use an official Python runtime as a parent image
 FROM python:3.11-slim
 
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV PORT=8080
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    python3-dev \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
 # Set the working directory in the container
 WORKDIR /app
 
@@ -20,6 +31,5 @@ COPY . .
 EXPOSE 8080
 
 # Define the command to run your app using uvicorn
-# This should match your Procfile but specifies a fixed port
-# Fly.io injects $PORT, but standard Docker practice is to expose/use a fixed port internally
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "$PORT"]
+# Using shell form to ensure environment variable expansion
+CMD uvicorn main:app --host 0.0.0.0 --port ${PORT}
