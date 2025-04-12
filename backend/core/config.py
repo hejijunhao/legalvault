@@ -22,9 +22,7 @@ class Settings(BaseSettings):
     BACKEND_CORS_ORIGINS: str = os.getenv("BACKEND_CORS_ORIGINS", "http://localhost:3000")
 
     # Security (Required)
-    # SECRET_KEY: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 8  # 8 days
-    # ENCRYPTION_KEY: str
     SUPABASE_JWT_SECRET: Optional[str] = None
 
     # Supabase
@@ -33,20 +31,13 @@ class Settings(BaseSettings):
     SUPABASE_SERVICE_ROLE_KEY: Optional[str] = None
 
     # LLM
-    OPENAI_API_KEY: str
+    OPENAI_API_KEY: str  # Removed Optional, now required
     PERPLEXITY_API_KEY: Optional[str] = None
     HUGGINGFACE_API_TOKEN: Optional[str] = None
 
     # Database
-    DATABASE_URL: Optional[PostgresDsn] = os.getenv("DATABASE_URL", os.getenv("DATABASE_URL_SESSION"))
+    DATABASE_URL: PostgresDsn = os.getenv("DATABASE_URL", os.getenv("DATABASE_URL_SESSION"))  # Removed Optional, now required
     SQLALCHEMY_DATABASE_URI: Optional[PostgresDsn] = None
-
-    @field_validator("SECRET_KEY", "ENCRYPTION_KEY", "OPENAI_API_KEY", "DATABASE_URL")
-    @classmethod
-    def validate_required(cls, v: Optional[str], info) -> str:
-        if not v:
-            raise ValueError(f"{info.field_name} must be set in environment variables")
-        return v
 
     @field_validator("SQLALCHEMY_DATABASE_URI", mode="before")
     @classmethod
