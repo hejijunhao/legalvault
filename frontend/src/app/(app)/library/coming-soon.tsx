@@ -1,3 +1,5 @@
+// src/app/(app)/library/coming-soon.tsx
+
 "use client"
 
 import { useEffect, useState } from "react"
@@ -92,7 +94,7 @@ export default function ComingSoon() {
             Where Information turns to Knowledge
           </h1>
           <p className="mb-12 mx-auto max-w-3xl text-xl text-gray-600">
-            Imagine a legal knowledge hub that doesn't just store files, but understands them - connecting concepts,
+            Imagine a legal knowledge hub that doesn&apos;t just store files, but understands them - connecting concepts,
             uncovering relationships, and delivering instant, context-aware insights.
           </p>
           <div className="mx-auto max-w-lg space-y-2">

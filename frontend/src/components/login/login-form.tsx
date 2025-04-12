@@ -9,7 +9,6 @@ import { motion } from "framer-motion"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/contexts/auth-context"
-import { toast } from "sonner" // If you have a toast library, or use another notification method
 
 export function LoginForm() {
   const router = useRouter()
