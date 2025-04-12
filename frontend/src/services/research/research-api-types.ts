@@ -45,7 +45,7 @@ export interface MessageListResponse {
 export interface Citation {
   text: string;
   url: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 export interface Message {
@@ -88,7 +88,7 @@ export interface ResearchSession {
 // WebSocket types
 export interface WebSocketMessage {
   type: string;
-  data?: any;
+  data?: Record<string, unknown>;
   message?: string;
   search_id?: string;
   status?: string;
@@ -97,7 +97,7 @@ export interface WebSocketMessage {
 
 export interface WebSocketConnection {
   disconnect: () => void;
-  send: (data: any) => void;
+  send: (data: Record<string, unknown>) => void;
   isConnected: boolean;
 }
 
@@ -107,5 +107,5 @@ export interface ApiError extends Error {
   statusText?: string;
   code?: string;
   details?: string;
-  originalError?: any;
+  originalError?: Error | unknown;
 }

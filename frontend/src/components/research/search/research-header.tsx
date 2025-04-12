@@ -2,7 +2,7 @@
 
 "use client"
 
-import { Share2, Copy, CheckCircle2 } from "lucide-react"
+import { Share2, Copy } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
@@ -12,7 +12,6 @@ interface ResearchHeaderProps {
   query: string
   queryType?: QueryType
   status?: QueryStatus
-  createdAt?: string
   className?: string
 }
 
@@ -27,7 +26,6 @@ export function ResearchHeader({
   query,
   queryType,
   status = QueryStatus.COMPLETED,
-  createdAt,
   className
 }: ResearchHeaderProps) {
   const handleShare = async () => {

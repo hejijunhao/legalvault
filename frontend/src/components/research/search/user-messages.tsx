@@ -5,13 +5,11 @@
 import { useEffect, useRef } from "react"
 import { motion } from "framer-motion"
 import { Avatar, AvatarImage } from "@/components/ui/avatar"
-import { ChevronDown, Copy, ThumbsUp, ThumbsDown, RefreshCw, Loader2, AlertCircle, ArrowRight, Share2, FolderPlus, Brain, Library } from "lucide-react"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { Copy, ThumbsUp, ThumbsDown, RefreshCw, Loader2, AlertCircle, ArrowRight } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { Message, Citation, QueryStatus } from "@/contexts/research/research-context"
+import { Message, QueryStatus } from "@/contexts/research/research-context"
 import { toast } from "sonner"
 import ReactMarkdown from "react-markdown"
-import type { Components } from "react-markdown"
 import rehypeRaw from "rehype-raw"
 import {
   Tooltip,
@@ -81,7 +79,7 @@ export function UserMessages({
   }
 
   // Process citations in text, replacing [n] with span elements
-  const processCitations = (text: string, citations: Citation[]) => {
+  const processCitations = (text: string, citations: any[]) => {
     return text.replace(/\[(\d+)\]/g, (match, number) => {
       const index = parseInt(number, 10) - 1
       if (index >= 0 && index < citations.length) {

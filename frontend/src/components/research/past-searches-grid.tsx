@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react"
 import { motion } from "framer-motion"
 import { ArrowUpRight, BookmarkIcon, Loader2 } from "lucide-react"
 import { useRouter } from "next/navigation"
-import { ResearchSession, useResearch } from "@/contexts/research/research-context"
+import { useResearch } from "@/contexts/research/research-context"
 
 const ITEMS_PER_PAGE = 12
 
