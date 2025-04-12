@@ -1,79 +1,79 @@
 # backend/requirements.txt
 
-aiofiles==24.1.0
-aiohappyeyeballs==2.4.4
+# aiofiles==24.1.0  # Likely unused (async file handling)
+# aiohappyeyeballs==2.4.4  # Evaluate (DNS for aiohttp)
 aiohttp==3.11.13
-aioredis==2.0.1
+# aioredis==2.0.1  # Unused Redis
 aiosignal==1.3.1
-aiosqlite==0.20.0
+# aiosqlite==0.20.0  # Unused SQLite
 alembic==1.13.1
 annotated-types==0.7.0
-anthropic==0.45.2
+# anthropic==0.45.2  # Unused Anthropic API
 anyio==4.7.0
 async-timeout==5.0.1
 asyncpg==0.30.0
 attrs==24.2.0
-babel==2.16.0
+# babel==2.16.0  # Unused i18n
 bcrypt==4.2.1
-beautifulsoup4==4.13.3
-cachetools==5.5.1
+# beautifulsoup4==4.13.3  # Unused web scraping
+# cachetools==5.5.1  # Unused Google auth
 certifi==2024.8.30
 cffi==1.17.1
 charset-normalizer==3.4.0
-chromedriver-autoinstaller==0.6.4
+# chromedriver-autoinstaller==0.6.4  # Unused browser automation
 click==8.1.7
-coloredlogs==15.0.1
-coverage==7.6.10
+# coloredlogs==15.0.1  # Unused logging
+# coverage==7.6.10  # Move to dev-dependencies
 cryptography==44.0.0
-cssselect==1.2.0
-dataclasses-json==0.6.7
+# cssselect==1.2.0  # Unused web scraping
+# dataclasses-json==0.6.7  # Unused JSON serialization
 Deprecated==1.2.18
 deprecation==2.1.0
-dirtyjson==1.0.8
-distro==1.9.0
+# dirtyjson==1.0.8  # Unused JSON parsing
+# distro==1.9.0  # Unused system info
 dnspython==2.7.0
 ecdsa==0.19.0
-elastic-transport==8.17.0
-elasticsearch==8.17.1
+# elastic-transport==8.17.0  # Unused elasticsearch
+# elasticsearch==8.17.1  # Unused search engine
 email_validator==2.2.0
 fastapi==0.115.6
 fastapi-admin==1.0.4
-feedfinder2==0.0.4
-feedparser==6.0.11
-filelock==3.16.1
-filetype==1.2.0
+# feedfinder2==0.0.4  # Unused RSS feed
+# feedparser==6.0.11  # Unused RSS feed
+# filelock==3.16.1  # Unused file locking
+# filetype==1.2.0  # Unused file type detection
 frozenlist==1.5.0
-fsspec==2024.10.0
-future==1.0.0
-gkeepapi==0.15.1
-google-api-core==2.24.1
-google-api-python-client==2.160.0
-google-auth==2.38.0
-google-auth-httplib2==0.2.0
-google-auth-oauthlib==1.2.1
-googleapis-common-protos==1.67.0rc1
+# fsspec==2024.10.0  # Unused filesystem abstraction
+# future==1.0.0  # Unused Python 2/3 compatibility
+# gkeepapi==0.15.1  # Unused Google Keep API
+# google-api-core==2.24.1  # Unused Google integration
+# google-api-python-client==2.160.0  # Unused Google integration
+# google-auth==2.38.0  # Unused Google integration
+# google-auth-httplib2==0.2.0  # Unused Google integration
+# google-auth-oauthlib==1.2.1  # Unused Google integration
+# googleapis-common-protos==1.67.0rc1  # Unused Google integration
 gotrue==2.11.4
-gpsoauth==1.1.1
+gpsoauth==1.1.1  # Unused Google auth
 greenlet==3.1.1
 h11==0.14.0
-h2==4.2.0
-hpack==4.1.0
-html2text==2024.2.26
+h2==4.2.0  # Evaluate (HTTP/2 support)
+hpack==4.1.0  # Evaluate (HTTP/2 support)
+html2text==2024.2.26  # Unused web scraping
 httpcore==1.0.7
-httplib2==0.22.0
+httplib2==0.22.0  # Unused Google API
 httptools==0.6.4
 httpx==0.28.1
 httpx-sse==0.4.0
-huggingface-hub==0.26.5
-humanfriendly==10.0
-hyperframe==6.1.0
+# huggingface-hub==0.26.5  # Unused ML integration
+humanfriendly==10.0  # Unused logging
+hyperframe==6.1.0  # Evaluate (HTTP/2 support)
 idna==3.10
-iniconfig==2.0.0
-iso8601==2.1.0
-jieba3k==0.35.1
+iniconfig==2.0.0  # Unused testing
+iso8601==2.1.0  # Unused date parsing
+# jieba3k==0.35.1  # Unused Chinese text processing
 Jinja2==3.1.4
 jiter==0.8.2
-joblib==1.4.2
+joblib==1.4.2  # Unused ML
 jsonpatch==1.33
 jsonpointer==3.0.0
 # langchain==0.3.18
@@ -114,64 +114,64 @@ jsonpointer==3.0.0
 # llama-index-readers-web==0.3.5
 # llama-index-storage-chat-store-redis==0.4.0
 # llama-parse==0.6.0
-lxml==5.3.0
+lxml==5.3.0  # Unused web scraping
 Mako==1.3.8
 MarkupSafe==3.0.2
-marshmallow==3.26.1
-ml-dtypes==0.4.1
-mpmath==1.3.0
-msal==1.31.1
-msgpack==1.1.0
+marshmallow==3.26.1  # Unused JSON serialization
+# ml-dtypes==0.4.1  # Unused ML types
+mpmath==1.3.0  # Unused symbolic math
+# msal==1.31.1  # Unused Microsoft authentication
+msgpack==1.1.0  # Unused Redis
 multidict==6.1.0
-mypy-extensions==1.0.0
-nest-asyncio==1.6.0
-networkx==3.4.2
-newspaper3k==0.2.8
-nltk==3.9.1
-numpy==1.26.4
-oauth2client==4.1.3
-oauthlib==3.2.2
-ollama==0.4.7
+# mypy-extensions==1.0.0  # Unused type inspection
+# nest-asyncio==1.6.0  # Unused asyncio nesting
+# networkx==3.4.2  # Unused graph operations
+# newspaper3k==0.2.8  # Unused web scraping
+# nltk==3.9.1  # Unused NLP
+# numpy==1.26.4  # Unused data science
+# oauth2client==4.1.3  # Unused Google auth
+# oauthlib==3.2.2  # Unused OAuth
+# ollama==0.4.7  # Unused ML model
 openai==1.61.1
 orjson==3.10.12
 outcome==1.3.0.post0
 packaging==24.2
-pandas==2.2.3
+# pandas==2.2.3  # Unused data science
 passlib==1.7.4
 pendulum==3.0.0
 pgvector==0.3.6
-pillow==11.1.0
+# pillow==11.1.0  # Unused image processing
 # pinecone==5.4.2
 # pinecone-plugin-inference==3.1.0
 # pinecone-plugin-interface==0.0.7
-playwright==1.50.0
-pluggy==1.5.0
+# playwright==1.50.0  # Unused browser automation
+pluggy==1.5.0  # Unused testing
 postgrest==0.19.3
-propcache==0.2.1
-proto-plus==1.26.0
-protobuf==5.29.3
-# psycopg==3.2.4
-psycopg-pool==3.2.4
-psycopg2==2.9.10
-psycopg2-binary==2.9.10
-pyasn1==0.4.8
-pyasn1_modules==0.4.1
+propcache==0.2.1  # Evaluate (property caching)
+proto-plus==1.26.0  # Unused Google API
+protobuf==5.29.3  # Unused Google API
+# psycopg==3.2.4  # Using asyncpg instead
+# psycopg-pool==3.2.4  # Using asyncpg instead
+# psycopg2==2.9.10  # Using asyncpg instead
+# psycopg2-binary==2.9.10  # Using asyncpg instead
+# pyasn1==0.4.8  # Unused Google auth
+# pyasn1_modules==0.4.1  # Unused Google auth
 pycparser==2.22
 pycryptodomex==3.21.0
 pydantic==2.10.3
 pydantic-settings==2.7.1
 pydantic_core==2.27.1
-PyDrive==1.3.1
+# PyDrive==1.3.1  # Unused Google Drive
 pyee==12.1.1
 PyJWT==2.10.1
 pyparsing==3.2.1
-pypdf==5.3.0
-pypika-tortoise==0.3.2
-PySocks==1.7.1
-pytest==8.3.4
-pytest-asyncio==0.25.2
-pytest-cov==6.0.0
-pytest-socket==0.7.0
+# pypdf==5.3.0  # Unused PDF processing
+# pypika-tortoise==0.3.2  # Unused ORM
+# PySocks==1.7.1  # Evaluate (SOCKS proxy)
+# pytest==8.3.4  # Move to dev-dependencies
+# pytest-asyncio==0.25.2  # Move to dev-dependencies
+# pytest-cov==6.0.0  # Move to dev-dependencies
+# pytest-socket==0.7.0  # Move to dev-dependencies
 python-dateutil==2.9.0.post0
 python-dotenv==1.0.1
 python-jose==3.4.0
@@ -182,52 +182,51 @@ PyYAML==6.0.2
 realtime==2.4.1
 # redis==5.2.1
 # redisvl==0.3.9
-regex==2024.11.6
+regex==2024.11.6  # Evaluate (advanced regex)
 requests==2.32.3
 requests-file==2.1.0
-requests-oauthlib==2.0.0
+# requests-oauthlib==2.0.0  # Unused OAuth
 requests-toolbelt==1.0.0
 rsa==4.9
-safetensors==0.5.2
-scikit-learn==1.6.1
-scipy==1.15.1
-selenium==4.28.1
-sentence-transformers==3.4.1
-sgmllib3k==1.0.0
-simsimd==6.2.1
+# safetensors==0.5.2  # Unused ML
+# scikit-learn==1.6.1  # Unused ML
+# scipy==1.15.1  # Unused ML
+# selenium==4.28.1  # Unused browser automation
+# sentence-transformers==3.4.1  # Unused ML
+# sgmllib3k==1.0.0  # Unused web scraping
+# simsimd==6.2.1  # Unused ML
 six==1.17.0
 sniffio==1.3.1
 sortedcontainers==2.4.0
-soupsieve==2.6
-spider-client==0.0.27
+# soupsieve==2.6  # Unused web scraping
 SQLAlchemy==2.0.36
 sqlmodel==0.0.16
 starlette==0.41.3
 storage3==0.11.3
 StrEnum==0.4.15
-striprtf==0.0.26
+# striprtf==0.0.26  # Unused RTF processing
 supabase==2.13.0
 supafunc==0.9.3
-sympy==1.13.1
-syrupy==4.8.1
+# sympy==1.13.1  # Unused symbolic math
+# syrupy==4.8.1  # Unused testing
 tabulate==0.9.0
 tenacity==9.0.0
-threadpoolctl==3.5.0
-tiktoken==0.8.0
-time-machine==2.16.0
-tinysegmenter==0.3
+# threadpoolctl==3.5.0  # Unused ML
+# tiktoken==0.8.0
+time-machine==2.16.0  # Unused testing
+tinysegmenter==0.3  # Unused text segmentation
 tldextract==5.1.3
-tokenizers==0.21.0
-torch==2.6.0
-tortoise-orm==0.22.2
-tqdm==4.67.1
-transformers==4.48.3
-trio==0.28.0
-trio-websocket==0.11.1
-typing-inspect==0.9.0
+# tokenizers==0.21.0  # Unused NLP/ML
+# torch==2.6.0
+# tortoise-orm==0.22.2  # Unused ORM
+# tqdm==4.67.1  # Unused progress bars
+# transformers==4.48.3  # Unused NLP/ML
+# trio==0.28.0
+# trio-websocket==0.11.1
+# typing-inspect==0.9.0  # Unused type inspection
 typing_extensions==4.12.2
 tzdata==2024.2
-uritemplate==4.1.1
+# uritemplate==4.1.1  # Unused Google API
 urllib3==1.26.20
 uvicorn==0.32.1
 uvloop==0.21.0
@@ -237,3 +236,4 @@ watchfiles==1.0.0
 wrapt==1.17.2
 wsproto==1.2.0
 yarl==1.18.3
+

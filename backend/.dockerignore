@@ -1,0 +1,15 @@
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.git
+.gitignore
+.env
+tests/
+docs/
+*.md
+*.log
+*.tar
+*.gz
+*.zip
+*.db

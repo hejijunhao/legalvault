@@ -1,24 +1,66 @@
 # Python
 __pycache__/
 *.py[cod]
-.venv/
-*.env
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 
-# Node/Next.js
-node_modules/
-.next/
-out/
+# Virtual Environment
+.venv/
+env/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
 *.log
 
-# Environment variables
+# Local development
 .env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+.env.*
+!.env.example
 
-# PyCharm
-.idea/
+# Dependencies
+node_modules/
 
-# Docker
-docker-compose.override.yml
+# Build files
+*.tar
+*.gz
+*.zip
+*.rar
+*.db
+
+# Coverage reports
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+
+# Cache
+.cache/
+.pytest_cache/
+.mypy_cache/
+
+# Misc
+.DS_Store
+Thumbs.db
