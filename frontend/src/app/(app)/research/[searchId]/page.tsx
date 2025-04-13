@@ -42,8 +42,6 @@ export default function ResearchPage() {
   }] : [])
   const [isResponsePending, setIsResponsePending] = useState(!!initialQuery)
   const [isSessionLoading, setIsSessionLoading] = useState(true)
-  const [sessionLoadAttempts, setSessionLoadAttempts] = useState(0)
-  const maxLoadAttempts = 2
 
   useEffect(() => {
     clearError()
@@ -65,76 +63,63 @@ export default function ResearchPage() {
   const loadSession = useCallback(async () => {
     if (!searchId?.trim() || !isMounted) return false
 
-    console.log(`Loading session data for ID: ${searchId}, attempt: ${sessionLoadAttempts + 1}/${maxLoadAttempts}`)
-    
-    try {
-      // Get the session which will trigger the context's internal polling
-      const session = await getSession(searchId)
-      
-      if (!isMounted) return false
-      
-      if (!session) {
-        console.error("No session found for ID:", searchId)
-        router.push("/research")
-        return false
-      }
+    const maxLoadAttempts = 3
+    let attempts = 0
+    let delay = 1000 // Start with 1-second delay
 
-      console.log(`Session loaded: ${session.id}, Title: ${session.title || 'No title'}`)
-      
-      // If session has messages, use them immediately
-      if (session.messages && session.messages.length > 0) {
-        console.log(`Session has ${session.messages.length} messages, using them`)
-        setMessages(session.messages)
-        setIsResponsePending(false)
-        return true
-      } else {
-        console.log("Session has no messages yet")
-        // No messages in session, but we'll rely on context's polling to update
-        setMessages([])
-        return false
+    while (attempts < maxLoadAttempts) {
+      try {
+        console.log(`Loading session data for ID: ${searchId}, attempt: ${attempts + 1}/${maxLoadAttempts}`)
+        const session = await getSession(searchId)
+
+        if (!isMounted) return false
+
+        if (!session) {
+          console.error("No session found for ID:", searchId)
+          return false
+        }
+
+        console.log(`Session loaded: ${session.id}, Title: ${session.title || 'No title'}`)
+
+        if (session.messages && session.messages.length > 0) {
+          console.log(`Session has ${session.messages.length} messages, using them`)
+          setMessages(session.messages)
+          setIsResponsePending(false)
+          return true
+        } else {
+          console.log("Session has no messages yet")
+          setMessages([])
+          if (attempts < maxLoadAttempts - 1) {
+            await new Promise(resolve => setTimeout(resolve, delay))
+            delay *= 2 // Exponential backoff: 1s, 2s, 4s
+          }
+        }
+      } catch (err) {
+        if (!isMounted) return false
+        console.error("Error fetching session:", err)
+        if (attempts < maxLoadAttempts - 1) {
+          await new Promise(resolve => setTimeout(resolve, delay))
+          delay *= 2 // Exponential backoff
+        }
       }
-    } catch (err) {
-      if (!isMounted) return false
-      console.error("Error fetching session:", err)
-      return false
+      attempts++
     }
-  }, [searchId, getSession, router, isMounted, sessionLoadAttempts])
+    console.error("Failed to load session after maximum attempts")
+    return false
+  }, [searchId, getSession, isMounted])
 
-  // Effect to load session and watch for changes in currentSession
   useEffect(() => {
-    // Skip if not mounted or no search ID
     if (!searchId?.trim() || !isMounted) return
-    
-    // Show loading state
+
     setIsSessionLoading(true)
-    
-    // If we already have messages in the current session, use them
-    if (currentSession?.id === searchId && currentSession.messages && currentSession.messages.length > 0) {
-      console.log(`Using ${currentSession.messages.length} messages from currentSession`)
-      setMessages(currentSession.messages)
-      setIsResponsePending(false)
-      setIsSessionLoading(false)
-      return
-    }
-    
-    // Otherwise, load the session
     loadSession().then(success => {
-      // If successful or we've reached max attempts, turn off loading
-      if (success || sessionLoadAttempts >= maxLoadAttempts - 1) {
-        setIsSessionLoading(false)
-      } else {
-        // Otherwise, increment attempts and try again after a delay
-        setSessionLoadAttempts(prev => prev + 1)
+      setIsSessionLoading(false)
+      if (!success) {
+        router.push("/research")
       }
     })
-    
-    // Cleanup function
-    return () => {
-      // No cleanup needed
-    }
-  }, [searchId, currentSession, loadSession, isMounted, sessionLoadAttempts])
+  }, [searchId, loadSession, isMounted, router])
 
-  // Effect to recheck for messages if currentSession updates
   useEffect(() => {
     if (currentSession?.id === searchId && currentSession.messages && currentSession.messages.length > 0) {
       console.log(`Current session updated with ${currentSession.messages.length} messages`)
@@ -144,26 +129,9 @@ export default function ResearchPage() {
     }
   }, [currentSession, searchId])
 
-  // Effect to retry loading after delay if first attempt fails
-  useEffect(() => {
-    if (sessionLoadAttempts > 0 && sessionLoadAttempts < maxLoadAttempts) {
-      const timer = setTimeout(() => {
-        console.log(`Retrying session load, attempt: ${sessionLoadAttempts + 1}/${maxLoadAttempts}`)
-        loadSession().then(success => {
-          if (success || sessionLoadAttempts >= maxLoadAttempts - 1) {
-            setIsSessionLoading(false)
-          }
-        })
-      }, 1500) // Wait 1.5 seconds before retrying
-      
-      return () => clearTimeout(timer)
-    }
-  }, [sessionLoadAttempts, loadSession, maxLoadAttempts])
-
   const handleSendMessage = async (content: string) => {
     if (!searchId || !content.trim()) return
-    
-    // Add optimistic message to local state
+
     setMessages(prev => [...prev, {
       id: `temp-${Date.now()}`,
       role: "user",
@@ -171,19 +139,15 @@ export default function ResearchPage() {
       sequence: 0,
       status: QueryStatus.PENDING
     }])
-    
+
     setIsResponsePending(true)
-    
+
     try {
-      // Send message - this will update context
       await sendMessage(searchId, content)
-      
-      // Wait a moment to let context update, then use the messages from there
       setTimeout(async () => {
         if (currentSession?.id === searchId && currentSession.messages) {
           setMessages(currentSession.messages)
         } else {
-          // If that didn't work, refresh the session
           const updatedSession = await getSession(searchId)
           if (updatedSession?.messages) {
             setMessages(updatedSession.messages)
@@ -202,10 +166,14 @@ export default function ResearchPage() {
 
   const handleRetryLoading = () => {
     setIsSessionLoading(true)
-    setSessionLoadAttempts(0)
+    loadSession().then(success => {
+      setIsSessionLoading(false)
+      if (!success) {
+        router.push("/research")
+      }
+    })
   }
 
-  // Handle case where there's no session and we're not loading
   if (!currentSession && !initialQuery && !isLoading && !isSessionLoading && messages.length === 0) {
     return (
       <div className="flex min-h-screen items-center justify-center" aria-live="polite">
@@ -227,11 +195,9 @@ export default function ResearchPage() {
     )
   }
 
-  // Show skeleton UI when loading
   if (isSessionLoading || isLoading) {
     return (
       <div className="flex h-screen flex-col bg-gray-50">
-        {/* Skeleton Header */}
         <header className="sticky top-0 z-10 border-b bg-white px-4 py-3 shadow-sm sm:px-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
@@ -241,8 +207,6 @@ export default function ResearchPage() {
           </div>
           <Skeleton className="mt-1 h-4 w-64 rounded" />
         </header>
-
-        {/* Skeleton Chat Area */}
         <div className="flex-1 overflow-y-auto px-4 pb-20 pt-4 sm:px-6 space-y-4">
           <div className="flex justify-start">
             <Skeleton className="h-16 w-3/4 rounded-lg" />
@@ -253,12 +217,10 @@ export default function ResearchPage() {
           <div className="flex justify-start">
             <Skeleton className="h-20 w-4/5 rounded-lg" />
           </div>
-           <div className="flex justify-end">
+          <div className="flex justify-end">
             <Skeleton className="h-10 w-1/2 rounded-lg" />
           </div>
         </div>
-
-        {/* Skeleton Input Area */}
         <div className="sticky bottom-0 border-t bg-white px-4 py-4 sm:px-6">
           <Skeleton className="h-10 w-full rounded" />
         </div>
