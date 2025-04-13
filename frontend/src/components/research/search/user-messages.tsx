@@ -4,7 +4,6 @@
 
 import { useEffect, useRef } from "react"
 import { motion } from "framer-motion"
-import { Avatar, AvatarImage } from "@/components/ui/avatar"
 import { Copy, ThumbsUp, ThumbsDown, RefreshCw, Loader2, AlertCircle, ArrowRight } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Message, QueryStatus } from "@/contexts/research/research-context"
@@ -70,15 +69,12 @@ export function UserMessages({
     }
   }
 
-  // Function to check if we should show the sender name
-  // (show for first message or when sender changes)
   const shouldShowSender = (index: number) => {
     if (index === 0) return true
     if (index > 0 && messages[index].role !== messages[index - 1].role) return true
     return false
   }
 
-  // Process citations in text, replacing [n] with span elements
   const processCitations = (text: string, citations: any[]) => {
     return text.replace(/\[(\d+)\]/g, (match, number) => {
       const index = parseInt(number, 10) - 1
@@ -106,20 +102,10 @@ export function UserMessages({
               message.role === "assistant" ? "justify-start" : "justify-end"
             )}>
               {message.role === "assistant" && (
-                <>
-                  <Avatar className="h-4 w-4 mr-1">
-                    <AvatarImage src="/vp-avatar.png" alt="Virtual Paralegal" />
-                  </Avatar>
-                  <span>Virtual Paralegal</span>
-                </>
+                <span>Virtual Paralegal</span>
               )}
               {message.role === "user" && (
-                <>
-                  <span>{userName}</span>
-                  <Avatar className="h-4 w-4 ml-1">
-                    <AvatarImage src={userAvatar || "/user-avatar.png"} alt={userName} />
-                  </Avatar>
-                </>
+                <span>{userName}</span>
               )}
             </div>
           )}
@@ -159,19 +145,14 @@ export function UserMessages({
                       rehypePlugins={[rehypeRaw]}
                       components={{
                         p: ({ node, children, ...props }) => {
-                          // Check if the direct children consist ONLY of whitespace text nodes
-                          // and exactly one specific citation span element.
                           let isOnlyCitationSpan = false;
                           if (node && node.children) {
                             const significantChildren = node.children.filter((child: any) => {
-                              // Ignore pure whitespace text nodes
                               if (child.type === 'text' && child.value.trim() === '') {
                                 return false;
                               }
                               return true;
                             });
-
-                            // Check if there's exactly one significant child, and it's our citation span
                             if (significantChildren.length === 1) {
                               const child = significantChildren[0];
                               if (
@@ -183,21 +164,15 @@ export function UserMessages({
                               }
                             }
                           }
-
-                          // If it's effectively just the citation span, render as a div
                           if (isOnlyCitationSpan) {
                             return <div className="mb-3 leading-[1.65] font-inter last:mb-0" {...props}>{children}</div>;
                           }
-
-                          // Otherwise, render as a standard paragraph
                           return <p className="mb-3 leading-[1.65] font-inter last:mb-0" {...props}>{children}</p>;
                         },
-                        // Keep div handling for direct divs in markdown
                         div: ({ children, ...props }) => (
                           <div className="mb-3 leading-[1.65] font-inter last:mb-0" {...props}>{children}</div>
                         ),
                         span: ({ node, ...props }) => {
-                          // Keep the simplified span override (render CitationHovercard directly)
                           if ('data-citation' in props) {
                             const index = parseInt(props['data-citation'] as string, 10)
                             const citation = message.content?.citations?.[index]
@@ -210,7 +185,7 @@ export function UserMessages({
                     >
                       {typeof message.content === 'object' && message.content?.text 
                         ? processCitations(message.content.text, message.content.citations || [])
-                        : typeof message.content === 'string' // Handle plain string content too
+                        : typeof message.content === 'string'
                         ? message.content 
                         : 'No content available'
                       }
