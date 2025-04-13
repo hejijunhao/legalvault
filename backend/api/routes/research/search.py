@@ -162,7 +162,7 @@ def search_list_dto_to_response(search_list_dto: Union[SearchListDTO, tuple]) ->
         limit=limit
     )
 
-@router.post("/", response_model=SearchResponse)
+@router.post("", response_model=SearchResponse)
 async def create_search(
     data: SearchCreate,
     current_user: User = Depends(get_current_user),
@@ -348,7 +348,7 @@ async def get_search(
             detail="An unexpected error occurred. Please try again later."
         )
 
-@router.get("/", response_model=SearchListResponse)
+@router.get("", response_model=SearchListResponse)
 async def list_searches(
     limit: int = Query(20, ge=1, le=100, description="Maximum number of results"),
     offset: int = Query(0, ge=0, description="Pagination offset"),
