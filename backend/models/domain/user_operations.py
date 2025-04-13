@@ -419,7 +419,7 @@ class UserOperations:
                 # Access metadata from the response
                 if hasattr(auth_user, 'user'):
                     user_metadata = auth_user.user
-                    last_login = user_metadata.get('last_sign_in_at')
+                    last_login = auth_user.user.last_sign_in_at if auth_user.user.last_sign_in_at else None
                 elif isinstance(auth_user, dict):
                     last_login = auth_user.get('last_sign_in_at')
                 
