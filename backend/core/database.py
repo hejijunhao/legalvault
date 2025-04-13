@@ -15,9 +15,10 @@ from sqlalchemy import text, Table, MetaData
 from sqlalchemy.engine.url import make_url
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import NullPool
 from sqlmodel import SQLModel
 
-from .config import settings  # No need for dotenv here anymore
+from .config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -53,10 +54,7 @@ execution_options = {
 async_engine = create_async_engine(
     async_url_obj,
     echo=False,
-    pool_size=20,        # Maximum number of persistent connections
-    max_overflow=10,     # Additional connections allowed temporarily
-    pool_timeout=30,     # Seconds to wait before giving up on a connection
-    pool_recycle=1800,   # Recycle connections after 30 minutes
+    poolclass=NullPool,  # Use NullPool to rely on pgBouncer
     connect_args={
         "ssl": ssl_context,
         "server_settings": {
@@ -71,7 +69,7 @@ async_engine = create_async_engine(
 )
 
 logger.info("Database engine configured with session pooling settings:")
-logger.info(f"  - Connection pooling: Using SQLAlchemy QueuePool with pool_size=20, max_overflow=10")
+logger.info(f"  - Connection pooling: Using SQLAlchemy NullPool with Supabase pgBouncer")
 logger.info(f"  - Prepared statements enabled (session mode)")
 
 async_session_factory = sessionmaker(
@@ -82,7 +80,7 @@ async_session_factory = sessionmaker(
 
 async def handle_pgbouncer_error(session: AsyncSession, error: Exception) -> Optional[AsyncSession]:
     error_message = str(error).lower()
-    if "invalidsqlstatementnameerror" in error_message or "max client connections reached" in error_message:
+    if any(err in error_message for err in ["invalidsqlstatementnameerror", "max client connections reached", "connection closed"]):
         logger.warning(f"pgBouncer error detected: {error_message[:100]}...")
         try:
             await session.close()
