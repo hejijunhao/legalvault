@@ -8,22 +8,25 @@ import { ApiError } from "./research-api-types";
  * Get the base URL for API requests with better environment handling
  */
 export function getApiBaseUrl(): string {
-  // In development, default to localhost:8000 if no API URL is provided
-  if (process.env.NODE_ENV === 'development') {
-    return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-  }
-  
-  // In production, use the provided API URL or current origin
   const apiUrl = process.env.NEXT_PUBLIC_API_URL;
-  if (apiUrl) {
-    // Ensure the URL doesn't have a trailing slash
-    return apiUrl.endsWith('/') ? apiUrl.slice(0, -1) : apiUrl;
+  
+  if (!apiUrl) {
+    console.error('NEXT_PUBLIC_API_URL is not set.');
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('Falling back to http://localhost:8000 for development');
+      return 'http://localhost:8000';
+    }
+    throw new Error('NEXT_PUBLIC_API_URL must be set in production');
   }
   
-  // Fallback to current origin (should only happen in production)
-  const origin = window.location.origin;
-  console.warn(`No NEXT_PUBLIC_API_URL provided, falling back to current origin: ${origin}`);
-  return origin;
+  const normalizedUrl = apiUrl.endsWith('/') ? apiUrl.slice(0, -1) : apiUrl;
+  if (process.env.NODE_ENV !== 'development' && !normalizedUrl.startsWith('https://')) {
+    console.warn(`Forcing HTTPS for API URL: ${normalizedUrl}`);
+    return `https://${normalizedUrl.replace(/^http:\/\//, '')}`;
+  }
+  
+  console.log('API Base URL:', normalizedUrl);
+  return normalizedUrl;
 }
 
 /**
@@ -31,7 +34,6 @@ export function getApiBaseUrl(): string {
  */
 export async function getAuthHeader(): Promise<Record<string, string>> {
   try {
-    // First try to get the current session
     const { data: { session }, error: sessionError } = await supabase.auth.getSession();
     
     if (sessionError) {
@@ -40,13 +42,11 @@ export async function getAuthHeader(): Promise<Record<string, string>> {
     }
     
     if (!session) {
-      // If no session, try to get the token from localStorage as fallback
       const token = localStorage.getItem('auth_token');
       if (!token) {
         throw new Error('Authentication required');
       }
       
-      // Try to refresh the session using the token
       const { data: { session: refreshedSession }, error: refreshError } = 
         await supabase.auth.refreshSession();
         
@@ -73,41 +73,34 @@ export async function getAuthHeader(): Promise<Record<string, string>> {
 
 /**
  * Fetch with support for self-signed certificates
- * @param url The URL to fetch
- * @param options Fetch options
- * @returns A fetch response
  */
 export async function fetchWithSelfSignedCert(
   url: string, 
   options: RequestInit = {}
 ): Promise<Response> {
-  // Normalize URL to prevent trailing slash issues
   const normalizedUrl = url.endsWith('/') && !url.endsWith('//') ? url.slice(0, -1) : url;
-  
-  // Ensure URL is absolute
   let fullUrl = normalizedUrl;
+  
   if (!normalizedUrl.startsWith('http')) {
     const baseUrl = getApiBaseUrl();
-    // Ensure we don't have double slashes when joining paths
     const separator = baseUrl.endsWith('/') && normalizedUrl.startsWith('/') ? '' : 
                      (!baseUrl.endsWith('/') && !normalizedUrl.startsWith('/')) ? '/' : '';
     fullUrl = `${baseUrl}${separator}${normalizedUrl}`;
   }
   
-  // Ensure headers are properly initialized
-  const headers = new Headers(options.headers || {});
-  
-  // Set default headers if not already present
-  if (!headers.has('Accept')) {
-    headers.set('Accept', 'application/json');
+  // Force HTTPS in production
+  if (process.env.NODE_ENV !== 'development' && fullUrl.startsWith('http://')) {
+    console.warn(`Converting HTTP to HTTPS for URL: ${fullUrl}`);
+    fullUrl = `https://${fullUrl.replace(/^http:\/\//, '')}`;
   }
   
+  console.log(`Final Fetch URL: ${fullUrl}`);
+  
+  const headers = new Headers(options.headers || {});
+  if (!headers.has('Accept')) headers.set('Accept', 'application/json');
   if (!headers.has('Content-Type') && options.method !== 'GET' && options.body) {
     headers.set('Content-Type', 'application/json');
   }
-  
-  // Log request (without sensitive data)
-  console.log(`API Request: ${options.method || 'GET'} ${fullUrl.replace(/token=([^&]+)/, 'token=***')}`);
   
   try {
     const response = await fetch(fullUrl, {
@@ -115,32 +108,26 @@ export async function fetchWithSelfSignedCert(
       headers
     });
     
-    // Log response status
-    console.log(`API Response: ${response.status} ${response.statusText} for ${options.method || 'GET'} ${fullUrl.replace(/token=([^&]+)/, 'token=***')}`);
+    console.log(`Response: ${response.status} ${response.statusText} for ${options.method || 'GET'} ${fullUrl}`);
     
-    // Handle redirects that might be caused by trailing slash issues
     if (response.status === 307 || response.status === 308) {
-      console.warn(`Received redirect (${response.status}) for URL: ${fullUrl}`);
+      console.warn(`Redirect (${response.status}) for URL: ${fullUrl}`);
       const redirectUrl = response.headers.get('Location');
       if (redirectUrl) {
-        console.log(`Following redirect to: ${redirectUrl.replace(/token=([^&]+)/, 'token=***')}`);
+        console.log(`Following redirect to: ${redirectUrl}`);
         return fetchWithSelfSignedCert(redirectUrl, options);
       }
     }
     
     return response;
   } catch (error) {
-    console.error(`API Request failed for ${options.method || 'GET'} ${fullUrl.replace(/token=([^&]+)/, 'token=***')}:`, error);
+    console.error(`Fetch failed for ${options.method || 'GET'} ${fullUrl}:`, error);
     throw error;
   }
 }
 
 /**
  * Retry a function with exponential backoff
- * @param fn The function to retry
- * @param maxRetries Maximum number of retries
- * @param shouldRetry Function to determine if a retry should be attempted
- * @returns The result of the function
  */
 export async function withRetry<T>(
   fn: () => Promise<T>,
@@ -159,7 +146,6 @@ export async function withRetry<T>(
         throw error;
       }
       
-      // Exponential backoff
       const delay = Math.pow(2, retryCount) * 1000;
       await new Promise(resolve => setTimeout(resolve, delay));
     }
@@ -168,16 +154,12 @@ export async function withRetry<T>(
 
 /**
  * Format an API error
- * @param error The error to format
- * @param defaultMessage Optional default message to use if no specific message is available
- * @returns A formatted API error
  */
 export function formatApiError(error: any, defaultMessage?: string): ApiError {
   const formattedError: ApiError = new Error(
     error.message || defaultMessage || 'An unexpected error occurred'
   ) as ApiError;
   
-  // Copy properties from the original error
   if (error.status) formattedError.status = error.status;
   if (error.statusText) formattedError.statusText = error.statusText;
   if (error.code) formattedError.code = error.code;
@@ -185,7 +167,6 @@ export function formatApiError(error: any, defaultMessage?: string): ApiError {
   
   formattedError.originalError = error;
   
-  // Format based on status code
   if (formattedError.status !== undefined) {
     if (formattedError.status === 401) {
       formattedError.message = 'Your session has expired. Please log in again.';
@@ -201,7 +182,6 @@ export function formatApiError(error: any, defaultMessage?: string): ApiError {
     }
   }
   
-  // Special handling for Perplexity API errors
   if (error.message?.includes('Perplexity API') || error.details?.includes('Perplexity API')) {
     if (error.message?.includes('rate limit') || error.details?.includes('rate limit')) {
       formattedError.message = 'Perplexity API rate limit exceeded. Please try again later.';
@@ -217,8 +197,6 @@ export function formatApiError(error: any, defaultMessage?: string): ApiError {
 
 /**
  * Handle an API error response
- * @param response The response to handle
- * @returns Never returns, always throws an error
  */
 export async function handleApiError(response: Response): Promise<never> {
   let errorData: any = {
@@ -227,7 +205,6 @@ export async function handleApiError(response: Response): Promise<never> {
   };
   
   try {
-    // Try to parse error details from response
     const contentType = response.headers.get('content-type');
     if (contentType && contentType.includes('application/json')) {
       const json = await response.json();
@@ -244,9 +221,6 @@ export async function handleApiError(response: Response): Promise<never> {
 
 /**
  * Schedule a cache clear after a specified time
- * @param clearFn The function to clear the cache
- * @param delay The delay in milliseconds
- * @returns A function to cancel the scheduled clear
  */
 export function scheduleCacheClear(
   clearFn: () => void, 

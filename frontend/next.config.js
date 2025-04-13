@@ -1,19 +1,20 @@
+if (process.env.NODE_ENV === 'production' && !process.env.NEXT_PUBLIC_API_URL) {
+  throw new Error('NEXT_PUBLIC_API_URL is required in production');
+}
+
 const nextConfig = {
-  /* config options here */
   async rewrites() {
     return [
       {
         source: '/api/:path*',
         destination: process.env.NODE_ENV === 'development'
-          ? 'https://localhost:8000/api/:path*'  // Use HTTPS in development
-          : (process.env.NEXT_PUBLIC_API_URL || 'https://localhost:8000/api/:path*'),
+          ? 'http://localhost:8000/api/:path*'
+          : `${process.env.NEXT_PUBLIC_API_URL}/api/:path*`,
       },
     ];
   },
-  // This helps with HTTPS in development
   webpack: (config, { dev }) => {
     if (dev) {
-      // Ensure the Node.js environment variable is respected
       config.resolve.fallback = { 
         ...config.resolve.fallback, 
         net: false,
@@ -22,20 +23,15 @@ const nextConfig = {
     }
     return config;
   },
-  // Disable SSL certificate verification in development
   serverRuntimeConfig: {
-    // Will only be available on the server side
     https: process.env.NODE_ENV === 'development' ? {
       rejectUnauthorized: false
     } : undefined
   },
   publicRuntimeConfig: {
-    // Will be available on both server and client
-    apiUrl: process.env.NODE_ENV === 'development' ? 'http://localhost:8000/api' : process.env.NEXT_PUBLIC_API_URL
+    apiUrl: process.env.NEXT_PUBLIC_API_URL
   },
-  // ESLint configuration
   eslint: {
-    // Warnings don't fail the build
     ignoreDuringBuilds: true
   },
 };

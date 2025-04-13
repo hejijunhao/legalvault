@@ -18,8 +18,6 @@ import { researchCache } from './research-cache';
 
 /**
  * Fetch a list of research sessions
- * @param options Options for filtering and pagination
- * @returns A list of research sessions
  */
 export async function fetchSessions(
   options?: {
@@ -29,15 +27,12 @@ export async function fetchSessions(
     offset?: number;
   } | null
 ): Promise<SearchListResponse> {
-  // Check cache first
   const cachedData = researchCache.getSessionList(options);
   if (cachedData) {
     return cachedData;
   }
   
   const headers = await getAuthHeader();
-  
-  // Build query parameters
   const params = new URLSearchParams();
   if (options?.featuredOnly) params.append('featured', 'true');
   if (options?.status) params.append('status', options.status);
@@ -45,57 +40,52 @@ export async function fetchSessions(
   if (options?.offset) params.append('offset', options.offset.toString());
   
   const queryString = params.toString() ? `?${params.toString()}` : '';
-  const url = `/api/research/searches${queryString}`;  // Removed trailing slash
+  const url = `/api/research/searches${queryString}`;
+  console.log('fetchSessions URL:', url);
   
   const response = await withRetry(() => fetchWithSelfSignedCert(url, { headers }));
   
   if (!response.ok) return handleApiError(response);
   const data = await response.json();
   
-  // Cache the response
   researchCache.setSessionList(data, options);
-  
   return data;
 }
 
 /**
  * Fetch a single research session by ID
- * @param sessionId The ID of the session to fetch
- * @returns The research session
  */
 export async function fetchSession(sessionId: string): Promise<ResearchSession> {
-  // Check cache first
   const cachedSession = researchCache.getSession(sessionId);
   if (cachedSession) {
     return cachedSession;
   }
   
   const headers = await getAuthHeader();
-  const response = await withRetry(() => 
-    fetchWithSelfSignedCert(`/api/research/searches/${sessionId}`, { headers })  // Removed trailing slash
-  );
+  const url = `/api/research/searches/${sessionId}`;
+  console.log('fetchSession URL:', url);
+  
+  const response = await withRetry(() => fetchWithSelfSignedCert(url, { headers }));
   
   if (!response.ok) return handleApiError(response);
   const data = await response.json();
   
-  // Cache the response
   researchCache.setSession(data);
-  
   return data;
 }
 
 /**
  * Create a new research session
- * @param query The query to create a session for
- * @param searchParams Additional search parameters
- * @returns The created research session
  */
 export async function createNewSession(
   query: string,
   searchParams?: SearchParams
 ): Promise<ResearchSession> {
   const headers = await getAuthHeader();
-  const response = await withRetry(() => fetchWithSelfSignedCert('/api/research/searches', {  // Removed trailing slash
+  const url = '/api/research/searches';
+  console.log('createNewSession URL:', url);
+  
+  const response = await withRetry(() => fetchWithSelfSignedCert(url, {
     method: 'POST',
     headers,
     body: JSON.stringify({
@@ -107,31 +97,27 @@ export async function createNewSession(
   if (!response.ok) return handleApiError(response);
   const data = await response.json();
   
-  // Cache the new session
   researchCache.setSession(data);
-  
-  // Invalidate session lists as they're now outdated
   researchCache.clearSessionListCache();
-  
   return data;
 }
 
 /**
  * Send a message to a research session
- * @param sessionId The ID of the session to send a message to
- * @param content The content of the message
- * @returns The updated research session
  */
 export async function sendSessionMessage(
   sessionId: string,
   content: string
 ): Promise<ResearchSession> {
   const headers = await getAuthHeader();
+  const url = `/api/research/searches/${sessionId}/continue`;
+  console.log('sendSessionMessage URL:', url);
+  
   const response = await withRetry(
-    () => fetchWithSelfSignedCert(`/api/research/searches/${sessionId}/continue`, {  // Changed to /continue
+    () => fetchWithSelfSignedCert(url, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ follow_up_query: content })  // Adjusted payload
+      body: JSON.stringify({ follow_up_query: content })
     }),
     3,
     (error) => error?.status === 429 || 
@@ -142,21 +128,13 @@ export async function sendSessionMessage(
   if (!response.ok) return handleApiError(response);
   const data = await response.json();
   
-  // Cache the updated session
   researchCache.setSession(data);
-  
-  // Invalidate message lists for this session as they're now outdated
   researchCache.invalidateSearch(sessionId);
-  
   return data;
 }
 
 /**
  * Continue a research session with a follow-up query
- * @param sessionId The ID of the session to continue
- * @param followUpQuery The follow-up query
- * @param options Additional options for the continuation
- * @returns The updated research session
  */
 export async function continueSession(
   sessionId: string,
@@ -168,8 +146,11 @@ export async function continueSession(
   }
 ): Promise<ResearchSession> {
   const headers = await getAuthHeader();
+  const url = `/api/research/searches/${sessionId}/continue`;
+  console.log('continueSession URL:', url);
+  
   const response = await withRetry(
-    () => fetchWithSelfSignedCert(`/api/research/searches/${sessionId}/continue`, {
+    () => fetchWithSelfSignedCert(url, {
       method: 'POST',
       headers,
       body: JSON.stringify({
@@ -184,24 +165,17 @@ export async function continueSession(
                error?.code === 'PERPLEXITY_RATE_LIMITED' || 
                error?.code === 'RATE_LIMITED'
   );
-
+  
   if (!response.ok) return handleApiError(response);
   const data = await response.json();
-
-  // Cache the updated session
+  
   researchCache.setSession(data);
-
-  // Invalidate message lists for this session as they're now outdated
   researchCache.invalidateSearch(sessionId);
-
   return data;
 }
 
 /**
  * Update the metadata of a research session
- * @param sessionId The ID of the session to update
- * @param updates The updates to apply
- * @returns The updated research session
  */
 export async function updateSessionMetadata(
   sessionId: string, 
@@ -216,7 +190,10 @@ export async function updateSessionMetadata(
   }
 ): Promise<ResearchSession> {
   const headers = await getAuthHeader();
-  const response = await withRetry(() => fetchWithSelfSignedCert(`/api/research/searches/${sessionId}`, {  // Removed trailing slash
+  const url = `/api/research/searches/${sessionId}`;
+  console.log('updateSessionMetadata URL:', url);
+  
+  const response = await withRetry(() => fetchWithSelfSignedCert(url, {
     method: 'PATCH',
     headers,
     body: JSON.stringify(updates)
@@ -225,31 +202,26 @@ export async function updateSessionMetadata(
   if (!response.ok) return handleApiError(response);
   const data = await response.json();
   
-  // Cache the updated session
   researchCache.setSession(data);
-  
-  // Invalidate session lists as they're now outdated
   researchCache.clearSessionListCache();
-  
   return data;
 }
 
 /**
  * Delete a research session
- * @param sessionId The ID of the session to delete
  */
 export async function deleteSession(sessionId: string): Promise<void> {
   const headers = await getAuthHeader();
-  const response = await withRetry(() => fetchWithSelfSignedCert(`/api/research/searches/${sessionId}`, {  // Removed trailing slash
+  const url = `/api/research/searches/${sessionId}`;
+  console.log('deleteSession URL:', url);
+  
+  const response = await withRetry(() => fetchWithSelfSignedCert(url, {
     method: 'DELETE',
     headers
   }));
   
   if (!response.ok) return handleApiError(response);
   
-  // Invalidate cache for this session
   researchCache.invalidateSearch(sessionId);
-  
-  // Invalidate session lists as they're now outdated
   researchCache.clearSessionListCache();
 }

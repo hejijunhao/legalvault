@@ -16,27 +16,23 @@ import { researchCache } from './research-cache';
 
 /**
  * Fetch a single message by ID
- * @param messageId The ID of the message to fetch
- * @returns The message
  */
 export async function fetchMessage(messageId: string): Promise<Message> {
-  // Check cache first
   const cachedMessage = researchCache.getMessage(messageId);
   if (cachedMessage) {
     return cachedMessage;
   }
 
   const headers = await getAuthHeader();
-  const response = await withRetry(() => 
-    fetchWithSelfSignedCert(`/api/research/messages/${messageId}`, { headers })
-  );
+  const url = `/api/research/messages/${messageId}`;
+  console.log('fetchMessage URL:', url);
+  
+  const response = await withRetry(() => fetchWithSelfSignedCert(url, { headers }));
   
   if (!response.ok) return handleApiError(response);
   const data = await response.json();
   
-  // Cache the response
   researchCache.setMessage(data);
-  
   return data;
 }
 
@@ -53,31 +49,25 @@ export async function createMessage(
   }
 ): Promise<Message> {
   const headers = await getAuthHeader();
-  const response = await withRetry(() => 
-    fetchWithSelfSignedCert(`/api/research/messages/search/${searchId}`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(message)
-    })
-  );
+  const url = `/api/research/messages/search/${searchId}`;
+  console.log('createMessage URL:', url);
+  
+  const response = await withRetry(() => fetchWithSelfSignedCert(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(message)
+  }));
   
   if (!response.ok) return handleApiError(response);
   const data = await response.json();
   
-  // Cache the new message
   researchCache.setMessage(data);
-  
-  // Invalidate message list cache for this search
   researchCache.invalidateMessageList(searchId);
-  
   return data;
 }
 
 /**
  * Fetch messages for a search
- * @param searchId The ID of the search to fetch messages for
- * @param options Options for filtering and pagination
- * @returns A list of messages
  */
 export async function fetchMessagesForSearch(
   searchId: string,
@@ -86,38 +76,31 @@ export async function fetchMessagesForSearch(
     offset?: number;
   } | null
 ): Promise<MessageListResponse> {
-  // Check cache first
   const cachedMessages = researchCache.getMessageList(searchId, options);
   if (cachedMessages) {
     return cachedMessages;
   }
 
   const headers = await getAuthHeader();
-  
-  // Build query parameters
   const params = new URLSearchParams();
   if (options?.limit) params.append('limit', options.limit.toString());
   if (options?.offset) params.append('offset', options.offset.toString());
   
   const queryString = params.toString() ? `?${params.toString()}` : '';
-  const response = await withRetry(() => 
-    fetchWithSelfSignedCert(`/api/research/messages/search/${searchId}${queryString}`, { headers })
-  );
+  const url = `/api/research/messages/search/${searchId}${queryString}`;
+  console.log('fetchMessagesForSearch URL:', url);
+  
+  const response = await withRetry(() => fetchWithSelfSignedCert(url, { headers }));
   
   if (!response.ok) return handleApiError(response);
   const data = await response.json();
   
-  // Cache the response
   researchCache.setMessageList(searchId, data, options);
-  
   return data;
 }
 
 /**
  * Update a message
- * @param messageId The ID of the message to update
- * @param updates The updates to apply
- * @returns The updated message
  */
 export async function updateMessage(
   messageId: string, 
@@ -127,37 +110,31 @@ export async function updateMessage(
   }
 ): Promise<Message> {
   const headers = await getAuthHeader();
-  const response = await withRetry(() => 
-    fetchWithSelfSignedCert(`/api/research/messages/${messageId}`, {
-      method: 'PATCH',
-      headers,
-      body: JSON.stringify(updates)
-    })
-  );
+  const url = `/api/research/messages/${messageId}`;
+  console.log('updateMessage URL:', url);
+  
+  const response = await withRetry(() => fetchWithSelfSignedCert(url, {
+    method: 'PATCH',
+    headers,
+    body: JSON.stringify(updates)
+  }));
   
   if (!response.ok) return handleApiError(response);
   const data = await response.json();
   
-  // Cache the updated message
   researchCache.setMessage(data);
-  
-  // Invalidate message list cache if we have the search_id
   if (data.search_id) {
     researchCache.invalidateMessageList(data.search_id);
   }
-  
   return data;
 }
 
 /**
  * Delete a message
- * @param messageId The ID of the message to delete
- * @param searchId Optional search ID if known, to avoid extra API call
  */
 export async function deleteMessage(messageId: string, searchId?: string): Promise<void> {
   const headers = await getAuthHeader();
   
-  // If searchId wasn't provided, try to get it from the message
   if (!searchId) {
     try {
       const message = await fetchMessage(messageId);
@@ -167,42 +144,21 @@ export async function deleteMessage(messageId: string, searchId?: string): Promi
     }
   }
   
-  const response = await withRetry(() => 
-    fetchWithSelfSignedCert(`/api/research/messages/${messageId}`, {
-      method: 'DELETE',
-      headers
-    })
-  );
+  const url = `/api/research/messages/${messageId}`;
+  console.log('deleteMessage URL:', url);
+  
+  const response = await withRetry(() => fetchWithSelfSignedCert(url, {
+    method: 'DELETE',
+    headers
+  }));
   
   if (!response.ok) return handleApiError(response);
   
-  // Remove from cache
   researchCache.deleteMessage(messageId);
-  
-  // Invalidate message list cache if we have the search_id
   if (searchId) {
     researchCache.invalidateMessageList(searchId);
   }
 }
 
 // TODO: Implement backend endpoint POST /research/messages/{message_id}/forward
-// export async function forwardMessage(
-//   messageId: string,
-//   destination: string,
-//   destinationType: 'email' | 'user' | 'workspace'
-// ): Promise<any> {
-//   const headers = await getAuthHeader();
-//   const response = await withRetry(() => 
-//     fetchWithSelfSignedCert(`/api/research/messages/${messageId}/forward`, {
-//       method: 'POST',
-//       headers,
-//       body: JSON.stringify({
-//         destination,
-//         destination_type: destinationType
-//       })
-//     })
-//   );
-//   
-//   if (!response.ok) return handleApiError(response);
-//   return await response.json();
-// }
+// export async function forwardMessage(...) { ... }
