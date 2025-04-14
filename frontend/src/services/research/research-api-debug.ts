@@ -56,9 +56,16 @@ export function monitorCacheOperations(enable: boolean = true): void {
   };
   
   const originalGetSession = researchCache.getSession;
-  researchCache.getSession = function(sessionId) {
-    const result = originalGetSession.call(this, sessionId);
+  researchCache.getSession = async function(sessionId) {
+    const result = await originalGetSession.call(this, sessionId);
     console.log(`Cache: Getting session ${sessionId} - ${result ? 'HIT' : 'MISS'}`);
+    return result;
+  };
+  
+  const originalCheckSessionCache = researchCache.checkSessionCache;
+  researchCache.checkSessionCache = function(sessionId) {
+    const result = originalCheckSessionCache.call(this, sessionId);
+    console.log(`Cache: Checking session cache ${sessionId} - ${result ? 'HIT' : 'MISS'}`);
     return result;
   };
   
@@ -72,6 +79,20 @@ export function monitorCacheOperations(enable: boolean = true): void {
   researchCache.getMessage = function(messageId) {
     const result = originalGetMessage.call(this, messageId);
     console.log(`Cache: Getting message ${messageId} - ${result ? 'HIT' : 'MISS'}`);
+    return result;
+  };
+  
+  const originalGetMessageList = researchCache.getMessageList;
+  researchCache.getMessageList = async function(searchId, options) {
+    const result = await originalGetMessageList.call(this, searchId, options);
+    console.log(`Cache: Getting message list for search ${searchId} - ${result ? 'HIT' : 'MISS'}`);
+    return result;
+  };
+  
+  const originalCheckMessageListCache = researchCache.checkMessageListCache;
+  researchCache.checkMessageListCache = function(searchId, options) {
+    const result = originalCheckMessageListCache.call(this, searchId, options);
+    console.log(`Cache: Checking message list cache for search ${searchId} - ${result ? 'HIT' : 'MISS'}`);
     return result;
   };
   
