@@ -27,7 +27,8 @@ export default function ResearchPage() {
     isLoading, 
     error, 
     sendMessage, 
-    clearError 
+    clearError, 
+    setError 
   } = useResearch()
   const [isMounted, setIsMounted] = useState(true)
   const [activeTab, setActiveTab] = useState<"answer" | "sources">("answer")
@@ -62,51 +63,43 @@ export default function ResearchPage() {
 
   const loadSession = useCallback(async () => {
     if (!searchId?.trim() || !isMounted) return false
-
     const maxLoadAttempts = 3
     let attempts = 0
-    let delay = 1000 // Start with 1-second delay
+    let delay = 1000
 
     while (attempts < maxLoadAttempts) {
       try {
-        console.log(`Loading session data for ID: ${searchId}, attempt: ${attempts + 1}/${maxLoadAttempts}`)
-        const session = await getSession(searchId)
-
-        if (!isMounted) return false
-
+        console.log(`Attempt ${attempts + 1}: Fetching session ${searchId}`);
+        const session = await getSession(searchId);
+        console.log("Response received:", JSON.stringify(session, null, 2));
         if (!session) {
-          console.error("No session found for ID:", searchId)
-          return false
+          console.error(`Attempt ${attempts + 1}: No session data returned`);
+          attempts++;
+          await new Promise(resolve => setTimeout(resolve, delay));
+          delay *= 2;
+          continue;
         }
-
-        console.log(`Session loaded: ${session.id}, Title: ${session.title || 'No title'}`)
-
-        if (session.messages && session.messages.length > 0) {
-          console.log(`Session has ${session.messages.length} messages, using them`)
-          setMessages(session.messages)
-          setIsResponsePending(false)
-          return true
-        } else {
-          console.log("Session has no messages yet")
-          setMessages([])
-          if (attempts < maxLoadAttempts - 1) {
-            await new Promise(resolve => setTimeout(resolve, delay))
-            delay *= 2 // Exponential backoff: 1s, 2s, 4s
-          }
-        }
-      } catch (err) {
-        if (!isMounted) return false
-        console.error("Error fetching session:", err)
-        if (attempts < maxLoadAttempts - 1) {
-          await new Promise(resolve => setTimeout(resolve, delay))
-          delay *= 2 // Exponential backoff
+        console.log(`Session loaded: ${session.id}, Messages: ${session.messages?.length || 0}`);
+        setMessages(session.messages || []);
+        setIsResponsePending(false);
+        return true;
+      } catch (err: any) {
+        console.error(`Attempt ${attempts + 1} failed:`, {
+          message: err.message,
+          status: err.status,
+          response: err.response ? JSON.stringify(err.response, null, 2) : 'No response'
+        });
+        attempts++;
+        if (attempts < maxLoadAttempts) {
+          await new Promise(resolve => setTimeout(resolve, delay));
+          delay *= 2;
         }
       }
-      attempts++
     }
-    console.error("Failed to load session after maximum attempts")
-    return false
-  }, [searchId, getSession, isMounted])
+    console.error("All attempts failed to load session");
+    setError({ message: "Failed to load session. Please try again or return to the research page." });
+    return false;
+  }, [searchId, getSession, isMounted, setError]);
 
   useEffect(() => {
     if (!searchId?.trim() || !isMounted) return

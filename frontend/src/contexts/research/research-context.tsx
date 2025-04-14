@@ -131,6 +131,7 @@ interface ResearchContextType {
   }) => Promise<void>
   deleteSession: (sessionId: string) => Promise<void>
   clearError: () => void
+  setError: React.Dispatch<React.SetStateAction<ErrorType | null>>
   totalSessions: number
   clearCache: () => void
 }
@@ -506,6 +507,7 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
         updateSession,
         deleteSession: deleteResearchSession,
         clearError,
+        setError,
         totalSessions,
         clearCache
       }}
