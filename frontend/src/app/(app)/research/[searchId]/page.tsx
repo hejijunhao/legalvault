@@ -1,4 +1,5 @@
 // src/app/(app)/research/[searchId]/page.tsx
+
 "use client"
 
 import { useEffect, useState, useRef, useCallback } from "react"
@@ -11,7 +12,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { UserMessages } from "@/components/research/search/user-messages"
 import { TypingIndicator } from "@/components/research/search/TypingIndicator"
 import { cn } from "@/lib/utils"
-import { Message, QueryStatus } from "@/services/research/research-api-types"
+import { Message, QueryStatus, QueryType } from "@/services/research/research-api-types"
 import { Skeleton } from '@/components/ui/skeleton'
 
 export default function ResearchPage() {
@@ -174,8 +175,8 @@ export default function ResearchPage() {
     }
   }, [currentSession, searchId])
 
-  const handleSendMessage = async (content: string) => {
-    console.log("ResearchPage: handleSendMessage - called with content =", content);
+  const handleSendMessage = async (content: string, type: QueryType = QueryType.GENERAL) => {
+    console.log("ResearchPage: handleSendMessage - called with content =", content, "type =", type);
     if (!searchId || !content.trim() || !isMountedRef.current) {
       console.log("ResearchPage: handleSendMessage - aborted: invalid searchId, empty content, or not mounted");
       return
@@ -471,6 +472,7 @@ export default function ResearchPage() {
       <ResearchInput 
         onSubmit={handleSendMessage} 
         isLoading={isLoading} 
+        searchId={searchId}
       />
     </div>
   )
