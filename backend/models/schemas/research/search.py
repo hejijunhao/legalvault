@@ -21,7 +21,7 @@ class SearchBase(BaseModel):
 
     @validator("search_params")
     def validate_search_params(cls, v):
-        allowed_keys = {"temperature", "max_tokens", "top_p", "top_k", "jurisdiction"}
+        allowed_keys = {"temperature", "max_tokens", "top_p", "top_k", "jurisdiction", "type"}
         if v and not all(k in allowed_keys for k in v.keys()):
             raise ValueError(f"Invalid search parameters. Allowed keys: {allowed_keys}")
         try:
