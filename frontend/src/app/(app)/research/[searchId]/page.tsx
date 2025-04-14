@@ -282,35 +282,79 @@ export default function ResearchPage() {
     )
   }
 
-  if (isSessionLoading || isLoading) {
+  if (isSessionLoading || (messages.length === 0 && !error)) {
     console.log("ResearchPage: Rendering loading skeleton");
     return (
-      <div className="flex h-screen flex-col bg-gray-50">
-        <header className="sticky top-0 z-10 border-b bg-white px-4 py-3 shadow-sm sm:px-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <Skeleton className="h-5 w-5 rounded-full" />
-              <Skeleton className="h-6 w-48 rounded" />
+      <div className="min-h-screen pb-20" aria-live="polite">
+        {/* Header skeleton that matches the actual header */}
+        <div className="sticky top-16 z-40 w-full bg-white/25 backdrop-blur-3xl backdrop-saturate-150 border-b border-white/5 shadow-[0_8px_32px_rgba(0,0,0,0.02)] bg-gradient-to-b from-white/30 to-white/20">
+          <div className="flex items-center mx-auto w-full max-w-[1440px] px-4 py-2">
+            {/* Back button skeleton */}
+            <Skeleton className="h-9 w-[140px] rounded-md" />
+            
+            <div className="mx-auto max-w-3xl w-full">
+              {/* Title skeleton */}
+              <Skeleton className="h-8 w-3/4 rounded my-2" />
+              
+              {/* Tab skeleton */}
+              <div className="mt-4 flex border-b border-gray-200">
+                <Skeleton className="h-8 w-20 rounded mx-1" />
+                <Skeleton className="h-8 w-20 rounded mx-1" />
+              </div>
             </div>
           </div>
-          <Skeleton className="mt-1 h-4 w-64 rounded" />
-        </header>
-        <div className="flex-1 overflow-y-auto px-4 pb-20 pt-4 sm:px-6 space-y-4">
-          <div className="flex justify-start">
-            <Skeleton className="h-16 w-3/4 rounded-lg" />
-          </div>
-          <div className="flex justify-end">
-            <Skeleton className="h-12 w-2/3 rounded-lg" />
-          </div>
-          <div className="flex justify-start">
-            <Skeleton className="h-20 w-4/5 rounded-lg" />
-          </div>
-          <div className="flex justify-end">
-            <Skeleton className="h-10 w-1/2 rounded-lg" />
+        </div>
+
+        {/* Message content skeleton that matches the actual message layout */}
+        <div className="mx-auto w-full max-w-[1440px] px-4 pt-8">
+          <div className="mx-auto max-w-3xl w-full">
+            <div className="space-y-6 mb-32"> {/* Added mb-32 to match tab-content margin */}
+              {/* User message skeleton */}
+              <div className="flex flex-col items-end">
+                <div className="flex items-center mb-1">
+                  <Skeleton className="h-5 w-16 rounded mr-2" /> {/* Username */}
+                  <Skeleton className="h-6 w-6 rounded-full" /> {/* Avatar */}
+                </div>
+                <Skeleton className="h-12 w-2/3 rounded-2xl bg-[#BFEF9C]" /> {/* Message bubble */}
+                <Skeleton className="h-4 w-20 rounded mt-1" /> {/* Status */}
+              </div>
+
+              {/* Assistant message skeleton */}
+              <div className="flex flex-col items-start">
+                <div className="flex items-center mb-1">
+                  <Skeleton className="h-6 w-6 rounded-full mr-2" /> {/* Avatar */}
+                  <Skeleton className="h-5 w-24 rounded" /> {/* Assistant name */}
+                </div>
+                <Skeleton className="h-24 w-4/5 rounded-2xl bg-[#FAFAFA] border border-[#E8E8E8]" /> {/* Message bubble */}
+                <div className="flex mt-2 gap-2">
+                  <Skeleton className="h-8 w-8 rounded-full" /> {/* Action button */}
+                  <Skeleton className="h-8 w-8 rounded-full" /> {/* Action button */}
+                  <Skeleton className="h-8 w-8 rounded-full" /> {/* Action button */}
+                </div>
+              </div>
+
+              {/* Another user message skeleton */}
+              <div className="flex flex-col items-end">
+                <Skeleton className="h-10 w-1/2 rounded-2xl bg-[#BFEF9C]" /> {/* Message bubble */}
+                <Skeleton className="h-4 w-20 rounded mt-1" /> {/* Status */}
+              </div>
+
+              {/* Typing indicator skeleton */}
+              <div className="flex flex-col items-start">
+                <Skeleton className="h-8 w-24 rounded-2xl bg-[#FAFAFA] border border-[#E8E8E8]" /> {/* Typing indicator */}
+              </div>
+            </div>
           </div>
         </div>
-        <div className="sticky bottom-0 border-t bg-white px-4 py-4 sm:px-6">
-          <Skeleton className="h-10 w-full rounded" />
+
+        {/* Input skeleton - positioned to match the actual ResearchInput */}
+        <div className="fixed bottom-0 left-0 right-0 border-t bg-white py-4">
+          <div className="mx-auto max-w-[1440px] px-4">
+            <div className="mx-auto max-w-3xl w-full">
+              <Skeleton className="h-12 w-full rounded-lg" />
+              <Skeleton className="h-4 w-48 mt-2 rounded" /> {/* Processing message */}
+            </div>
+          </div>
         </div>
       </div>
     )
