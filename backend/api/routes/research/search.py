@@ -306,46 +306,49 @@ async def get_search(
     
     Retrieves the full details of a search, including all messages in the conversation.
     """
+    logger.info(f"Request to get search {search_id} by user {current_user.id}")
     try:
         # Add execution_options for pgBouncer compatibility
         search_result = await operations.get_search_by_id(
             search_id,
             execution_options={"no_parameters": True, "use_server_side_cursors": False}
         )
+        logger.debug(f"Search result from operations: {search_result}")
         
-        # Check if we got an error dictionary instead of SearchDTO
+        # Handle potential error dictionary from operations layer
         if isinstance(search_result, dict) and "error" in search_result:
-            logger.error(f"Database error in get_search: {search_result['error']}")
-            # If it's a "not found" error, return 404
-            if "not found" in search_result["error"].lower():
-                raise HTTPException(status_code=404, detail=search_result["error"])
-            # For database errors, return 503
-            if "database error" in search_result["error"].lower():
-                raise HTTPException(
-                    status_code=503, 
-                    detail="Database connection failed. Please try again later."
-                )
-            # For other errors, return 500
-            raise HTTPException(status_code=500, detail=search_result["error"])
-            
+            error_detail = search_result["error"]
+            logger.error(f"Database error returned from operations for search {search_id}: {error_detail}")
+            if "not found" in error_detail.lower():
+                raise HTTPException(status_code=404, detail=error_detail)
+            elif "database error" in error_detail.lower() or "connection failed" in error_detail.lower():
+                raise HTTPException(status_code=503, detail="Database connection failed. Please try again later.")
+            else:
+                raise HTTPException(status_code=500, detail=f"Internal error retrieving search: {error_detail}")
+
         if not search_result:
+            logger.warning(f"Search {search_id} not found after operations call.")
             raise HTTPException(status_code=404, detail="Search not found")
         
         # Verify ownership or permissions
         if str(search_result.user_id) != str(current_user.id) and "admin" not in user_permissions:
+            logger.warning(f"User {current_user.id} unauthorized for search {search_id} owned by {search_result.user_id}")
             raise HTTPException(status_code=403, detail="Not authorized to access this search")
         
         # Convert DTO to API response model
-        return search_dto_to_response(search_result)
+        response = search_dto_to_response(search_result)
+        logger.info(f"Returning search {search_id} successfully for user {current_user.id}")
+        return response
         
-    except HTTPException:
-        # Re-raise HTTP exceptions as is
+    except HTTPException as e:
+        # Log HTTP exceptions specifically if they weren't caught above
+        logger.error(f"HTTP exception during get_search for {search_id}: {e.status_code} - {e.detail}")
         raise
     except Exception as e:
-        logger.error(f"Unexpected error in get_search: {str(e)}", exc_info=True)
+        logger.error(f"Unexpected error during get_search for {search_id}: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail="An unexpected error occurred. Please try again later."
+            detail=f"An unexpected error occurred while retrieving the search. Please try again later."
         )
 
 @router.get("", response_model=SearchListResponse)
