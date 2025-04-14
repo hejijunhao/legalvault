@@ -18,7 +18,7 @@ export function CitationHovercard({ index, citation }: CitationHovercardProps) {
     <HoverCard openDelay={0} closeDelay={0}>
       <HoverCardTrigger asChild>
         <button
-          className="inline-flex h-[20px] min-w-[20px] select-none items-center justify-center rounded-[6px] bg-gray-100 px-1.5 text-xs font-medium text-gray-900 hover:bg-[#BFEF9C] transition-colors"
+          className="inline-flex h-[18px] min-w-[18px] select-none items-center justify-center rounded-sm bg-[#F0F7FF] px-[5px] text-[11px] font-medium text-[#0066CC] hover:bg-[#E0EFFF] transition-colors mx-[3px] border border-[#E0EFFF] relative top-[1px]"
         >
           {index}
         </button>
@@ -40,9 +40,9 @@ export function CitationHovercard({ index, citation }: CitationHovercardProps) {
           )}
 
           {/* Citation Text */}
-          <p className="text-sm text-gray-600 leading-relaxed">
+          <div className="text-sm text-gray-600 leading-relaxed">
             <span className="line-clamp-4">{citation.text}</span>
-          </p>
+          </div>
 
           {/* Source Link */}
           {citation.url && (

@@ -130,36 +130,56 @@ export function UserMessages({
                 {/* Message Text */}
                 <div className="prose prose-sm max-w-none">
                   <div className="text-[15px] leading-[1.65] m-0 break-words font-inter tracking-[-0.01em]
-                    /* Adjusted heading styles for elegance */
-                    [&>h1]:text-xl [&>h1]:font-semibold [&>h1]:mb-4 [&>h1]:mt-2 [&>h1]:font-inter [&>h1]:leading-[1.35]
-                    [&>h2]:text-lg [&>h2]:font-semibold [&>h2]:mb-3 [&>h2]:mt-2 [&>h2]:font-inter [&>h2]:leading-[1.4]
-                    [&>h3]:text-base [&>h3]:font-semibold [&>h3]:mb-2.5 [&>h3]:mt-1.5 [&>h3]:font-inter [&>h3]:leading-[1.45]
-                    /* Refined paragraph and list spacing */
-                    [&>p]:mb-3 [&>p]:leading-[1.65] [&>p]:font-inter
-                    [&>ul]:mb-3 [&>ul]:pl-4 [&>ul>li]:mb-1.5 [&>ul>li]:leading-[1.65] [&>ul>li]:font-inter
-                    [&>ol]:mb-3 [&>ol]:pl-4 [&>ol>li]:mb-1.5 [&>ol>li]:leading-[1.65] [&>ol>li]:font-inter
+                    /* Refined heading styles for elegance */
+                    [&>h1]:text-[22px] [&>h1]:font-semibold [&>h1]:mb-5 [&>h1]:mt-3 [&>h1]:font-inter [&>h1]:leading-[1.3] [&>h1]:tracking-[-0.02em] [&>h1]:text-gray-900
+                    [&>h2]:text-[18px] [&>h2]:font-semibold [&>h2]:mb-4 [&>h2]:mt-5 [&>h2]:font-inter [&>h2]:leading-[1.35] [&>h2]:tracking-[-0.015em] [&>h2]:text-gray-900
+                    [&>h3]:text-[16px] [&>h3]:font-semibold [&>h3]:mb-3 [&>h3]:mt-4 [&>h3]:font-inter [&>h3]:leading-[1.4] [&>h3]:tracking-[-0.01em] [&>h3]:text-gray-900
+                    /* Enhanced paragraph and text styling */
+                    [&>div]:mb-3.5 [&>div]:leading-[1.7] [&>div]:font-inter [&>div]:text-[15px] [&>div]:tracking-[-0.01em] [&>div]:text-gray-800
+                    /* Refined list styling */
+                    [&>ul]:mb-4 [&>ul]:pl-5 [&>ul>li]:mb-2 [&>ul>li]:leading-[1.7] [&>ul>li]:font-inter [&>ul>li]:text-gray-800
+                    [&>ol]:mb-4 [&>ol]:pl-5 [&>ol>li]:mb-2 [&>ol>li]:leading-[1.7] [&>ol>li]:font-inter [&>ol>li]:text-gray-800
+                    /* List markers styling */
+                    [&>ul>li]:marker:text-gray-400 [&>ol>li]:marker:text-gray-400 [&>ol>li]:marker:font-normal
+                    /* Emphasis styling */
+                    [&_strong]:font-semibold [&_strong]:text-gray-900
+                    [&_em]:italic [&_em]:text-gray-800
+                    /* Link styling */
+                    [&_a]:text-blue-600 [&_a]:no-underline [&_a]:border-b [&_a]:border-blue-200 [&_a:hover]:border-blue-600 [&_a:hover]:text-blue-700
+                    /* Code styling */
+                    [&_code]:font-mono [&_code]:text-[13px] [&_code]:bg-gray-50 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-gray-800 [&_code]:border [&_code]:border-gray-200
+                    [&_pre]:bg-gray-50 [&_pre]:p-3 [&_pre]:rounded-md [&_pre]:overflow-x-auto [&_pre]:border [&_pre]:border-gray-200
+                    [&_pre_code]:bg-transparent [&_pre_code]:border-0 [&_pre_code]:p-0
+                    /* Blockquote styling */
+                    [&_blockquote]:border-l-4 [&_blockquote]:border-gray-200 [&_blockquote]:pl-4 [&_blockquote]:italic [&_blockquote]:text-gray-700 [&_blockquote]:my-4
+                    /* Table styling */
+                    [&_table]:w-full [&_table]:border-collapse [&_table]:my-4
+                    [&_th]:border [&_th]:border-gray-200 [&_th]:bg-gray-50 [&_th]:p-2 [&_th]:text-left [&_th]:font-semibold [&_th]:text-gray-700
+                    [&_td]:border [&_td]:border-gray-200 [&_td]:p-2 [&_td]:text-gray-800
                     /* Ensure last element has no bottom margin */
                     [&>*:last-child]:mb-0 
                     /* Ensure first element has no top margin */
-                    [&>*:first-child]:mt-0">
+                    [&>*:first-child]:mt-0"
+                  >
                     <ReactMarkdown
                       rehypePlugins={[rehypeRaw]}
                       components={{
                         p: ({ node, children }) => (
-                          <p className="mb-3 leading-[1.65] font-inter last:mb-0">{children}</p>
+                          <div className="mb-3.5 leading-[1.7] font-inter last:mb-0">{children}</div>
                         ),
-                        sup: ({ node, ...props }) => {
-                          if ('data-citation' in props) {
+                        sup: ({ node, ...props }: { node?: any, [key: string]: any }) => {
+                          // Check for data-citation attribute using a type-safe approach
+                          if (props['data-citation'] !== undefined) {
                             const citationIndex = parseInt(props['data-citation'] as string, 10)
                             const citation = message.content?.citations?.[citationIndex]
                             if (!citation) return <sup>{props.children}</sup>
                             return (
-                              <sup>
+                              <sup className="inline-flex align-baseline relative">
                                 <CitationHovercard index={citationIndex + 1} citation={citation} />
                               </sup>
                             )
                           }
-                          return <sup {...props} />
+                          return <sup className="text-[11px] relative top-[-0.2em] font-medium" {...props} />
                         }
                       }}
                     >
@@ -174,35 +194,34 @@ export function UserMessages({
                 </div>
               </div>
 
-              {/* Status indicator for user messages */}
-              {message.role === "user" && message.status && (
-                <div className="flex justify-end -mt-10 mb-2">
-                  <div className={cn(
-                    "text-[13px] px-1.5 py-0.5 text-gray-500",
-                    message.status === QueryStatus.PENDING 
-                      ? "text-gray-500" 
-                      : message.status === QueryStatus.FAILED 
-                        ? "text-red-500" 
-                        : "text-gray-500"
-                  )}>
-                    {message.status === QueryStatus.PENDING && (
-                      <span className="flex items-center gap-1.5">
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                        {getStatusText(message.status)}
-                      </span>
-                    )}
-                    {message.status === QueryStatus.FAILED && (
-                      <span className="flex items-center gap-1.5">
-                        <AlertCircle className="h-3 w-3" />
-                        {getStatusText(message.status)}
-                      </span>
-                    )}
-                    {message.status !== QueryStatus.PENDING && message.status !== QueryStatus.FAILED && (
-                      <span>{getStatusText(message.status)}</span>
-                    )}
-                  </div>
+              {/* Message Status - Commented out as requested */}
+              {/* {message.role === "user" && message.status && (
+                <div className={cn(
+                  "mt-1 flex justify-end",
+                  "text-[13px] px-1.5 py-0.5 text-gray-500",
+                  message.status === QueryStatus.PENDING 
+                    ? "text-gray-500" 
+                    : message.status === QueryStatus.FAILED 
+                      ? "text-red-500" 
+                      : "text-gray-500"
+                )}>
+                  {message.status === QueryStatus.PENDING && (
+                    <span className="flex items-center gap-1.5">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      {getStatusText(message.status)}
+                    </span>
+                  )}
+                  {message.status === QueryStatus.FAILED && (
+                    <span className="flex items-center gap-1.5">
+                      <AlertCircle className="h-3 w-3" />
+                      {getStatusText(message.status)}
+                    </span>
+                  )}
+                  {message.status !== QueryStatus.PENDING && message.status !== QueryStatus.FAILED && (
+                    <span>{getStatusText(message.status)}</span>
+                  )}
                 </div>
-              )}
+              )} */}
 
               {/* Message Actions */}
               {message.role === "assistant" && (

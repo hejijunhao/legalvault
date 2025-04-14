@@ -6,7 +6,7 @@ import { useState, useRef, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import { ArrowUp, Loader2, Sparkles, Building2 } from "lucide-react"
+import { ArrowRight, Loader2, Gavel, BookText, Building2 } from "lucide-react"
 import { useResearch, QueryType } from "@/contexts/research/research-context"
 import { useAuth } from "@/contexts/auth-context"
 import { cn } from "@/lib/utils"
@@ -138,7 +138,7 @@ export function ResearchInput({
               placeholder="Type your legal question here..."
               className={cn(
                 "mb-3 w-full resize-none border-0 bg-transparent text-lg text-gray-900",
-                "placeholder:text-gray-500 focus:outline-none focus:ring-0",
+                "placeholder:text-gray-500 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0",
                 isAtLimit && "text-red-500",
                 (isLoading || disabled) && "text-gray-500"
               )}
@@ -148,34 +148,47 @@ export function ResearchInput({
               aria-invalid={isAtLimit}
               maxLength={MAX_LENGTH}
             />
-            <span className="absolute bottom-1 right-1 text-xs text-gray-400">
-              {input.length}/{MAX_LENGTH}
-            </span>
+            {/* Character count removed */}
           </div>
 
           <div className="flex items-center justify-between gap-2 pt-2">
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => toggleQueryType(QueryType.GENERAL)}
+                onClick={() => toggleQueryType(QueryType.COURT_CASE)}
                 className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-sm transition-colors ${
-                  selectedType === QueryType.GENERAL
-                    ? "bg-[#E0F2FE] text-[#0C547A]"
+                  selectedType === QueryType.COURT_CASE
+                    ? "bg-[#9FE870] text-[#1A2E0D]"
                     : "bg-gray-50 text-gray-600 hover:bg-gray-100"
                 }`}
-                aria-pressed={selectedType === QueryType.GENERAL}
-                title="Search general legal information"
+                aria-pressed={selectedType === QueryType.COURT_CASE}
+                title="Search court cases and legal precedents"
                 disabled={isLoading || disabled}
               >
-                <Sparkles className="h-4 w-4" />
-                <span>General</span>
+                <Gavel className="h-4 w-4" />
+                <span>Courts</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => toggleQueryType(QueryType.LEGISLATIVE)}
+                className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-sm transition-colors ${
+                  selectedType === QueryType.LEGISLATIVE
+                    ? "bg-[#9FE870] text-[#1A2E0D]"
+                    : "bg-gray-50 text-gray-600 hover:bg-gray-100"
+                }`}
+                aria-pressed={selectedType === QueryType.LEGISLATIVE}
+                title="Search legislation, statutes and regulations"
+                disabled={isLoading || disabled}
+              >
+                <BookText className="h-4 w-4" />
+                <span>Legislative</span>
               </button>
               <button
                 type="button"
                 onClick={() => toggleQueryType(QueryType.COMMERCIAL)}
                 className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-sm transition-colors ${
                   selectedType === QueryType.COMMERCIAL
-                    ? "bg-[#DCFCE7] text-[#166534]"
+                    ? "bg-[#9FE870] text-[#1A2E0D]"
                     : "bg-gray-50 text-gray-600 hover:bg-gray-100"
                 }`}
                 aria-pressed={selectedType === QueryType.COMMERCIAL}
@@ -201,7 +214,7 @@ export function ResearchInput({
               {isLoading ? (
                 <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
               ) : (
-                <ArrowUp className="h-5 w-5" aria-hidden="true" />
+                <ArrowRight className="h-5 w-5" aria-hidden="true" />
               )}
             </Button>
           </div>
