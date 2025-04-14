@@ -26,7 +26,6 @@ export function ResearchSearch({
 
   const handleTextareaChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
     onQueryChange(e.target.value)
-
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto"
       textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`
@@ -34,8 +33,7 @@ export function ResearchSearch({
   }
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    // Submit on Enter key (without Shift)
-    if (e.key === "Enter" && !e.shiftKey && query.trim() && query.trim().length >= 5) {
+    if (e.key === "Enter" && !e.shiftKey && query.trim() && query.trim().length >= 3) {
       e.preventDefault()
       onSubmit?.(selectedType)
     }
@@ -46,12 +44,12 @@ export function ResearchSearch({
   }
 
   const handleSubmit = () => {
-    if (query.trim() && query.trim().length >= 5 && !isLoading && onSubmit) {
+    if (query.trim() && query.trim().length >= 3 && !isLoading && onSubmit) {
       onSubmit(selectedType)
     }
   }
 
-  const isValidQuery = query.trim() && query.trim().length >= 5
+  const isValidQuery = query.trim() && query.trim().length >= 3
 
   return (
     <motion.div
@@ -79,7 +77,6 @@ export function ResearchSearch({
 
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            {/* Courts Toggle */}
             <button
               onClick={() => toggleQueryType(QueryType.COURT_CASE)}
               className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-sm transition-colors ${
@@ -93,8 +90,6 @@ export function ResearchSearch({
               <Gavel className="h-4 w-4" />
               <span>Courts</span>
             </button>
-
-            {/* Legislative Toggle */}
             <button
               onClick={() => toggleQueryType(QueryType.LEGISLATIVE)}
               className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-sm transition-colors ${
@@ -108,8 +103,6 @@ export function ResearchSearch({
               <BookText className="h-4 w-4" />
               <span>Legislative</span>
             </button>
-
-            {/* Commercial Toggle */}
             <button
               onClick={() => toggleQueryType(QueryType.COMMERCIAL)}
               className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-sm transition-colors ${
@@ -124,7 +117,6 @@ export function ResearchSearch({
               <span>Commercial</span>
             </button>
           </div>
-
           <div className="flex items-center">
             <button
               onClick={handleSubmit}
@@ -148,3 +140,5 @@ export function ResearchSearch({
     </motion.div>
   )
 }
+
+

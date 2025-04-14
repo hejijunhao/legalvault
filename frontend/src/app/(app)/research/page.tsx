@@ -41,7 +41,7 @@ export default function ResearchPage() {
         max_tokens: 2048, // Reasonable length limit
         top_p: 0.95, // High value for more focused responses
         top_k: 50, // Standard value for diverse but relevant results
-        query_type: queryType || QueryType.GENERAL // Pass queryType if provided
+        type: queryType || QueryType.GENERAL // Pass queryType if provided
       })
       router.push(`/research/${sessionId}?initialQuery=${encodeURIComponent(trimmedQuery)}&queryType=${queryType || QueryType.GENERAL}`)
     } catch (err) {

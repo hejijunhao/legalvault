@@ -65,6 +65,7 @@ export interface SearchParams {
   top_p?: number;
   top_k?: number;
   jurisdiction?: string;
+  type?: QueryType;
 }
 
 export interface ResearchSession {
