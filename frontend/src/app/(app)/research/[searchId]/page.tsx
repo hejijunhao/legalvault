@@ -143,6 +143,10 @@ export default function ResearchPage() {
       if (!success) {
         console.log("ResearchPage: Session load effect - Redirecting to /research due to failure");
         router.push("/research")
+      } else {
+        // ***** Added logging to check if messages should be fetched *****
+        console.log("ResearchPage: Session load effect - Session loaded successfully, checking for messages");
+        console.log("ResearchPage: Session load effect - Current messages length =", messages.length);
       }
     })
   }, [searchId, loadSession, isMounted, router])
@@ -157,6 +161,12 @@ export default function ResearchPage() {
       console.log("ResearchPage: Current session effect - Set isResponsePending to false");
       setIsSessionLoading(false)
       console.log("ResearchPage: Current session effect - Set isSessionLoading to false");
+    } else {
+      // ***** Added logging to diagnose why messages aren't updated *****
+      console.log("ResearchPage: Current session effect - No messages to update or session mismatch");
+      console.log("ResearchPage: Current session effect - currentSession =", currentSession ? JSON.stringify(currentSession, null, 2) : null);
+      console.log("ResearchPage: Current session effect - Attempting to fetch messages for searchId =", searchId);
+      console.log("ResearchPage: Current session effect - Should call fetchMessagesForSearch for searchId =", searchId);
     }
   }, [currentSession, searchId])
 
