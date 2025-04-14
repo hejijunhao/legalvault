@@ -75,7 +75,7 @@ export function ResearchInput({
     if (isInitialQuery) {
       setIsCreating(true)
       try {
-        const newSession = await createSession(content, { query_type: selectedType })
+        const newSession = await createSession(content, { type: selectedType })
         if (newSession) {
           setInput("")
           setSelectedType(QueryType.GENERAL)
