@@ -1,3 +1,5 @@
+# core/database.py
+
 # Core database configuration for LegalVault that handles database connection setup.
 # Configures async (asyncpg) database engine with pgBouncer compatibility,
 # manages SSL and connection pooling settings, and provides database initialization functions.
@@ -71,12 +73,14 @@ async_engine = create_async_engine(
 logger.info("Database engine configured with session pooling settings:")
 logger.info(f"  - Connection pooling: Using SQLAlchemy NullPool with Supabase pgBouncer")
 logger.info(f"  - Prepared statements enabled (session mode)")
+logger.info(f"  - Engine created with URL: {async_url_obj._replace(password='[REDACTED]')}")
 
 async_session_factory = sessionmaker(
     bind=async_engine,
     class_=AsyncSession,
     expire_on_commit=False
 )
+logger.info("Async session factory initialized")
 
 async def handle_pgbouncer_error(session: AsyncSession, error: Exception) -> Optional[AsyncSession]:
     error_message = str(error).lower()
@@ -84,8 +88,11 @@ async def handle_pgbouncer_error(session: AsyncSession, error: Exception) -> Opt
         logger.warning(f"pgBouncer error detected: {error_message[:100]}...")
         try:
             await session.close()
+            logger.info("Closed session due to pgBouncer error")
             fresh_session = async_session_factory()
+            logger.info("Created fresh session for pgBouncer error recovery")
             await fresh_session.execute(text("SELECT 1"))
+            logger.info("Fresh session test query succeeded")
             return fresh_session
         except Exception as inner_e:
             logger.error(f"Failed to create replacement session: {str(inner_e)}")
@@ -105,13 +112,16 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
         logger.info("Test query succeeded")
         
         yield session
+        logger.info("Session yielded successfully")
     except Exception as e:
         logger.info(f"Exception caught in get_db: {type(e).__name__}: {str(e)}")
         if session:
             await session.rollback()
+            logger.info("Rolled back session due to error")
         
         fresh_session = await handle_pgbouncer_error(session, e)
         if fresh_session:
+            logger.info("Yielding fresh session after pgBouncer error recovery")
             yield fresh_session
             return
         
@@ -128,12 +138,19 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 @asynccontextmanager
 async def get_session_db():
+    logger.info("Entering get_session_db")
     session = async_session_factory()
+    logger.info("Session created in get_session_db")
     try:
+        logger.info("Executing test query in get_session_db: SELECT 1")
         await session.execute(text("SELECT 1"))
+        logger.info("Test query succeeded in get_session_db")
         yield session
+        logger.info("Committing session in get_session_db")
         await session.commit()
+        logger.info("Session committed in get_session_db")
     except Exception as e:
+        logger.info("Rolling back session in get_session_db due to error")
         await session.rollback()
         error_message = str(e).lower()
         if "json" in error_message and "serializable" in error_message:
@@ -143,16 +160,24 @@ async def get_session_db():
             logger.error(f"Database error in WebSocket session: {e}")
             raise
     finally:
+        logger.info("Closing session in get_session_db")
         await session.close()
+        logger.info("Session closed in get_session_db")
 
 async def init_db() -> bool:
     try:
         logger.info("Attempting to initialize database...")
         async with async_engine.connect() as conn:
+            logger.info("Executing test query in init_db: SELECT 1")
             await conn.execute(text("SELECT 1"))
+            logger.info("Test query succeeded in init_db")
+            logger.info("Creating schema public if not exists")
             await conn.execute(text("CREATE SCHEMA IF NOT EXISTS public"))
+            logger.info("Creating schema vault if not exists")
             await conn.execute(text("CREATE SCHEMA IF NOT EXISTS vault"))
+            logger.info("Creating all SQLModel metadata")
             await conn.run_sync(SQLModel.metadata.create_all)
+            logger.info("SQLModel metadata creation completed")
         logger.info("Database initialized successfully!")
         return True
     except Exception as e:
@@ -163,4 +188,5 @@ async def init_db() -> bool:
         return False
 
 def get_pgbouncer_execution_options():
+    logger.info("Returning pgBouncer execution options")
     return {}

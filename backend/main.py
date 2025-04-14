@@ -12,6 +12,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+logger.info("Starting LegalVault API server")
 logger.info("Importing models to initialize SQLAlchemy metadata")
 import models  # noqa: E402
 logger.info("SQLAlchemy metadata initialized with all models")
@@ -57,9 +58,11 @@ app.add_middleware(
     expose_headers=["Content-Length", "Content-Range"],
     max_age=600,
 )
+logger.info("CORS middleware configured")
 
 app.include_router(api_router, prefix="/api")
 app.include_router(webhook_router, prefix="/api/webhooks")
+logger.info("API routers included")
 
 @app.on_event("startup")
 async def startup_event():
@@ -91,4 +94,7 @@ async def general_exception_handler(request: Request, exc: Exception):
 
 @app.get("/api/health")
 async def health_check():
-    return {"status": "ok", "version": settings.VERSION}
+    logger.info("Received health check request")
+    response = {"status": "ok", "version": settings.VERSION}
+    logger.info("Returning health check response")
+    return response

@@ -49,6 +49,7 @@ async def get_current_user(
         logger.info(f"Received token: {actual_token[:10]}...")
         
         # Decode token
+        logger.info("Decoding token")
         user_ops = UserOperations(session)
         token_data = await user_ops.decode_token(actual_token)
         
@@ -59,6 +60,7 @@ async def get_current_user(
                 detail="Authentication failed: Invalid or expired token",
                 headers={"WWW-Authenticate": "Bearer"},
             )
+        logger.info(f"Token decoded successfully: user_id={token_data.user_id}")
         
         # Get user from database using direct SQL to avoid prepared statements
         user_id_str = str(token_data.user_id)
@@ -74,6 +76,7 @@ async def get_current_user(
         )
         
         logger.info(f"Looking up user with auth_user_id: {token_data.user_id}")
+        logger.debug(f"Executing query: {query}")
         
         result = await session.execute(query)
         user_row = result.fetchone()
@@ -85,7 +88,6 @@ async def get_current_user(
                 detail="Authentication failed: User not found",
                 headers={"WWW-Authenticate": "Bearer"},
             )
-        
         logger.info(f"Found user: {user_row.email} (ID: {user_row.id})")
         
         # Create a User object from the row data
@@ -103,6 +105,7 @@ async def get_current_user(
             updated_at=user_row.updated_at
         )
         
+        logger.info(f"Returning authenticated user: {user.email}")
         return user
     except jwt.ExpiredSignatureError:
         logger.info("Authentication failed: Token expired")
@@ -119,14 +122,17 @@ async def get_current_user(
             logger.info(f"pgBouncer error encountered: {e}. Attempting with a fresh session...")
             try:
                 # Create a fresh session
+                logger.info("Creating fresh session for auth retry")
                 fresh_session = async_session_factory()
                 
                 # Run a test query first
+                logger.debug("Executing test query in fresh session: SELECT 1")
                 test_query = text("SELECT 1").execution_options(
                     no_parameters=True, 
                     use_server_side_cursors=False
                 )
                 await fresh_session.execute(test_query)
+                logger.info("Test query succeeded in fresh session")
                 
                 # Use a direct SQL query with string formatting to avoid prepared statements
                 fresh_query = text(f"""
@@ -138,6 +144,7 @@ async def get_current_user(
                     use_server_side_cursors=False
                 )
                 
+                logger.debug(f"Executing retry query: {fresh_query}")
                 result = await fresh_session.execute(fresh_query)
                 user_row = result.fetchone()
                 
@@ -166,13 +173,16 @@ async def get_current_user(
                 )
                 
                 # Close fresh session
+                logger.info("Closing fresh session after successful retry")
                 await fresh_session.close()
                 
+                logger.info(f"Returning authenticated user after retry: {user.email}")
                 return user
             except Exception as retry_error:
                 logger.error(f"Retry also failed: {retry_error}")
                 
                 if 'fresh_session' in locals() and fresh_session:
+                    logger.info("Closing fresh session after retry failure")
                     await fresh_session.close()
                 
                 raise HTTPException(
@@ -192,31 +202,41 @@ async def get_user_permissions(
     """
     Get permissions for the current user based on their role.
     """
+    logger.info(f"Retrieving permissions for user {user.id} with role {user.role}")
     role_permissions = {
         "lawyer": ["read:all", "write:own"],
         "admin": ["read:all", "write:all", "admin:all"],
         "paralegal": ["read:all", "write:limited"],
     }
-    return role_permissions.get(user.role, [])
+    permissions = role_permissions.get(user.role, [])
+    logger.info(f"Permissions for user {user.id}: {permissions}")
+    return permissions
 
 async def require_admin(user: User = Depends(get_current_user)):
     """
     Require the user to have admin role.
     """
+    logger.info(f"Checking admin role for user {user.id}")
     if user.role != "admin":
+        logger.error(f"User {user.id} does not have admin role")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Insufficient permissions"
         )
+    logger.info(f"User {user.id} confirmed as admin")
     return user
 
 async def require_super_admin(user: User = Depends(get_current_user)):
     """
     Require the user to have super_admin role.
     """
+    logger.info(f"Checking super_admin role for user {user.id}")
     if user.role != "super_admin":
+        logger.error(f"User {user.id} does not have super_admin role")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Insufficient permissions"
         )
+    logger.info(f"User {user.id} confirmed as super_admin")
     return user
+
