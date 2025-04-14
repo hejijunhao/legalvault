@@ -76,10 +76,11 @@ export function UserMessages({
   }
 
   const processCitations = (text: string, citations: any[]) => {
+    let citationIndex = 0
     return text.replace(/\[(\d+)\]/g, (match, number) => {
       const index = parseInt(number, 10) - 1
       if (index >= 0 && index < citations.length) {
-        return `<span data-citation="${index}"></span>`
+        return `<sup class="citation" data-citation="${citationIndex++}"></sup>`
       }
       return match
     })
@@ -144,42 +145,21 @@ export function UserMessages({
                     <ReactMarkdown
                       rehypePlugins={[rehypeRaw]}
                       components={{
-                        p: ({ node, children, ...props }) => {
-                          let isOnlyCitationSpan = false;
-                          if (node && node.children) {
-                            const significantChildren = node.children.filter((child: any) => {
-                              if (child.type === 'text' && child.value.trim() === '') {
-                                return false;
-                              }
-                              return true;
-                            });
-                            if (significantChildren.length === 1) {
-                              const child = significantChildren[0];
-                              if (
-                                child.type === 'element' &&
-                                child.tagName === 'span' &&
-                                child.properties?.['data-citation'] !== undefined
-                              ) {
-                                isOnlyCitationSpan = true;
-                              }
-                            }
-                          }
-                          if (isOnlyCitationSpan) {
-                            return <div className="mb-3 leading-[1.65] font-inter last:mb-0" {...props}>{children}</div>;
-                          }
-                          return <p className="mb-3 leading-[1.65] font-inter last:mb-0" {...props}>{children}</p>;
-                        },
-                        div: ({ children, ...props }) => (
-                          <div className="mb-3 leading-[1.65] font-inter last:mb-0" {...props}>{children}</div>
+                        p: ({ node, children }) => (
+                          <p className="mb-3 leading-[1.65] font-inter last:mb-0">{children}</p>
                         ),
-                        span: ({ node, ...props }) => {
+                        sup: ({ node, ...props }) => {
                           if ('data-citation' in props) {
-                            const index = parseInt(props['data-citation'] as string, 10)
-                            const citation = message.content?.citations?.[index]
-                            if (!citation) return <span>[{index + 1}]</span>
-                            return <CitationHovercard index={index + 1} citation={citation} />
+                            const citationIndex = parseInt(props['data-citation'] as string, 10)
+                            const citation = message.content?.citations?.[citationIndex]
+                            if (!citation) return <sup>{props.children}</sup>
+                            return (
+                              <sup>
+                                <CitationHovercard index={citationIndex + 1} citation={citation} />
+                              </sup>
+                            )
                           }
-                          return <span {...props} />
+                          return <sup {...props} />
                         }
                       }}
                     >

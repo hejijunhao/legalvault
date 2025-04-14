@@ -9,6 +9,7 @@ import {
   SearchListResponse, 
   MessageListResponse 
 } from './research-api-types';
+import { getAuthHeader, fetchWithSelfSignedCert, withRetry, handleApiError } from './research-api-core';
 
 /**
  * Cache for research sessions and messages
@@ -18,6 +19,7 @@ export class ResearchCache {
   sessionListCache: Map<string, CacheEntry<SearchListResponse>> = new Map();
   messageCache: Map<string, CacheEntry<Message>> = new Map();
   messageListCache: Map<string, CacheEntry<MessageListResponse>> = new Map();
+  private pendingFetches: Map<string, Promise<any>> = new Map(); // For deduplication
   
   config: CacheConfig = {
     ttl: 5 * 60 * 1000, // 5 minutes
@@ -34,7 +36,6 @@ export class ResearchCache {
    * Load cache from localStorage (client-side only)
    */
   loadFromStorage(): void {
-    // Skip during SSR (server-side rendering)
     if (typeof window === 'undefined') {
       this.sessionCache = new Map();
       this.messageCache = new Map();
@@ -47,25 +48,19 @@ export class ResearchCache {
       
       const parsed = JSON.parse(storedData) as CacheStorage;
       
-      // Load sessions
       if (parsed.sessions) {
         Object.values(parsed.sessions).forEach(entry => {
           this.sessionCache.set(entry.key, entry);
         });
       }
       
-      // Load messages
       if (parsed.messages) {
         Object.values(parsed.messages).forEach(entry => {
           this.messageCache.set(entry.key, entry);
         });
       }
-      
-      // We don't restore session lists or message lists from storage
-      // as they're more likely to be outdated
     } catch (error) {
       console.error('Error loading cache from storage:', error);
-      // Clear potentially corrupted cache
       localStorage.removeItem(this.config.storageKey);
     }
   }
@@ -74,20 +69,17 @@ export class ResearchCache {
    * Save cache to localStorage (client-side only)
    */
   saveToStorage(): void {
-    // Skip during SSR (server-side rendering)
     if (typeof window === 'undefined') {
       return;
     }
 
     try {
-      // Convert Maps to objects for storage
       const sessionsObj: Record<string, CacheEntry<ResearchSession>> = {};
       const messagesObj: Record<string, CacheEntry<Message>> = {};
       
       this.sessionCache.forEach((entry, key) => {
         const storageEntry = { ...entry };
         
-        // Sanitize sensitive data if configured
         if (this.config.sanitizeBeforeStorage && entry.data) {
           storageEntry.data = this.sanitizeForStorage(entry.data);
         }
@@ -98,15 +90,12 @@ export class ResearchCache {
       this.messageCache.forEach((entry, key) => {
         const storageEntry = { ...entry };
         
-        // Sanitize sensitive data if configured
         if (this.config.sanitizeBeforeStorage && entry.data) {
           storageEntry.data = this.sanitizeForStorage(entry.data);
         }
         
         messagesObj[key] = storageEntry;
       });
-      
-      // We don't store session lists or message lists as they're more likely to be outdated
       
       const storage: CacheStorage = {
         sessions: sessionsObj,
@@ -153,14 +142,60 @@ export class ResearchCache {
   }
   
   /**
-   * Get a session from cache
+   * Check session cache without fetching
    */
-  getSession(sessionId: string): ResearchSession | null {
+  checkSessionCache(sessionId: string): ResearchSession | null {
     const entry = this.sessionCache.get(sessionId);
     if (this.isValid(entry) && entry) {
+      console.log(`Cache hit for session ${sessionId}`);
       return entry.data;
     }
     return null;
+  }
+  
+  /**
+   * Get a session from cache or fetch it
+   */
+  async getSession(sessionId: string): Promise<ResearchSession | null> {
+    const entry = this.sessionCache.get(sessionId);
+    if (this.isValid(entry) && entry) {
+      console.log(`Cache hit for session ${sessionId}`);
+      return entry.data;
+    }
+
+    const key = `session_${sessionId}`;
+    if (this.pendingFetches.has(key)) {
+      console.log(`Waiting for pending fetch for session ${sessionId}`);
+      return this.pendingFetches.get(key);
+    }
+
+    const promise = (async () => {
+      try {
+        const headers = await getAuthHeader();
+        const url = `/api/research/searches/${sessionId}`;
+        console.log('fetchSession URL:', url);
+
+        const response = await withRetry(() => fetchWithSelfSignedCert(url, { headers }));
+        
+        if (!response.ok) {
+          throw await handleApiError(response);
+        }
+        const data = await response.json();
+        
+        if (data) {
+          this.setSession(data);
+        }
+        return data;
+      } catch (err) {
+        throw err;
+      } finally {
+        this.pendingFetches.delete(key);
+      }
+    })();
+
+    this.pendingFetches.set(key, promise);
+    console.log(`Initiating fetch for session ${sessionId}`);
+    return promise;
   }
   
   /**
@@ -190,6 +225,7 @@ export class ResearchCache {
     const key = this.getSessionListCacheKey(options);
     const entry = this.sessionListCache.get(key);
     if (this.isValid(entry) && entry) {
+      console.log(`Cache hit for session list ${key}`);
       return entry.data;
     }
     return null;
@@ -219,6 +255,7 @@ export class ResearchCache {
   getMessage(messageId: string): Message | null {
     const entry = this.messageCache.get(messageId);
     if (this.isValid(entry) && entry) {
+      console.log(`Cache hit for message ${messageId}`);
       return entry.data;
     }
     return null;
@@ -248,18 +285,73 @@ export class ResearchCache {
   }
   
   /**
-   * Get a message list from cache
+   * Check message list cache without fetching
    */
-  getMessageList(searchId: string, options?: {
+  checkMessageListCache(searchId: string, options?: {
     limit?: number;
     offset?: number;
   } | null): MessageListResponse | null {
     const key = this.getMessageListCacheKey(searchId, options);
     const entry = this.messageListCache.get(key);
     if (this.isValid(entry) && entry) {
+      console.log(`Cache hit for message list ${key}`);
       return entry.data;
     }
     return null;
+  }
+  
+  /**
+   * Get a message list from cache or fetch it
+   */
+  async getMessageList(searchId: string, options?: {
+    limit?: number;
+    offset?: number;
+  } | null): Promise<MessageListResponse | null> {
+    const key = this.getMessageListCacheKey(searchId, options);
+    const entry = this.messageListCache.get(key);
+    if (this.isValid(entry) && entry) {
+      console.log(`Cache hit for message list ${key}`);
+      return entry.data;
+    }
+
+    const fetchKey = `messages_${key}`;
+    if (this.pendingFetches.has(fetchKey)) {
+      console.log(`Waiting for pending fetch for message list ${key}`);
+      return this.pendingFetches.get(fetchKey);
+    }
+
+    const promise = (async () => {
+      try {
+        const headers = await getAuthHeader();
+        const params = new URLSearchParams();
+        if (options?.limit) params.append('limit', options.limit.toString());
+        if (options?.offset) params.append('offset', options.offset.toString());
+        
+        const queryString = params.toString() ? `?${params.toString()}` : '';
+        const url = `/api/research/messages/search/${searchId}${queryString}`;
+        console.log('fetchMessagesForSearch URL:', url);
+        
+        const response = await withRetry(() => fetchWithSelfSignedCert(url, { headers }));
+        
+        if (!response.ok) {
+          throw await handleApiError(response);
+        }
+        const data = await response.json();
+        
+        if (data) {
+          this.setMessageList(searchId, data, options);
+        }
+        return data;
+      } catch (err) {
+        throw err;
+      } finally {
+        this.pendingFetches.delete(fetchKey);
+      }
+    })();
+
+    this.pendingFetches.set(fetchKey, promise);
+    console.log(`Initiating fetch for message list ${key}`);
+    return promise;
   }
   
   /**
@@ -306,10 +398,8 @@ export class ResearchCache {
    * Invalidate cache for a specific search
    */
   invalidateSearch(searchId: string): void {
-    // Remove the session from cache
     this.sessionCache.delete(searchId);
     
-    // Remove message lists for this search
     const messageListKeys = Array.from(this.messageListCache.keys())
       .filter(key => key.startsWith(`search_${searchId}`));
     
@@ -356,6 +446,7 @@ export class ResearchCache {
     this.sessionListCache.clear();
     this.messageCache.clear();
     this.messageListCache.clear();
+    this.pendingFetches.clear();
     if (typeof window !== 'undefined') {
       localStorage.removeItem(this.config.storageKey);
     }
@@ -377,7 +468,6 @@ export class ResearchCache {
     const age = Date.now() - entry.timestamp;
     const timeUntilExpiration = this.config.ttl - age;
     
-    // If the entry is close to expiration, refresh it
     if (timeUntilExpiration < refreshThreshold) {
       console.log(`Cache entry for ${key} is close to expiration, refreshing...`);
       return refreshFn();

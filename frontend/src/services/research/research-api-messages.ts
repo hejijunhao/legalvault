@@ -76,7 +76,7 @@ export async function fetchMessagesForSearch(
     offset?: number;
   } | null
 ): Promise<MessageListResponse> {
-  const cachedMessages = researchCache.getMessageList(searchId, options);
+  const cachedMessages = researchCache.checkMessageListCache(searchId, options);
   if (cachedMessages) {
     return cachedMessages;
   }
@@ -159,6 +159,3 @@ export async function deleteMessage(messageId: string, searchId?: string): Promi
     researchCache.invalidateMessageList(searchId);
   }
 }
-
-// TODO: Implement backend endpoint POST /research/messages/{message_id}/forward
-// export async function forwardMessage(...) { ... }

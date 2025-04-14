@@ -56,7 +56,7 @@ export async function fetchSessions(
  * Fetch a single research session by ID
  */
 export async function fetchSession(sessionId: string): Promise<ResearchSession> {
-  const cachedSession = researchCache.getSession(sessionId);
+  const cachedSession = researchCache.checkSessionCache(sessionId);
   if (cachedSession) {
     return cachedSession;
   }

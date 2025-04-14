@@ -40,9 +40,9 @@ export function CitationHovercard({ index, citation }: CitationHovercardProps) {
           )}
 
           {/* Citation Text */}
-          <div className="text-sm text-gray-600 leading-relaxed">
-            <p className="line-clamp-4">{citation.text}</p>
-          </div>
+          <p className="text-sm text-gray-600 leading-relaxed">
+            <span className="line-clamp-4">{citation.text}</span>
+          </p>
 
           {/* Source Link */}
           {citation.url && (

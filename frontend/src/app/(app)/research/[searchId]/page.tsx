@@ -1,5 +1,4 @@
 // src/app/(app)/research/[searchId]/page.tsx
-
 "use client"
 
 import { useEffect, useState, useRef, useCallback } from "react"
@@ -34,8 +33,8 @@ export default function ResearchPage() {
     setError 
   } = useResearch()
   console.log("ResearchPage: useResearch hook initialized, isLoading =", isLoading, "error =", error);
-  const [isMounted, setIsMounted] = useState(true)
-  console.log("ResearchPage: isMounted initialized to", isMounted);
+  const isMountedRef = useRef(true) // Changed from useState
+  console.log("ResearchPage: isMountedRef initialized to", isMountedRef.current);
   const [activeTab, setActiveTab] = useState<"answer" | "sources">("answer")
   console.log("ResearchPage: activeTab initialized to", activeTab);
   const headerRef = useRef<HTMLDivElement>(null)
@@ -57,10 +56,11 @@ export default function ResearchPage() {
   useEffect(() => {
     console.log("ResearchPage: Mounting effect - clearing error");
     clearError()
+    isMountedRef.current = true // Set ref on mount
     return () => {
-      console.log("ResearchPage: Unmounting - clearing error and setting isMounted to false");
+      console.log("ResearchPage: Unmounting - clearing error and setting isMountedRef to false");
       clearError()
-      setIsMounted(false)
+      isMountedRef.current = false // Set ref on unmount
     }
   }, [clearError])
 
@@ -80,8 +80,8 @@ export default function ResearchPage() {
   }, [])
 
   const loadSession = useCallback(async () => {
-    console.log("ResearchPage: loadSession - called with searchId =", searchId, "isMounted =", isMounted);
-    if (!searchId?.trim() || !isMounted) {
+    console.log("ResearchPage: loadSession - called with searchId =", searchId, "isMounted =", isMountedRef.current);
+    if (!searchId?.trim() || !isMountedRef.current) {
       console.log("ResearchPage: loadSession - aborting: invalid searchId or not mounted");
       return false
     }
@@ -102,10 +102,12 @@ export default function ResearchPage() {
           continue;
         }
         console.log(`ResearchPage: loadSession - Session loaded: ${session.id}, Messages: ${session.messages?.length || 0}`);
-        setMessages(session.messages || []);
-        console.log("ResearchPage: loadSession - Updated messages state with", session.messages?.length || 0, "messages");
-        setIsResponsePending(false);
-        console.log("ResearchPage: loadSession - Set isResponsePending to false");
+        if (isMountedRef.current) { // Guard state updates
+          setMessages(session.messages || []);
+          console.log("ResearchPage: loadSession - Updated messages state with", session.messages?.length || 0, "messages");
+          setIsResponsePending(false);
+          console.log("ResearchPage: loadSession - Set isResponsePending to false");
+        }
         return true;
       } catch (err: any) {
         console.error(`ResearchPage: loadSession - Attempt ${attempts + 1} failed:`, {
@@ -122,14 +124,16 @@ export default function ResearchPage() {
       }
     }
     console.error("ResearchPage: loadSession - All attempts failed to load session");
-    setError({ message: "Failed to load session. Please try again or return to the research page." });
-    console.log("ResearchPage: loadSession - Set error state due to failure");
+    if (isMountedRef.current) { // Guard state update
+      setError({ message: "Failed to load session. Please try again or return to the research page." });
+      console.log("ResearchPage: loadSession - Set error state due to failure");
+    }
     return false;
-  }, [searchId, getSession, isMounted, setError]);
+  }, [searchId, getSession, setError]);
 
   useEffect(() => {
-    console.log("ResearchPage: Session load effect - triggered with searchId =", searchId, "isMounted =", isMounted);
-    if (!searchId?.trim() || !isMounted) {
+    console.log("ResearchPage: Session load effect - triggered with searchId =", searchId, "isMounted =", isMountedRef.current);
+    if (!searchId?.trim() || !isMountedRef.current) {
       console.log("ResearchPage: Session load effect - aborting: invalid searchId or not mounted");
       return
     }
@@ -138,22 +142,23 @@ export default function ResearchPage() {
     console.log("ResearchPage: Session load effect - Set isSessionLoading to true");
     loadSession().then(success => {
       console.log("ResearchPage: Session load effect - loadSession completed, success =", success);
-      setIsSessionLoading(false)
-      console.log("ResearchPage: Session load effect - Set isSessionLoading to false");
-      if (!success) {
+      if (isMountedRef.current) { // Guard state update
+        setIsSessionLoading(false)
+        console.log("ResearchPage: Session load effect - Set isSessionLoading to false");
+      }
+      if (!success && isMountedRef.current) {
         console.log("ResearchPage: Session load effect - Redirecting to /research due to failure");
         router.push("/research")
       } else {
-        // ***** Added logging to check if messages should be fetched *****
         console.log("ResearchPage: Session load effect - Session loaded successfully, checking for messages");
         console.log("ResearchPage: Session load effect - Current messages length =", messages.length);
       }
     })
-  }, [searchId, loadSession, isMounted, router])
+  }, [searchId, loadSession, router])
 
   useEffect(() => {
     console.log("ResearchPage: Current session effect - checking currentSession.id =", currentSession?.id, "searchId =", searchId);
-    if (currentSession?.id === searchId && currentSession.messages && currentSession.messages.length > 0) {
+    if (currentSession?.id === searchId && currentSession.messages && currentSession.messages.length > 0 && isMountedRef.current) {
       console.log(`ResearchPage: Current session effect - Current session updated with ${currentSession.messages.length} messages`);
       setMessages(currentSession.messages)
       console.log("ResearchPage: Current session effect - Updated messages state with", currentSession.messages.length, "messages");
@@ -162,7 +167,6 @@ export default function ResearchPage() {
       setIsSessionLoading(false)
       console.log("ResearchPage: Current session effect - Set isSessionLoading to false");
     } else {
-      // ***** Added logging to diagnose why messages aren't updated *****
       console.log("ResearchPage: Current session effect - No messages to update or session mismatch");
       console.log("ResearchPage: Current session effect - currentSession =", currentSession ? JSON.stringify(currentSession, null, 2) : null);
       console.log("ResearchPage: Current session effect - Attempting to fetch messages for searchId =", searchId);
@@ -172,26 +176,27 @@ export default function ResearchPage() {
 
   const handleSendMessage = async (content: string) => {
     console.log("ResearchPage: handleSendMessage - called with content =", content);
-    if (!searchId || !content.trim()) {
-      console.log("ResearchPage: handleSendMessage - aborted: invalid searchId or empty content");
+    if (!searchId || !content.trim() || !isMountedRef.current) {
+      console.log("ResearchPage: handleSendMessage - aborted: invalid searchId, empty content, or not mounted");
       return
     }
 
     console.log("ResearchPage: handleSendMessage - Adding temporary user message");
-    setMessages(prev => {
-      const newMessages = [...prev, {
-        id: `temp-${Date.now()}`,
-        role: "user" as "user",
-        content: { text: content },
-        sequence: 0,
-        status: QueryStatus.PENDING
-      }]
-      console.log("ResearchPage: handleSendMessage - Updated messages state with", newMessages.length, "messages");
-      return newMessages;
-    })
-
-    setIsResponsePending(true)
-    console.log("ResearchPage: handleSendMessage - Set isResponsePending to true");
+    if (isMountedRef.current) { // Guard state update
+      setMessages(prev => {
+        const newMessages = [...prev, {
+          id: `temp-${Date.now()}`,
+          role: "user" as "user",
+          content: { text: content },
+          sequence: 0,
+          status: QueryStatus.PENDING
+        }]
+        console.log("ResearchPage: handleSendMessage - Updated messages state with", newMessages.length, "messages");
+        return newMessages;
+      })
+      setIsResponsePending(true)
+      console.log("ResearchPage: handleSendMessage - Set isResponsePending to true");
+    }
 
     try {
       console.log("ResearchPage: handleSendMessage - Sending message to API");
@@ -199,28 +204,32 @@ export default function ResearchPage() {
       console.log("ResearchPage: handleSendMessage - Message sent successfully");
       setTimeout(async () => {
         console.log("ResearchPage: handleSendMessage - Checking for updated session after 500ms");
-        if (currentSession?.id === searchId && currentSession.messages) {
-          console.log("ResearchPage: handleSendMessage - Updating messages from currentSession");
-          setMessages(currentSession.messages)
-          console.log("ResearchPage: handleSendMessage - Updated messages state with", currentSession.messages.length, "messages");
-        } else {
-          console.log("ResearchPage: handleSendMessage - Fetching updated session");
-          const updatedSession = await getSession(searchId)
-          if (updatedSession?.messages) {
-            console.log("ResearchPage: handleSendMessage - Updating messages from fetched session");
-            setMessages(updatedSession.messages)
-            console.log("ResearchPage: handleSendMessage - Updated messages state with", updatedSession.messages.length, "messages");
+        if (isMountedRef.current) { // Guard state updates
+          if (currentSession?.id === searchId && currentSession.messages) {
+            console.log("ResearchPage: handleSendMessage - Updating messages from currentSession");
+            setMessages(currentSession.messages)
+            console.log("ResearchPage: handleSendMessage - Updated messages state with", currentSession.messages.length, "messages");
           } else {
-            console.log("ResearchPage: handleSendMessage - No messages in updated session");
+            console.log("ResearchPage: handleSendMessage - Fetching updated session");
+            const updatedSession = await getSession(searchId)
+            if (updatedSession?.messages) {
+              console.log("ResearchPage: handleSendMessage - Updating messages from fetched session");
+              setMessages(updatedSession.messages)
+              console.log("ResearchPage: handleSendMessage - Updated messages state with", updatedSession.messages.length, "messages");
+            } else {
+              console.log("ResearchPage: handleSendMessage - No messages in updated session");
+            }
+            setIsResponsePending(false)
+            console.log("ResearchPage: handleSendMessage - Set isResponsePending to false");
           }
         }
-        setIsResponsePending(false)
-        console.log("ResearchPage: handleSendMessage - Set isResponsePending to false");
       }, 500)
     } catch (err) {
       console.error("ResearchPage: handleSendMessage - Error sending message:", err)
-      setIsResponsePending(false)
-      console.log("ResearchPage: handleSendMessage - Set isResponsePending to false due to error");
+      if (isMountedRef.current) { // Guard state update
+        setIsResponsePending(false)
+        console.log("ResearchPage: handleSendMessage - Set isResponsePending to false due to error");
+      }
     }
   }
 
@@ -239,8 +248,10 @@ export default function ResearchPage() {
     console.log("ResearchPage: handleRetryLoading - Set isSessionLoading to true");
     loadSession().then(success => {
       console.log("ResearchPage: handleRetryLoading - loadSession completed, success =", success);
-      setIsSessionLoading(false)
-      console.log("ResearchPage: handleRetryLoading - Set isSessionLoading to false");
+      if (isMountedRef.current) { // Guard state update
+        setIsSessionLoading(false)
+        console.log("ResearchPage: handleRetryLoading - Set isSessionLoading to false");
+      }
       if (!success) {
         console.log("ResearchPage: handleRetryLoading - Redirecting to /research due to failure");
         router.push("/research")

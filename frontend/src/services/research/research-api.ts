@@ -30,15 +30,7 @@ export {
   fetchMessagesForSearch,
   updateMessage,
   deleteMessage
-  // forwardMessage // TODO: Uncomment when backend implements POST /research/messages/{message_id}/forward
 } from './research-api-messages';
-
-// Re-export WebSocket-related functions (disabled for HTTP-only Beta)
-// export {
-//   connectToMessageUpdates,
-//   requestLatestMessages,
-//   sendTypingNotification
-// } from './research-api-websocket';
 
 // Export cache interface
 import { researchCache } from './research-cache';
@@ -46,10 +38,10 @@ export const cache = {
   clear: () => researchCache.clear(),
   invalidateSearch: (searchId: string) => researchCache.invalidateSearch(searchId),
   invalidateMessageList: (searchId: string) => researchCache.invalidateMessageList(searchId),
-  getSession: (sessionId: string) => researchCache.getSession(sessionId),
+  getSession: async (sessionId: string) => researchCache.getSession(sessionId),
   getMessage: (messageId: string) => researchCache.getMessage(messageId),
   getSessionList: (options?: any) => researchCache.getSessionList(options),
-  getMessageList: (searchId: string, options?: any) => researchCache.getMessageList(searchId, options),
+  getMessageList: async (searchId: string, options?: any) => researchCache.getMessageList(searchId, options),
   setSession: (session: any) => researchCache.setSession(session),
   setMessage: (message: any) => researchCache.setMessage(message),
   clearSessionListCache: () => researchCache.clearSessionListCache(),

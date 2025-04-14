@@ -158,8 +158,8 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
   
   const POLLING_INTERVAL = 5000
   const [pollingId, setPollingId] = useState<NodeJS.Timeout | null>(null)
-  const [pollFailures, setPollFailures] = useState(0) // New: Track polling failures
-  const MAX_POLL_FAILURES = 5 // New: Stop polling after 5 failures
+  const [pollFailures, setPollFailures] = useState(0)
+  const MAX_POLL_FAILURES = 5
 
   const clearError = useCallback(() => setError(null), [])
 
@@ -182,7 +182,7 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
     return formatApiError(err, defaultMessage)
   }
 
-  const updateSessionInList = (updatedSession: ResearchSession) => {
+  const updateSessionInList = useCallback((updatedSession: ResearchSession) => {
     setSessions(prev => {
       const index = prev.findIndex(s => s.id === updatedSession.id)
       if (index === -1) return [...prev, updatedSession]
@@ -190,7 +190,7 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
       newSessions[index] = updatedSession
       return newSessions
     })
-  }
+  }, []);
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -272,7 +272,7 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
       setLoadingStates(prev => ({ ...prev, fetchingSession: false }))
       setIsLoading(false)
     }
-  }, [updateSessionInList])
+  }, [updateSessionInList, setError, setCurrentSession, setIsLoading, setLoadingStates])
 
   const createSession = async (query: string, searchParams?: SearchParams): Promise<string> => {
     const trimmedQuery = query.trim()
@@ -288,7 +288,7 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
     try {
       const newSession = await createNewSession(trimmedQuery, searchParams)
       updateSessionInList(newSession)
-      cache.invalidateSearch(newSession.id) // Fix 1: Targeted invalidation
+      cache.invalidateSearch(newSession.id)
       return newSession.id
     } catch (err) {
       setError(handleApiError(err, "Failed to create session"))
@@ -315,7 +315,7 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
     setIsLoading(true)
     setError(null)
     
-    const previousSession = structuredClone(currentSession) // Fix 4: Deep clone for rollback
+    const previousSession = structuredClone(currentSession)
     const optimisticMessage: Message = {
       id: Math.random().toString(36).substr(2, 9),
       role: "user",
@@ -338,7 +338,7 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
       updateSessionInList(updatedSession)
       cache.invalidateSearch(sessionId)
     } catch (err) {
-      setCurrentSession(previousSession) // Rollback with deep clone
+      setCurrentSession(previousSession)
       setError(handleApiError(err, "Failed to send message"))
     } finally {
       setLoadingStates(prev => ({ ...prev, sendingMessage: false }))
@@ -369,7 +369,7 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
       return
     }
 
-    const previousSession = structuredClone(sessionToUpdate) // Fix 4: Deep clone for rollback
+    const previousSession = structuredClone(sessionToUpdate)
     const optimisticSession: ResearchSession = {
       ...sessionToUpdate,
       ...updates,
@@ -389,7 +389,7 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
       updateSessionInList(updatedSession)
       cache.invalidateSearch(sessionId)
     } catch (err) {
-      if (currentSession?.id === sessionId) setCurrentSession(previousSession) // Rollback
+      if (currentSession?.id === sessionId) setCurrentSession(previousSession)
       updateSessionInList(previousSession)
       setError(handleApiError(err, "Failed to update session"))
     } finally {
@@ -418,7 +418,7 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
     
     try {
       await deleteSessionApi(sessionId)
-      cache.invalidateSearch(sessionId) // Fix 1: Targeted invalidation
+      cache.invalidateSearch(sessionId)
     } catch (err) {
       setSessions(previousSessions)
       setTotalSessions(previousTotal)
@@ -434,7 +434,7 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
     if (pollingId) {
       clearInterval(pollingId)
       setPollingId(null)
-      setPollFailures(0) // Reset failures
+      setPollFailures(0)
     }
     
     if (currentSession?.id && isAuthenticated) {
@@ -446,7 +446,6 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
           setCurrentSession(prev => {
             if (!prev || prev.id !== currentSession.id) return prev
             
-            // Fix 2: Merge messages with Map for deduplication
             const messageMap = new Map(prev.messages?.map(m => [m.id, m]) ?? [])
             messageData.items.forEach(m => messageMap.set(m.id, m))
             const updatedMessages = Array.from(messageMap.values()).sort((a, b) => a.sequence - b.sequence)
@@ -454,9 +453,9 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
             return { ...prev, messages: updatedMessages }
           })
           
-          setPollFailures(0) // Reset on success
+          setPollFailures(0)
         } catch (err) {
-          setPollFailures(prev => prev + 1) // Fix 3: Increment failure count
+          setPollFailures(prev => prev + 1)
           if (pollFailures + 1 >= MAX_POLL_FAILURES) {
             clearInterval(intervalId)
             setPollingId(null)
