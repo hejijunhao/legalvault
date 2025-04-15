@@ -1,6 +1,5 @@
 // src/services/research/research-api-core.ts
 
-
 import { supabase } from "@/lib/supabase";
 import { ApiError } from "./research-api-types";
 
@@ -216,7 +215,18 @@ export async function handleApiError(response: Response): Promise<never> {
     console.error('Error parsing error response:', e);
   }
   
-  throw formatApiError(errorData);
+  let message = 'An unexpected error occurred';
+  if (errorData.status === 400) {
+    message = `Validation error: ${errorData.detail || 'Invalid request'}`;
+  } else if (errorData.status === 404) {
+    message = 'Resource not found';
+  } else if (errorData.status === 500) {
+    message = 'A server error occurred. Please try again later.';
+  } else if (errorData.status === 503) {
+    message = 'Service unavailable. Please try again later.';
+  }
+  
+  throw new Error(message);
 }
 
 /**
