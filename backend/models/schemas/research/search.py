@@ -6,6 +6,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field, validator
 
 from models.enums.research_enums import QueryCategory, QueryType
+from models.schemas.research.search_message import MessageContent
 
 
 class SearchBase(BaseModel):
@@ -87,7 +88,7 @@ class CitationModel(BaseModel):
 class SearchMessageResponse(BaseModel):
     """Schema for search message responses"""
     role: str
-    content: Dict[str, Any]
+    content: MessageContent
     sequence: int
 
     model_config = {"from_attributes": True}
@@ -98,15 +99,11 @@ class SearchResponse(SearchBase):
     id: UUID = Field(..., description="Unique search ID")
     query: str = Field(..., description="Search query")
     user_id: UUID = Field(..., description="ID of the search owner")
-    enterprise_id: Optional[UUID] = Field(None, description="Enterprise ID if applicable")
-    created_at: datetime = Field(..., description="Search creation timestamp")
-    updated_at: Optional[datetime] = Field(None, description="Last update timestamp")
-    category: Optional[QueryCategory] = Field(None, description="Query category")
-    query_type: Optional[QueryType] = Field(None, description="Query type")
-    messages: List[SearchMessageResponse] = Field(
-        default_factory=list,
-        description="Associated messages"
-    )
+    enterprise_id: Optional[UUID] = Field(None, description="ID of the enterprise if applicable")
+    created_at: datetime = Field(..., description="When the search was created")
+    updated_at: datetime = Field(..., description="When the search was last updated")
+    category: Optional[str] = Field(None, description="Search category")
+    query_type: Optional[str] = Field(None, description="Type of search query")
 
     model_config = {"from_attributes": True}
 

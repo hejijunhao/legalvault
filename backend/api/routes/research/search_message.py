@@ -22,10 +22,13 @@ from models.dtos.research.search_message_dto import (
     SearchMessageListDTO
 )
 from models.schemas.research.search_message import (
+    SearchMessageBase,
     SearchMessageResponse,
-    SearchMessageUpdate,
     SearchMessageListResponse,
-    SearchMessageCreate
+    SearchMessageCreate,
+    MessageContent,
+    CitationResponse,
+    SearchMessageUpdate
 )
 
 logger = logging.getLogger(__name__)
@@ -49,15 +52,31 @@ async def search_message_dto_to_response(
             message_dto.search_id,
             execution_options={"no_parameters": True, "use_server_side_cursors": False}
         )
-        message_dto.search_title = search.title if search else None
-        logger.debug(f"Search title for search {message_dto.search_id}: {message_dto.search_title}")
+        if search:
+            message_dto.search_title = search.title
+    
+    # Convert MessageContentDTO to MessageContent schema
+    content_dto = message_dto.get_structured_content()
+    content = MessageContent(
+        text=content_dto.text,
+        citations=[
+            CitationResponse(
+                text=c.text,
+                url=c.url,
+                title=c.title,
+                source=c.source,
+                timestamp=c.timestamp
+            ) for c in content_dto.citations
+        ],
+        metadata=content_dto.metadata
+    )
     
     response = SearchMessageResponse(
         id=message_dto.id,
         search_id=message_dto.search_id,
         search_title=message_dto.search_title,
         role=message_dto.role,
-        content=message_dto.get_structured_content().to_dict(),
+        content=content,  # Use the converted MessageContent object
         sequence=message_dto.sequence,
         status=message_dto.status,
         created_at=message_dto.created_at,

@@ -1,6 +1,5 @@
 # services/workflow/research/search_workflow.py
 
-
 from typing import Dict, List, Optional, Any, Tuple
 from uuid import UUID, uuid4
 import logging
@@ -24,7 +23,8 @@ from models.domain.research.search_operations import ResearchOperations
 from models.domain.research.search_message_operations import SearchMessageOperations
 
 # Import DTOs
-from models.dtos.research.search_dto import SearchDTO, SearchResultDTO, SearchCreateDTO
+from models.dtos.research.search_dto import SearchDTO, SearchResultDTO, SearchCreateDTO, SearchContinueDTO
+from models.dtos.research.search_message_dto import SearchMessageCreateDTO
 
 # Import centralized enums
 from models.enums.research_enums import QueryCategory, QueryType, QueryStatus
@@ -63,6 +63,11 @@ class APIError(SearchWorkflowError):
 class PersistenceError(SearchWorkflowError):
     """Exception raised for database persistence errors."""
     def __init__(self, message: str, error_code: str = "persistence_error"):
+        super().__init__(message, error_code, 500)
+
+class DatabaseError(SearchWorkflowError):
+    """Exception raised for database errors."""
+    def __init__(self, message: str, error_code: str = "database_error"):
         super().__init__(message, error_code, 500)
 
 # New LLM Service Classes
@@ -142,7 +147,9 @@ class ResearchSearchWorkflow:
             logger.warning("Perplexity API key not configured. API calls will fail.")
         self._api_url = "https://api.perplexity.ai/chat/completions"
         self.model = model
-
+        # Initialize message operations with the same session
+        self.message_operations = SearchMessageOperations(research_operations.db_session)
+    
     async def _analyze_query(
         self, 
         query: str,
@@ -286,31 +293,52 @@ class ResearchSearchWorkflow:
         
         return payload
 
-    def _build_follow_up_payload(self, follow_up_query: str, thread_id: Optional[str] = None, previous_messages: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+    def _build_follow_up_payload(self, follow_up_query: str, thread_id: Optional[str] = None, previous_messages: Optional[List[Dict[str, str]]] = None) -> Dict[str, Any]:
         """
-        Build the payload for a follow-up query.
-        
+        Build the payload for a follow-up query to the Perplexity API.
+
         Args:
             follow_up_query: Follow-up query from the user
-            thread_id: Optional thread ID from previous API call
+            thread_id: Optional thread ID from previous API call (not used in payload but kept for compatibility)
             previous_messages: Optional list of previous messages in the conversation
-            
+
         Returns:
             API payload dictionary
         """
-        messages = previous_messages or []
-        
-        if not messages:
-            messages.append({
-                "role": "system",
-                "content": "Provide a concise, accurate, and legally relevant response to the follow-up query, prioritizing authoritative sources such as case law, statutes, and reputable legal commentary, tailored to the needs of a practicing lawyer."
-            })
-        
-        messages.append({
-            "role": "user",
-            "content": follow_up_query
-        })
-        
+        messages = []
+        last_role = None
+
+        # Add system message first
+        system_message = "Provide a concise, accurate, and legally relevant response to the follow-up query, prioritizing authoritative sources such as case law, statutes, and reputable legal commentary, tailored to the needs of a practicing lawyer."
+        messages.append({"role": "system", "content": system_message})
+
+        # Process previous messages ensuring alternation
+        if previous_messages:
+            for msg in previous_messages:
+                role = msg.get("role")
+                content = msg.get("content", "")
+
+                # Skip empty messages or invalid roles
+                if not content or role not in ["user", "assistant"]:
+                    continue
+
+                # Skip if same role would repeat
+                if role == last_role:
+                    logger.debug(f"Skipping message to avoid consecutive {role} roles: {content[:100]}...")
+                    continue
+
+                # Add message and update last_role
+                messages.append({"role": role, "content": content})
+                last_role = role
+
+        # Add the new user query if it wouldn't create consecutive user messages
+        if last_role != "user":
+            messages.append({"role": "user", "content": follow_up_query})
+        else:
+            logger.warning("Cannot append user message due to consecutive user roles; payload may be incomplete")
+
+        logger.debug(f"Payload message roles: {[msg['role'] for msg in messages]}")
+
         return {
             "model": self.model,
             "messages": messages,
@@ -629,24 +657,14 @@ class ResearchSearchWorkflow:
 
     async def execute_follow_up(
         self,
-        search_id: UUID,
-        user_id: UUID,
-        follow_up_query: str,
-        enterprise_id: Optional[UUID] = None,
-        thread_id: Optional[str] = None,
-        previous_messages: Optional[List[Dict[str, Any]]] = None
+        continue_dto: SearchContinueDTO
     ) -> SearchResultDTO:
         """
         Execute a follow-up query for an existing search, maintaining context.
         
         Args:
-            search_id: UUID of the existing search
-            user_id: UUID of the user initiating the follow-up
-            follow_up_query: The follow-up query text
-            enterprise_id: Optional UUID of the user's enterprise
-            thread_id: Optional thread ID from previous API call
-            previous_messages: Optional list of previous messages
-            
+            continue_dto: SearchContinueDTO containing all required follow-up parameters
+        
         Returns:
             SearchResultDTO containing the search results or error information
             
@@ -655,6 +673,13 @@ class ResearchSearchWorkflow:
             APIError: If there's an error with the external API
             PersistenceError: If there's an error persisting the results
         """
+        search_id = continue_dto.search_id
+        user_id = continue_dto.user_id
+        follow_up_query = continue_dto.follow_up_query
+        enterprise_id = continue_dto.enterprise_id
+        thread_id = continue_dto.thread_id
+        previous_messages = continue_dto.previous_messages
+        
         context = {
             "user_id": str(user_id),
             "search_id": str(search_id),
@@ -680,76 +705,165 @@ class ResearchSearchWorkflow:
             logger.warning("Unauthorized access attempt", extra=context)
             raise SearchWorkflowError("Unauthorized access to this search", "unauthorized", 403)
         
-        # If no thread_id or previous_messages provided, try to get them from the search
+        # Load previous messages and calculate sequence
+        messages_dto = await self.message_operations.list_messages_by_search(
+            search_id,
+            limit=100,
+            offset=0,
+            execution_options={"no_parameters": True, "use_server_side_cursors": False}
+        )
+        search_dto.messages = messages_dto.items if messages_dto else []
+        next_sequence = len(search_dto.messages) + 1 if search_dto.messages else 1
+        logger.debug("Calculated message sequence", extra={**context, "sequence": next_sequence})
+        
         if not thread_id or not previous_messages:
-            if search_dto.messages and len(search_dto.messages) >= 2:
-                # Extract thread_id and messages from the search
+            if search_dto.messages:
                 assistant_messages = [m for m in search_dto.messages if m.role == "assistant"]
                 if assistant_messages and "thread_id" in assistant_messages[-1].content:
                     thread_id = assistant_messages[-1].content.get("thread_id")
+                    logger.debug(f"Retrieved thread_id {thread_id} from previous messages")
                 
-                # Convert messages to the format expected by the API
-                previous_messages = []
-                for msg in search_dto.messages:
-                    if msg.role == "user":
-                        previous_messages.append({"role": "user", "content": msg.content.get("text", "")})
-                    elif msg.role == "assistant" and "text" in msg.content:
-                        previous_messages.append({"role": "assistant", "content": msg.content.get("text", "")})
+                previous_messages = [
+                    {
+                        "role": msg.role,
+                        "content": msg.content.get("text", "")
+                    }
+                    for msg in search_dto.messages
+                    if msg.role in ["user", "assistant"] and "text" in msg.content
+                ]
+        
+        previous_messages = previous_messages or []
         
         # Validate the follow-up query
-        search_domain = ResearchSearch(user_id=user_id, enterprise_id=enterprise_id)
-        if not search_domain.validate_query(follow_up_query):
+        if not continue_dto.validate_query():
             logger.warning("Invalid follow-up query rejected", extra=context)
             raise QueryValidationError("Invalid follow-up query")
-        
+
+        # Save the user's follow-up query as a message
+        try:
+            user_message_dto = SearchMessageCreateDTO(
+                search_id=search_id,
+                user_id=user_id,
+                role="user",
+                content={
+                    "text": follow_up_query
+                },
+                sequence=next_sequence
+            )
+            success = await self.message_operations.create_message_with_commit(
+                user_message_dto,
+                execution_options={"no_parameters": True, "use_server_side_cursors": False}
+            )
+            if not success:
+                logger.error("Failed to save user follow-up query", extra={**context, "sequence": next_sequence})
+                raise PersistenceError("Failed to save user follow-up query")
+            
+            logger.debug("User follow-up query saved", extra={
+                **context,
+                "sequence": next_sequence,
+                "message_type": "user_query"
+            })
+            
+            # Update previous_messages with the new user message
+            previous_messages.append({
+                "role": "user",
+                "content": follow_up_query
+            })
+        except Exception as e:
+            logger.error("Failed to persist user follow-up message", extra={
+                **context,
+                "error": str(e),
+                "sequence": next_sequence
+            })
+            raise PersistenceError(f"Failed to save user follow-up message: {str(e)}")
+
         # Call the API with the follow-up query and context
-        payload = self._build_follow_up_payload(follow_up_query, thread_id, previous_messages or [])
-        response = await self._call_perplexity_api(payload)
+        payload = self._build_follow_up_payload(follow_up_query, thread_id, previous_messages)
         
+        if not any(msg["role"] == "user" and msg["content"] == follow_up_query for msg in payload.get("messages", [])):
+            logger.error("Follow-up query missing from payload", extra={**context, "payload_messages": len(payload.get("messages", []))})
+            raise APIError("Invalid message sequence: follow-up query not included in payload")
+        
+        logger.debug("Sending follow-up payload", extra={
+            **context,
+            "messages_count": len(payload.get("messages", [])),
+            "thread_id": thread_id
+        })
+        
+        response = await self._call_perplexity_api(payload)
         execution_time = (datetime.utcnow() - start_time).total_seconds()
         
         if "error" in response:
-            logger.error("Error in API response", extra={
-                **context, 
-                "error": response["error"],
-                "execution_time": execution_time
-            })
-            raise APIError(response["error"])
-        
+            error_msg = response["error"]
+            error_context = {
+                **context,
+                "error": error_msg,
+                "execution_time": execution_time,
+                "payload_size": len(str(payload)),
+                "messages_count": len(payload.get("messages", [])),
+                "thread_id": thread_id
+            }
+            
+            if "Invalid request" in error_msg:
+                logger.error("Invalid request to Perplexity API", extra=error_context)
+                raise APIError(f"Invalid request format: {error_msg}")
+            elif "Rate limit" in error_msg:
+                logger.error("Rate limit exceeded", extra=error_context)
+                raise APIError("Rate limit exceeded. Please try again later.")
+            else:
+                logger.error("Unexpected API error", extra=error_context)
+                raise APIError(f"API error: {error_msg}")
+
         processed_response = self._process_results(response)
-        
-        # Add metadata to the response
         processed_response["metadata"] = {
             "execution_time": execution_time,
-            "is_follow_up": True
+            "is_follow_up": True,
+            "search_id": str(search_id)
         }
         
-        # Create a SearchResultDTO from the processed response
-        result_dto = SearchResultDTO(
+        # Save the assistant's response with next sequence
+        try:
+            assistant_message_dto = SearchMessageCreateDTO(
+                search_id=search_id,
+                user_id=user_id,
+                role="assistant",
+                content={
+                    "text": processed_response.get("text", ""),
+                    "citations": processed_response.get("citations", []),
+                    "thread_id": processed_response.get("thread_id"),
+                    "token_usage": processed_response.get("token_usage", 0),
+                    "metadata": processed_response.get("metadata", {})
+                },
+                sequence=next_sequence + 1  # Increment sequence for assistant response
+            )
+            success = await self.message_operations.create_message_with_commit(
+                assistant_message_dto,
+                execution_options={"no_parameters": True, "use_server_side_cursors": False}
+            )
+            if not success:
+                raise PersistenceError("Failed to save assistant response")
+            
+            logger.info("Assistant response saved successfully", extra={
+                **context,
+                "sequence": next_sequence + 1,
+                "message_type": "assistant_response",
+                "execution_time": execution_time
+            })
+        except Exception as e:
+            logger.error("Failed to persist assistant response", extra={
+                **context,
+                "error": str(e),
+                "sequence": next_sequence + 1
+            })
+            raise PersistenceError(f"Failed to save assistant response: {str(e)}")
+
+        return SearchResultDTO(
             thread_id=processed_response.get("thread_id"),
             text=processed_response.get("text", ""),
             citations=processed_response.get("citations", []),
             token_usage=processed_response.get("token_usage", 0),
             metadata=processed_response.get("metadata", {})
         )
-        
-        # Persist the follow-up query and response
-        success = await self.research_operations.add_search_messages(
-            search_id=search_id,
-            user_query=follow_up_query,
-            response=processed_response
-        )
-        
-        if not success:
-            logger.error("Failed to persist follow-up messages", extra=context)
-            raise PersistenceError("Failed to save follow-up messages")
-        
-        logger.info("Follow-up query executed successfully", extra={
-            **context, 
-            "execution_time": execution_time
-        })
-        
-        return result_dto
 
 # Future Enhancements:
 # 1. Caching Layer

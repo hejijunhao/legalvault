@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 from models.enums.research_enums import QueryCategory, QueryType, QueryStatus
 from models.dtos.base_dto import PaginatedListDTO, StatusDTO, TupleConverterMixin
+from models.dtos.research.search_message_dto import SearchMessageDTO  # Added import for type hint
 
 # Field mappings for tuple conversion
 SEARCH_TUPLE_FIELDS = {
@@ -38,6 +39,10 @@ class SearchDTO(BaseModel, TupleConverterMixin):
     query_type: Optional[QueryType] = None
     created_at: datetime
     updated_at: datetime
+    messages: Optional[List[SearchMessageDTO]] = Field(
+        default_factory=list,
+        description="List of messages associated with this search, ordered by sequence"
+    )  # Added messages field
     
     class Config:
         from_attributes = True
@@ -59,7 +64,8 @@ class SearchDTO(BaseModel, TupleConverterMixin):
             category=None,  # Not persisted in DB, set to None
             query_type=None,  # Not persisted in DB, set to None
             created_at=db_search.created_at,
-            updated_at=db_search.updated_at
+            updated_at=db_search.updated_at,
+            messages=[SearchMessageDTO.from_db(msg) for msg in getattr(db_search, 'messages', [])]  # Populate messages
         )
 
 class SearchListDTO(PaginatedListDTO[SearchDTO]):
@@ -92,7 +98,7 @@ class SearchContinueDTO(BaseModel):
     search_id: UUID = Field(..., description="ID of the search to continue")
     user_id: UUID = Field(..., description="ID of the user making the follow-up query")
     follow_up_query: str = Field(..., description="The follow-up question or query")
-    enterprise_id: UUID = Field(..., description="Enterprise ID for the search context")
+    enterprise_id: Optional[UUID] = Field(None, description="Enterprise ID for the search context")
     thread_id: Optional[str] = Field(None, description="Optional thread ID for conversation tracking")
     previous_messages: Optional[List[Dict[str, Any]]] = Field(
         default_factory=list,
@@ -102,6 +108,22 @@ class SearchContinueDTO(BaseModel):
         default_factory=dict,
         description="Optional parameters to customize the search behavior"
     )
+
+    def validate_query(self) -> bool:
+        """Validate the follow-up query"""
+        # Basic validation rules
+        if not self.follow_up_query or len(self.follow_up_query.strip()) < 3:
+            return False
+        
+        # Check for non-printable characters
+        if not all(char.isprintable() for char in self.follow_up_query):
+            return False
+            
+        # Check for reasonable length (e.g., not too long)
+        if len(self.follow_up_query) > 1000:
+            return False
+            
+        return True
 
     def get_context(self) -> Dict[str, Any]:
         """Get the context for the follow-up query"""
@@ -131,7 +153,9 @@ def to_search_dto(db_search: Any) -> SearchDTO:
 
 def to_search_dto_without_messages(db_search: Any) -> SearchDTO:
     """Convert database model to SearchDTO without loading messages"""
-    return SearchDTO.from_db(db_search)
+    dto = SearchDTO.from_db(db_search)
+    dto.messages = []  # Explicitly set messages to empty list
+    return dto
 
 def to_search_list_dto(
     db_searches: List[Any],

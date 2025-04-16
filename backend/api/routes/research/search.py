@@ -16,7 +16,7 @@ from core.database import get_db, async_session_factory
 from core.auth import get_current_user, get_user_permissions
 from models.database.user import User
 from models.domain.research.search_operations import ResearchOperations
-from services.workflow.research.search_workflow import ResearchSearchWorkflow, GPT4oMiniService, LLMService
+from services.workflow.research.search_workflow import ResearchSearchWorkflow, GPT4oMiniService
 
 # Import schemas for API responses
 from models.schemas.research.search import (
@@ -26,9 +26,10 @@ from models.schemas.research.search import (
     SearchListResponse,
     SearchUpdate
 )
-from models.schemas.research.search_message import SearchMessageResponse
-
-# Import DTOs
+from models.schemas.research.search_message import (
+    SearchMessageResponse,
+    MessageContent
+)
 from models.dtos.research.search_dto import (
     SearchDTO, SearchListDTO, SearchCreateDTO, SearchUpdateDTO, SearchContinueDTO
 )
@@ -116,9 +117,15 @@ def search_dto_to_response(search_dto: Union[SearchDTO, tuple]) -> SearchRespons
         logger.debug(f"Converting {len(search_dto.messages)} messages")
         messages = [
             SearchMessageResponse(
+                id=msg.id,
+                search_id=msg.search_id,
+                search_title=msg.search_title,
                 role=msg.role,
-                content=msg.content,
-                sequence=msg.sequence
+                content=MessageContent(**msg.get_structured_content().dict()),  # Convert DTO to MessageContent
+                sequence=msg.sequence,
+                status=msg.status,
+                created_at=msg.created_at,
+                updated_at=msg.updated_at
             ) for msg in search_dto.messages
         ]
         logger.debug("Messages converted successfully")
@@ -268,6 +275,7 @@ async def continue_search(
 ) -> SearchResponse:
     """Continue an existing search with a follow-up query"""
     logger.info(f"Received continue_search request for search {search_id} by user {user.id}")
+    
     # Verify search exists and user has access
     logger.info(f"Retrieving search {search_id} for verification")
     search = await workflow.research_operations.get_search_by_id(
@@ -277,10 +285,12 @@ async def continue_search(
     if not search:
         logger.error(f"Search {search_id} not found")
         raise HTTPException(status_code=404, detail="Search not found")
+    
     logger.info(f"Search {search_id} found")
     if search.user_id != user.id:
         logger.error(f"User {user.id} not authorized for search {search_id}")
         raise HTTPException(status_code=403, detail="Not authorized to continue this search")
+    
     logger.info(f"User {user.id} authorized for search {search_id}")
     
     try:
@@ -289,7 +299,7 @@ async def continue_search(
             search_id=search_id,
             user_id=user.id,
             follow_up_query=data.follow_up_query,
-            enterprise_id=user.enterprise_id,
+            enterprise_id=user.enterprise_id,  # Can be None, handled by optional field
             thread_id=data.thread_id,
             previous_messages=data.previous_messages,
             search_params=data.search_params if hasattr(data, 'search_params') else {}
@@ -299,22 +309,20 @@ async def continue_search(
         # Execute follow-up workflow
         logger.info("Executing follow-up workflow")
         result = await workflow.execute_follow_up(continue_dto)
-        if not result or not result.get("search_id"):
-            logger.error("Follow-up workflow failed: No search_id returned")
+        if not result:
+            logger.error("Follow-up workflow failed: No result returned")
             raise HTTPException(status_code=500, detail="Failed to execute follow-up query")
         logger.info("Follow-up workflow executed successfully")
-            
-        # Get updated search and return response
+        
+        # Get updated search with messages
         logger.info(f"Retrieving updated search {search_id}")
         updated_search = await workflow.research_operations.get_search_by_id(
             search_id,
+            include_messages=True,
             execution_options={"no_parameters": True, "use_server_side_cursors": False}
         )
-        if not updated_search:
-            logger.error(f"Updated search {search_id} not found")
-            raise HTTPException(status_code=404, detail="Updated search not found")
-        logger.info(f"Retrieved updated search {search_id} successfully")
-            
+        
+        # Convert DTO to API response model and return
         response = search_dto_to_response(updated_search)
         logger.info(f"Returning continue_search response for search {search_id}")
         return response
@@ -324,7 +332,6 @@ async def continue_search(
         raise HTTPException(status_code=400, detail=e.message)
     except QueryClarificationError as e:
         logger.error(f"QueryClarificationError in continue_search: {e.message}")
-        # Return a structured response with suggested clarifications
         raise HTTPException(
             status_code=400, 
             detail={
@@ -595,4 +602,3 @@ async def get_user_enterprise(current_user: User, db: AsyncSession) -> Optional[
             logger.error(f"Error in get_user_enterprise: {e}")
     
     return None
-
