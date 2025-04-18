@@ -29,7 +29,7 @@ load_dotenv()
 config = context.config
 
 # Set the sqlalchemy.url from environment variable
-database_url = os.environ["DATABASE_URL"]
+database_url = os.environ["DATABASE_URL_MIGRATE"]
 if "gssencmode=disable" not in database_url:
     if "?" in database_url:
         database_url += "&gssencmode=disable"

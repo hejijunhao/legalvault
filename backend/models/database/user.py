@@ -17,9 +17,9 @@ class User(PublicBase, TimestampMixin):
     __tablename__ = "users"  # Explicitly set to plural form to match Supabase naming convention
     
     auth_user_id = Column(UUID(as_uuid=True), ForeignKey('auth.users.id'), unique=True, nullable=False, index=True)
-    first_name = Column(String, nullable=False)
-    last_name = Column(String, nullable=False)
-    name = Column(String, nullable=False)
+    first_name = Column(String, nullable=True)
+    last_name = Column(String, nullable=True)
+    name = Column(String, nullable=True)
     email = Column(String, unique=True, nullable=True, index=True)
     role = Column(String, default="lawyer", nullable=False)
     virtual_paralegal_id = Column(UUID(as_uuid=True), ForeignKey('public.virtual_paralegals.id'), index=True, nullable=True)
