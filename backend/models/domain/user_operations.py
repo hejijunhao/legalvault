@@ -453,6 +453,85 @@ class UserOperations:
             logger.error(f"Error getting user profile: {str(e)}", exc_info=True)
             return None
 
+    async def get_user_profile_by_any_id(self, user_id: UUID) -> Optional[UserProfile]:
+        """Get user profile information by either public.users.id or auth.users.id.
+        
+        Args:
+            user_id: UUID of the user in either public.users.id or auth.users.id
+        
+        Returns:
+            UserProfile object with complete user information or None if user not found
+        """
+        # First try to get user by public.users.id
+        profile = await self.get_user_profile(user_id)
+        if profile:
+            return profile
+            
+        # If not found, try to get user by auth.users.id
+        query = text("""
+            SELECT id, auth_user_id, first_name, last_name, name, role, email, virtual_paralegal_id, enterprise_id, created_at, updated_at
+            FROM public.users WHERE auth_user_id = :auth_user_id
+        """).execution_options(
+            no_parameters=True,  # Required for pgBouncer compatibility
+            use_server_side_cursors=False  # Disable server-side cursors
+        )
+        
+        try:
+            logger.debug(f"Retrieving user profile for auth_user_id: {user_id}")
+            result = await self.db.execute(query, {"auth_user_id": user_id})
+            user_data = result.fetchone()
+            
+            if not user_data:
+                logger.warning(f"No user found with auth_user_id: {user_id}")
+                return None
+            
+            # Get last login time from Supabase Auth if possible
+            last_login = None
+            try:
+                from core.supabase_client import get_supabase_client
+                supabase = get_supabase_client()
+                
+                # Get user details from Supabase Auth using auth_user_id
+                auth_user_id = user_data[1]  # auth_user_id is at index 1
+                auth_user = supabase.auth.admin.get_user_by_id(auth_user_id)
+                
+                # Access metadata from the response
+                if hasattr(auth_user, 'user'):
+                    user_metadata = auth_user.user
+                    last_login = auth_user.user.last_sign_in_at if auth_user.user.last_sign_in_at else None
+                elif isinstance(auth_user, dict):
+                    last_login = auth_user.get('last_sign_in_at')
+                
+                if not last_login:
+                    logger.warning(f"No last_sign_in_at found for user {auth_user_id}")
+            except Exception as auth_error:
+                logger.error(f"Error retrieving last login from Supabase Auth: {str(auth_error)}")
+                last_login = None
+            
+            # Use email from public.users table
+            email = user_data[6]  # email is now at index 6
+            
+            # If email is not set in the database, use a fallback
+            if not email:
+                email = f"{user_data[2].lower()}.{user_data[3].lower()}@example.com"
+                logger.warning(f"Using fallback email for user {user_id}: {email}")
+            
+            return UserProfile(
+                id=user_data[0],
+                email=email,
+                first_name=user_data[2],
+                last_name=user_data[3],
+                name=user_data[4],
+                role=user_data[5],
+                virtual_paralegal_id=user_data[7],
+                enterprise_id=user_data[8],
+                created_at=user_data[9],
+                last_login=last_login
+            )
+        except Exception as e:
+            logger.error(f"Error getting user profile: {str(e)}", exc_info=True)
+            return None
+
     async def decode_token(self, token: str) -> Optional[TokenData]:
         """Decode and validate a JWT token"""
         try:

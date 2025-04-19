@@ -9,6 +9,9 @@ from core.database import get_db
 from core.auth import get_current_user
 from models.database.user import User
 from uuid import UUID
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -62,10 +65,13 @@ async def get_current_user_profile(
     """
     Get the current user's profile.
     """
+    logger.info(f"Getting profile for current user with public.users.id={current_user.id} and auth.users.id={current_user.auth_user_id}")
+    
     user_ops = UserOperations(session)
-    profile = await user_ops.get_user_profile(current_user.id)
+    profile = await user_ops.get_user_profile_by_any_id(current_user.auth_user_id)
     
     if not profile:
+        logger.error(f"Profile not found for user with public.users.id={current_user.id} and auth.users.id={current_user.auth_user_id}")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User profile not found",
