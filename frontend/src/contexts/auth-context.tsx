@@ -9,6 +9,7 @@ import { supabase } from '../lib/supabase'
 // Define the User type based on your UserProfile from the backend
 type User = {
   id: string
+  auth_user_id: string
   email: string
   first_name: string
   last_name: string

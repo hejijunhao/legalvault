@@ -6,22 +6,18 @@ import { useRef, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import Link from "next/link"
 import { User, Settings, Building, LogOut, CreditCard } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { useAuth } from "@/contexts/auth-context"
 
 interface DropdownProfileMenuProps {
   isOpen: boolean
   onClose: () => void
 }
 
-const menuItems = [
-  { icon: User, label: "Profile", href: "/profile" },
-  { icon: CreditCard, label: "Billing", href: "/billing" },
-  { icon: Settings, label: "Settings", href: "/settings" },
-  { icon: Building, label: "Company", href: "/company" },
-  { icon: LogOut, label: "Logout", href: "/logout" },
-]
-
 export function DropdownProfileMenu({ isOpen, onClose }: DropdownProfileMenuProps) {
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const router = useRouter()
+  const { user, logout, isLoading } = useAuth()
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -35,6 +31,34 @@ export function DropdownProfileMenu({ isOpen, onClose }: DropdownProfileMenuProp
       document.removeEventListener("mousedown", handleClickOutside)
     }
   }, [onClose])
+
+  const handleLogout = async () => {
+    await logout()
+    onClose()
+    router.push('/login')
+  }
+
+  const menuItems = [
+    { 
+      icon: User, 
+      label: "Profile", 
+      href: user ? `/profile/${user.id}` : "#",
+      onClick: () => user && onClose()
+    },
+    { icon: CreditCard, label: "Billing", href: "/billing", onClick: onClose },
+    { icon: Settings, label: "Settings", href: "/settings", onClick: onClose },
+    { icon: Building, label: "Company", href: "/company", onClick: onClose },
+    { 
+      icon: LogOut, 
+      label: "Logout", 
+      href: "#",
+      onClick: handleLogout
+    },
+  ]
+
+  if (isLoading) {
+    return null
+  }
 
   return (
     <AnimatePresence>
@@ -51,11 +75,11 @@ export function DropdownProfileMenu({ isOpen, onClose }: DropdownProfileMenuProp
             <Link
               key={item.label}
               href={item.href}
-              className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-              onClick={onClose}
+              className="flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 transition-colors hover:bg-gray-100"
+              onClick={item.onClick}
             >
-              <item.icon className="mr-3 h-4 w-4 text-gray-400" />
-              {item.label}
+              <item.icon className="h-4 w-4" />
+              <span>{item.label}</span>
             </Link>
           ))}
         </motion.div>
