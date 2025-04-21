@@ -68,37 +68,10 @@ async def get_current_user_profile(
     logger.info(f"Getting profile for current user with public.users.id={current_user.id} and auth.users.id={current_user.auth_user_id}")
     
     user_ops = UserOperations(session)
-    profile = await user_ops.get_user_profile_by_any_id(current_user.auth_user_id)
+    profile = await user_ops.get_user_profile_by_any_id(current_user.id)  # Use public.users.id
     
     if not profile:
         logger.error(f"Profile not found for user with public.users.id={current_user.id} and auth.users.id={current_user.auth_user_id}")
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User profile not found",
-        )
-        
-    return profile
-
-@router.get("/user/{user_id}", response_model=UserProfile)
-async def get_user_profile(
-    user_id: UUID,
-    current_user: dict = Depends(get_current_user),
-    session: AsyncSession = Depends(get_db)
-):
-    """
-    Get a user's profile by ID.
-    """
-    # Check if the user is requesting their own profile or has admin permissions
-    if current_user["id"] != user_id and current_user["role"] not in ["admin", "super_admin"]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to access this user's profile",
-        )
-        
-    user_ops = UserOperations(session)
-    profile = await user_ops.get_user_profile(user_id)
-    
-    if not profile:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User profile not found",

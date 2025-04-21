@@ -10,6 +10,7 @@ from models.database.user import User
 from uuid import UUID
 import logging
 from pydantic import EmailStr
+from sqlalchemy import text
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -42,15 +43,26 @@ async def get_user_profile(
 ):
     """Get a user's profile by their ID (either public.users.id or auth.users.id)."""
     logger.info(f"User {current_user.id} requesting profile for user: {user_id}")
+    
+    # Check if the user is requesting their own profile or has admin permissions
+    if current_user.id != user_id and current_user.role not in ["admin", "super_admin"]:
+        logger.warning(f"User {current_user.id} with role {current_user.role} attempted to access profile of user {user_id}")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to access this user's profile",
+        )
+    
     user_ops = UserOperations(session)
     profile = await user_ops.get_user_profile_by_any_id(user_id)
     
     if not profile:
+        logger.warning(f"Profile not found for user_id: {user_id}")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"User with ID {user_id} not found"
         )
     
+    logger.info(f"Successfully found profile for user: {profile.email}")
     return profile
 
 @router.patch("/me/email", response_model=UserProfile)
