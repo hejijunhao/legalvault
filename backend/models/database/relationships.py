@@ -1,3 +1,5 @@
+# models/database/relationships.py
+
 """
 This module sets up SQLAlchemy relationships after all models are loaded
 to avoid circular import issues.
@@ -11,6 +13,7 @@ from models.database.enterprise import Enterprise
 from models.database.paralegal import VirtualParalegal
 from models.database.research.public_searches import PublicSearch
 from models.database.research.public_search_messages import PublicSearchMessage
+from models.database.vp_profile_picture import VPProfilePicture
 
 # User relationships
 User.enterprise = relationship(
@@ -54,6 +57,21 @@ VirtualParalegal.user = relationship(
     lazy="selectin",
     uselist=False,
     primaryjoin="VirtualParalegal.id==User.virtual_paralegal_id"
+)
+
+VirtualParalegal.profile_picture = relationship(
+    "VPProfilePicture",
+    back_populates="virtual_paralegal",
+    lazy="selectin",
+    uselist=False,
+    cascade="all, delete-orphan"
+)
+
+# VPProfilePicture relationships
+VPProfilePicture.virtual_paralegal = relationship(
+    "VirtualParalegal",
+    back_populates="profile_picture",
+    lazy="selectin"
 )
 
 # PublicSearch relationships

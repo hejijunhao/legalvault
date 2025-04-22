@@ -10,26 +10,31 @@ from uuid import uuid4
 
 if TYPE_CHECKING:
     from .user import User
-    # from .profile_picture import VPProfilePicture
 
 class VirtualParalegal(PublicBase, TimestampMixin):
-    # Explicitly setting table name to plural form instead of using auto-generated singular form
+    """Virtual Paralegal database model representing an AI assistant.
+    
+    This model stores the core attributes of a virtual paralegal in the public schema.
+    It maintains relationships with users and profile pictures, and tracks basic
+    identity information.
+    
+    Attributes:
+        first_name (str): The VP's first name
+        last_name (str): The VP's last name
+        email (Optional[str]): Contact email, if applicable
+        phone (Optional[str]): Contact phone number, if applicable
+        whatsapp (Optional[str]): WhatsApp contact, if applicable
+        gender (Optional[str]): VP's gender representation
+    """
     __tablename__ = "virtual_paralegals"
     
-    first_name = Column(String, nullable=False, index=True)
-    last_name = Column(String, nullable=False, index=True)
-    email = Column(String, nullable=False, unique=True)
-    phone = Column(String, nullable=True)
-    whatsapp = Column(String, nullable=True)
-    # profile_picture_id = Column(UUID(as_uuid=True), ForeignKey('vault.vp_profile_pictures.id'), nullable=True, index=True)
-
-    # Relationships are now defined in models.database.relationships
-    # to avoid circular import issues
+    first_name: str = Column(String, nullable=False, index=True)
+    last_name: str = Column(String, nullable=False, index=True)
+    email: Optional[str] = Column(String, nullable=True, unique=True)
+    phone: Optional[str] = Column(String, nullable=True)
+    whatsapp: Optional[str] = Column(String, nullable=True)
+    gender: Optional[str] = Column(String, nullable=True)
     
-    @property
-    def name(self):
-        """Return the full name by combining first and last name"""
-        return f"{self.first_name} {self.last_name}"
-    
-    def __repr__(self):
-        return f"VirtualParalegal(id={self.id}, name={self.name}, email={self.email})"
+    def __repr__(self) -> str:
+        """Return string representation of the Virtual Paralegal."""
+        return f"VirtualParalegal(id={self.id}, first_name={self.first_name}, last_name={self.last_name})"

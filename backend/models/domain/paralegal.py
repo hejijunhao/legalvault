@@ -1,3 +1,5 @@
+# models/domain/paralegal.py
+
 from typing import List, Dict, Any, Optional
 from uuid import UUID
 from dataclasses import dataclass, field
