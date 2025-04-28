@@ -18,11 +18,9 @@ class VPProfilePicture(PublicBase, TimestampMixin):
     """
     __tablename__ = "vp_profile_pictures"
 
-    name: str = Column(String, nullable=False)
-    description: str = Column(Text, nullable=True)
     bucket_id: str = Column(String, nullable=False, default="vp_profile_pictures")
     path: str = Column(String, nullable=False)  # Path to image in storage, e.g., "template_1.png"
 
     def __repr__(self) -> str:
         """Return string representation of the profile picture."""
-        return f"VPProfilePicture(id={self.id}, name={self.name}, path={self.path})"
+        return f"VPProfilePicture(id={self.id}, path={self.path})"
