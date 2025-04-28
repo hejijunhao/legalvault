@@ -2,15 +2,17 @@
 
 import { VPIdentityCard } from "./vp-identity-card"
 import { KnowledgeMemoryCard } from "./knowledge-memory-card"
+import { VirtualParalegalResponse } from "@/services/paralegal/paralegal-api-types"
 
-export function ParalegalProfile() {
+interface ParalegalProfileProps {
+  paralegal: VirtualParalegalResponse
+}
+
+export function ParalegalProfile({ paralegal }: ParalegalProfileProps) {
   return (
     <div className="space-y-6">
-      <VPIdentityCard />
-      <KnowledgeMemoryCard />
+      <VPIdentityCard paralegal={paralegal} />
+      <KnowledgeMemoryCard disabled />
     </div>
   )
 }
-
-
-

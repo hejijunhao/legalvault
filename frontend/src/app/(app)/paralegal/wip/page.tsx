@@ -2,79 +2,125 @@
 
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { motion } from "framer-motion"
 import { cn } from "@/lib/utils"
-import Image from "next/image"
-import { ActivityBlock } from "@/components/paralegal/activity-block"
-import { ChatInput } from "@/components/paralegal/chat-input"
+import { Loader2 } from "lucide-react"
+import { ParalegalProfile } from "@/components/paralegal/paralegal-profile"
+import { paralegalService } from "@/services/paralegal/paralegal-api"
+import { VirtualParalegalResponse, ParalegalNotFoundError } from "@/services/paralegal/paralegal-api-types"
+import { Button } from "@/components/ui/button"
 
 type Section = "profile" | "knowledge" | "abilities" | "integrations"
 
 export default function ParalegalPage() {
   const [selectedSection, setSelectedSection] = useState<Section>("profile")
+  const [paralegal, setParalegal] = useState<VirtualParalegalResponse | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
+  // Sections configuration with disabled state
   const sections = [
-    { id: "profile", label: "Profile Overview" },
-    { id: "knowledge", label: "Knowledge & Memory" },
-    { id: "abilities", label: "Abilities" },
-    { id: "integrations", label: "Integrations" },
-  ] as const
+    { id: "profile" as const, label: "Profile Overview", disabled: false },
+    { id: "knowledge" as const, label: "Knowledge & Memory", disabled: true },
+    { id: "abilities" as const, label: "Abilities", disabled: true },
+    { id: "integrations" as const, label: "Integrations", disabled: true },
+  ]
+
+  // Fetch paralegal data
+  useEffect(() => {
+    const fetchParalegal = async () => {
+      try {
+        const data = await paralegalService.getMyParalegal()
+        setParalegal(data)
+        setError(null)
+      } catch (err) {
+        if (err instanceof ParalegalNotFoundError) {
+          setError("No Virtual Paralegal assigned. Please configure one first.")
+        } else {
+          setError("Failed to load Virtual Paralegal data.")
+        }
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchParalegal()
+  }, [])
+
+  // Loading state
+  if (loading) {
+    return (
+      <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-gray-500" />
+      </div>
+    )
+  }
+
+  // Error state with retry option
+  if (error) {
+    return (
+      <div className="flex h-[calc(100vh-4rem)] flex-col items-center justify-center gap-4">
+        <p className="text-gray-600">{error}</p>
+        <Button
+          onClick={() => {
+            setLoading(true)
+            setError(null)
+            paralegalService.getMyParalegal()
+              .then(data => {
+                setParalegal(data)
+                setError(null)
+              })
+              .catch(() => setError("Failed to load Virtual Paralegal data."))
+              .finally(() => setLoading(false))
+          }}
+        >
+          Retry
+        </Button>
+      </div>
+    )
+  }
 
   return (
-    <div className="relative mx-auto min-h-[calc(100vh-4rem)] max-w-[1440px] overflow-hidden px-8">
-      <div className="grid grid-cols-[300px_1fr] gap-12">
-        {/* Navigation Menu */}
-        <nav className="relative z-10 flex flex-col space-y-6 p-12">
-          {sections.map(({ id, label }) => (
-            <button
-              key={id}
-              onClick={() => setSelectedSection(id)}
-              className={cn(
-                "w-fit text-left transition-all duration-300",
-                selectedSection === id
-                  ? "font-['Libre_Baskerville'] text-3xl italic text-gray-900"
-                  : "font-inter text-base text-gray-600 hover:text-gray-900",
-              )}
-            >
-              {label}
-            </button>
-          ))}
-        </nav>
-
-        {/* Content Section */}
-        <div className="relative flex flex-col min-h-[calc(100vh-4rem)] pt-[220px]">
-          {/* Activity Block */}
-          {selectedSection === "profile" && (
-            <motion.div
-              initial={{ opacity: 0, y: -20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5 }}
-              className="absolute top-12 right-0 w-[600px]"
-            >
-              <ActivityBlock />
-            </motion.div>
-          )}
-
-          {/* Portrait Section */}
-          <div className="absolute bottom-0 left-[-200px] w-[calc(100%-300px)]">
-            <div className="relative h-[calc(100vh-4rem)] w-full">
-              <Image
-                src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Virtual%20Paralegals-fie2JYdrbgShF29etJsoiieb2v8SUT.svg"
-                alt="Virtual Paralegal Portrait"
-                layout="fill"
-                objectFit="contain"
-                objectPosition="bottom left"
-                priority
-              />
-            </div>
-          </div>
+    <div className="relative mx-auto min-h-[calc(100vh-4rem)] w-full">
+      {/* Header Section */}
+      <div className="sticky top-0 z-10 h-24 w-full border-b bg-white/80 backdrop-blur-sm">
+        <div className="mx-auto flex h-full max-w-[1440px] items-center px-8">
+          <nav className="flex space-x-12">
+            {sections.map(({ id, label, disabled }) => (
+              <button
+                key={id}
+                onClick={() => !disabled && setSelectedSection(id)}
+                className={cn(
+                  "relative transition-all duration-300",
+                  selectedSection === id
+                    ? "font-['Libre_Baskerville'] text-xl italic text-gray-900"
+                    : "font-inter text-base text-gray-600 hover:text-gray-900",
+                  disabled && "cursor-not-allowed opacity-50 hover:text-gray-600"
+                )}
+                disabled={disabled}
+                title={disabled ? "Coming soon" : undefined}
+              >
+                {label}
+                {selectedSection === id && (
+                  <motion.div
+                    layoutId="activeSection"
+                    className="absolute -bottom-[25px] left-0 right-0 h-px bg-gray-900"
+                    transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                  />
+                )}
+              </button>
+            ))}
+          </nav>
         </div>
       </div>
 
-      {/* Chat Input */}
-      <ChatInput />
+      {/* Main Content */}
+      <div className="mx-auto max-w-[1440px] px-8 py-12">
+        {paralegal && selectedSection === "profile" && (
+          <ParalegalProfile paralegal={paralegal} />
+        )}
+      </div>
     </div>
   )
 }
-

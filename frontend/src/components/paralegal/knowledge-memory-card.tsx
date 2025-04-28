@@ -3,10 +3,18 @@
 import type React from "react"
 import { Card } from "@/components/ui/card"
 import { Brain, Globe2, GraduationCap, MessageSquare, CheckSquare } from "lucide-react"
+import { cn } from "@/lib/utils"
 
-export function KnowledgeMemoryCard() {
+interface KnowledgeMemoryCardProps {
+  disabled?: boolean
+}
+
+export function KnowledgeMemoryCard({ disabled }: KnowledgeMemoryCardProps) {
   return (
-    <Card className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-gray-50 to-gray-100 border-none shadow-lg hover:shadow-xl transition-all duration-300">
+    <Card className={cn(
+      "relative overflow-hidden rounded-3xl bg-gradient-to-br from-gray-50 to-gray-100 border-none shadow-lg hover:shadow-xl transition-all duration-300",
+      disabled && "opacity-50 cursor-not-allowed pointer-events-none"
+    )}>
       <div className="relative p-6 space-y-6">
         <h3 className="text-lg font-medium text-gray-800 tracking-wider">KNOWLEDGE & MEMORY</h3>
 
