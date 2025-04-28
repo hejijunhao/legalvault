@@ -61,17 +61,18 @@ VirtualParalegal.user = relationship(
 
 VirtualParalegal.profile_picture = relationship(
     "VPProfilePicture",
-    back_populates="virtual_paralegal",
     lazy="selectin",
     uselist=False,
-    cascade="all, delete-orphan"
+    foreign_keys=[VirtualParalegal.profile_picture_id],
+    back_populates="virtual_paralegals"
 )
 
 # VPProfilePicture relationships
-VPProfilePicture.virtual_paralegal = relationship(
+VPProfilePicture.virtual_paralegals = relationship(
     "VirtualParalegal",
     back_populates="profile_picture",
-    lazy="selectin"
+    lazy="selectin",
+    uselist=True
 )
 
 # PublicSearch relationships
