@@ -25,9 +25,9 @@ class UserCreate(BaseModel):
 class UserProfile(BaseModel):
     id: UUID
     email: EmailStr
-    first_name: str
-    last_name: str
-    name: str
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    name: Optional[str] = None
     role: str
     virtual_paralegal_id: Optional[UUID] = None
     enterprise_id: Optional[UUID] = None
