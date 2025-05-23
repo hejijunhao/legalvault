@@ -381,9 +381,11 @@ export default function ResearchPage() {
             className="w-fit"
           />
           <div className="mx-auto max-w-3xl w-full">
-            <h1 className="text-left text-[24px] font-normal italic break-words whitespace-normal leading-10 text-[#111827] font-['Libre_Baskerville']">
-              {initialQuery || currentSession?.title || currentSession?.query || "Research Session"}
-            </h1>
+            <div className="flex-1 min-w-0">
+              <h1 className="text-left text-[24px] font-normal italic break-words whitespace-normal leading-10 text-[#111827] font-['Libre_Baskerville'] truncate max-h-[3rem] overflow-hidden" title={initialQuery || currentSession?.title || currentSession?.query || "Research Session"}>
+                {initialQuery || currentSession?.title || currentSession?.query || "Research Session"}
+              </h1>
+            </div>
             <div className="mt-4 flex border-b border-gray-200">
               <button
                 onClick={() => handleTabChange("answer")}
