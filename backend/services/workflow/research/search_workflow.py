@@ -129,7 +129,7 @@ class ResearchSearchWorkflow:
         llm_service: LLMService,
         research_operations: ResearchOperations,
         api_key: Optional[str] = None,
-        model: str = "sonar"
+        model: str = "sonar-pro"
     ):
         """
         Initialize the workflow orchestrator with API configuration, LLM service, and operations.
@@ -168,7 +168,7 @@ class ResearchSearchWorkflow:
             Query analysis result including classification and metadata
         """
         prompt = f"""
-        You are an expert legal research assistant. Analyze this query and provide:
+        You are an expert legal research assistant for Singapore law firms. Analyze this query and provide:
 
         1. **Relevance**: Is it or could it be related to legal research? (Yes/No)
         2. **Clarity**: Rate its clarity from 0 (vague) to 1 (crystal clear).
@@ -233,12 +233,12 @@ class ResearchSearchWorkflow:
         if query_type == QueryType.COURT_CASE:
             enhanced_query = f"""Legal Case Research Request: {enhanced_query}
             Please provide relevant case law, including case names, citations, key holdings,
-            and their application to the query. Format citations according to standard legal citation practices."""
+            and their application to the query. Format citations according to standard legal citation practices. Focus on Singapore."""
             
         elif query_type == QueryType.LEGISLATIVE:
             enhanced_query = f"""Legal Statutory Research Request: {enhanced_query}
             Please provide relevant statutes, regulations, or codes, including their citations,
-            effective dates, and interpretation in relevant jurisdictions."""
+            effective dates, and interpretation in relevant jurisdictions. Focus on Singapore."""
             
         elif query_type == QueryType.COMMERCIAL:
             enhanced_query = f"""Legal Commercial Research Request: {enhanced_query}
@@ -253,6 +253,8 @@ class ResearchSearchWorkflow:
         4. Recent developments or pending changes in the law
         5. Practical applications for legal practitioners
         
+        As you are an expert legal research assistant for Singapore law firms, you should focus on Singapore law and statutes.
+
         Results should be structured, authoritative, and suitable for legal professionals."""
         
         return enhanced_query
@@ -271,7 +273,7 @@ class ResearchSearchWorkflow:
         messages = [
             {
                 "role": "system",
-                "content": "Provide a concise, accurate, and legally relevant response to the query, prioritizing authoritative sources such as case law, statutes, and reputable legal commentary, tailored to the needs of a practicing lawyer."
+                "content": "Provide a concise, accurate, and legally relevant response to the query, prioritizing Singapore-focused or Singapore-based authoritative sources such as case law, statutes, and reputable legal commentary, tailored to the needs of a practicing lawyer. Prioritise more recent cases of a higher authority (High Court or above). Organise your results based on authority (Court of Appeal --> Appellate Division of High Court --> General Division of High Court --> State Courts) and date of judment (most recent --> least recent)"
             },
             {
                 "role": "user",
