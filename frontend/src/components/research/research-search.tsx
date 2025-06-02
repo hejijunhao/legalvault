@@ -70,7 +70,7 @@ export function ResearchSearch({
           onKeyDown={handleKeyDown}
           onFocus={() => setIsFocused(true)}
           onBlur={() => setIsFocused(false)}
-          placeholder="Ask anything..."
+          placeholder="Search for anything..."
           className="mb-3 w-full resize-none border-0 bg-transparent text-lg text-gray-900 placeholder:text-gray-500 focus:outline-none focus:ring-0"
           style={{ minHeight: "24px", maxHeight: "200px" }}
         />

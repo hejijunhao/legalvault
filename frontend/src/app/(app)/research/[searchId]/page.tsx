@@ -367,7 +367,7 @@ export default function ResearchPage() {
       <div 
         ref={headerRef}
         className={cn(
-          "sticky top-16 z-40 w-full transition-all duration-300",
+          "sticky top-0 z-40 w-full transition-all duration-300", // Changed top-16 to top-0
           isScrolled
             ? "bg-white/25 backdrop-blur-3xl backdrop-saturate-150 border-b border-white/5 shadow-[0_8px_32px_rgba(0,0,0,0.02)] bg-gradient-to-b from-white/30 to-white/20"
             : "bg-transparent"

@@ -14,7 +14,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 
 export default function ResearchPage() {
   const [query, setQuery] = useState("")
-  const { createSession, getSessions, isLoading, error, clearError } = useResearch()
+  const { createSession, getSessions, isLoading, error, clearError } = useResearch() 
   const router = useRouter()
 
   // Clear context error when component mounts or unmounts
@@ -29,25 +29,15 @@ export default function ResearchPage() {
     getSessions({ limit: 12, skipAuthCheck: true }) // Show up to 12 recent searches
   }, [getSessions]) // Add getSessions to dependency array
 
-  const handleSearch = async (queryType: QueryType | null) => {
+  const handleSearch = (queryType: QueryType | null) => { 
     const trimmedQuery = query.trim()
     if (!trimmedQuery || trimmedQuery.length < 5) return
     
-    try {
-      // Create session with search parameters
-      const sessionId = await createSession(trimmedQuery, {
-        // Search parameters
-        temperature: 0.7, // Default temperature for balanced responses
-        max_tokens: 2048, // Reasonable length limit
-        top_p: 0.95, // High value for more focused responses
-        top_k: 50, // Standard value for diverse but relevant results
-        type: queryType || QueryType.GENERAL // Pass queryType if provided
-      })
-      router.push(`/research/${sessionId}?initialQuery=${encodeURIComponent(trimmedQuery)}&queryType=${queryType || QueryType.GENERAL}`)
-    } catch (err) {
-      // Error is already handled by the context provider
-      console.error("Failed to create research session:", err)
-    }
+    const queryParams = new URLSearchParams()
+    queryParams.append("initialQuery", trimmedQuery)
+    queryParams.append("queryType", queryType || QueryType.GENERAL)
+
+    router.push(`/research/new?${queryParams.toString()}`)
   }
 
   const handleSelectPrompt = (prompt: string) => {
@@ -68,7 +58,7 @@ export default function ResearchPage() {
           transition={{ duration: 0.5, delay: 0.1 }}
           className="text-center text-[32px] font-normal italic leading-6 text-[#111827] font-['Libre_Baskerville']"
         >
-          What legal insights do you need?
+          Legal AI that searches the web for you
         </motion.h1>
 
         <motion.div
@@ -85,7 +75,6 @@ export default function ResearchPage() {
               isLoading={isLoading}
             />
             
-            {/* Add the prompt suggestions component right after the search bar */}
             <ResearchPromptSuggestions onSelectPrompt={handleSelectPrompt} />
             
             {error && (
@@ -96,7 +85,6 @@ export default function ResearchPage() {
             )}
           </div>
           
-          {/* Past searches grid will handle its own loading and error states */}
           <PastSearchesGrid />
         </motion.div>
       </motion.div>
