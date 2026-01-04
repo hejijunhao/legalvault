@@ -4,6 +4,7 @@
 
 import { useState } from "react"
 import { motion } from "framer-motion"
+import { animations, transitions } from "@/lib/animations"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -77,9 +78,8 @@ export function ChatWindow({ onClose }: ChatWindowProps) {
           {messages.map((message) => (
             <motion.div
               key={message.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.2 }}
+              {...animations.fadeInUpSmall}
+              transition={transitions.fast}
               className={`flex ${message.sender === "user" ? "justify-end" : "justify-start"}`}
             >
               <div

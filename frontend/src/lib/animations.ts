@@ -131,8 +131,16 @@ export const gridItemVariants: Variants = {
   },
 }
 
+// Type for any animation preset
+type AnimationPreset = {
+  initial: Record<string, unknown>
+  animate: Record<string, unknown>
+  exit?: Record<string, unknown>
+  transition: Transition
+}
+
 // Helper to create staggered animations with custom delay
-export function withDelay(animation: typeof animations.fadeInUp, delay: number) {
+export function withDelay<T extends AnimationPreset>(animation: T, delay: number): T {
   return {
     ...animation,
     transition: {
@@ -143,6 +151,6 @@ export function withDelay(animation: typeof animations.fadeInUp, delay: number) 
 }
 
 // Helper to create index-based stagger delay
-export function withStaggerIndex(animation: typeof animations.fadeInUp, index: number, staggerDelay = 0.05) {
+export function withStaggerIndex<T extends AnimationPreset>(animation: T, index: number, staggerDelay = 0.05): T {
   return withDelay(animation, index * staggerDelay)
 }

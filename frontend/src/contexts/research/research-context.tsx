@@ -11,7 +11,6 @@ import {
   deleteSession as deleteSessionApi,
   sendSessionMessage as sendMessageApi,
   fetchMessagesForSearch,
-  formatApiError,
   cache,
   ApiError,
   MessageListResponse
@@ -123,16 +122,27 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
     }
 
     console.error(`API Error: ${defaultMessage}`, err)
-    
+
     if (err instanceof Error && (err as any).code === 'ECONNRESET' || err.message.includes('socket hang up')) {
       return { message: 'Connection Error', details: 'Could not connect to the server.', code: 'CONNECTION_ERROR' }
     }
-    
+
     if (err instanceof Error && (err.message.toLowerCase().includes('authentication') || (err as any).status === 401)) {
       return { message: 'Authentication Error', details: 'Your session may have expired.', code: 'AUTH_ERROR' }
     }
-    
-    return formatApiError(err, defaultMessage)
+
+    // Handle ApiError instances
+    if (err instanceof ApiError) {
+      return { message: err.message, details: err.details, code: err.code }
+    }
+
+    // Handle regular Error instances
+    if (err instanceof Error) {
+      return { message: err.message || defaultMessage, details: undefined, code: 'UNKNOWN_ERROR' }
+    }
+
+    // Fallback for unknown error types
+    return { message: defaultMessage, details: 'An unexpected error occurred', code: 'UNKNOWN_ERROR' }
   }
 
   const updateSessionInList = useCallback((updatedSession: ResearchSession) => {

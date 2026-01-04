@@ -7,17 +7,6 @@ export * from './research-api-types'
 // Re-export ApiError from centralized location
 export { ApiError } from '@/lib/api-client'
 
-// Re-export legacy core functionality (deprecated - use @/lib/api-client directly)
-export {
-  getApiBaseUrl,
-  getAuthHeader,
-  fetchWithSelfSignedCert,
-  withRetry,
-  formatApiError,
-  handleApiError,
-  scheduleCacheClear
-} from './research-api-core'
-
 // Re-export session-related functions
 export {
   fetchSessions,

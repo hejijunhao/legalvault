@@ -1,15 +1,15 @@
 // src/services/research/research-cache.ts
 
-import { 
-  CacheConfig, 
-  CacheEntry, 
-  CacheStorage, 
-  ResearchSession, 
-  Message, 
-  SearchListResponse, 
-  MessageListResponse 
+import {
+  CacheConfig,
+  CacheEntry,
+  CacheStorage,
+  ResearchSession,
+  Message,
+  SearchListResponse,
+  MessageListResponse
 } from './research-api-types';
-import { getAuthHeader, fetchWithSelfSignedCert, withRetry, handleApiError } from './research-api-core';
+import { apiClient } from '@/lib/api-client';
 
 /**
  * Cache for research sessions and messages
@@ -171,17 +171,9 @@ export class ResearchCache {
 
     const promise = (async () => {
       try {
-        const headers = await getAuthHeader();
-        const url = `/api/research/searches/${sessionId}`;
-        console.log('fetchSession URL:', url);
+        console.log('fetchSession URL:', `/api/research/searches/${sessionId}`);
+        const data = await apiClient.get<ResearchSession>(`/api/research/searches/${sessionId}`);
 
-        const response = await withRetry(() => fetchWithSelfSignedCert(url, { headers }));
-        
-        if (!response.ok) {
-          throw await handleApiError(response);
-        }
-        const data = await response.json();
-        
         if (data) {
           this.setSession(data);
         }
@@ -322,22 +314,14 @@ export class ResearchCache {
 
     const promise = (async () => {
       try {
-        const headers = await getAuthHeader();
-        const params = new URLSearchParams();
-        if (options?.limit) params.append('limit', options.limit.toString());
-        if (options?.offset) params.append('offset', options.offset.toString());
-        
-        const queryString = params.toString() ? `?${params.toString()}` : '';
-        const url = `/api/research/messages/search/${searchId}${queryString}`;
+        const url = `/api/research/messages/search/${searchId}`;
         console.log('fetchMessagesForSearch URL:', url);
-        
-        const response = await withRetry(() => fetchWithSelfSignedCert(url, { headers }));
-        
-        if (!response.ok) {
-          throw await handleApiError(response);
-        }
-        const data = await response.json();
-        
+
+        const data = await apiClient.get<MessageListResponse>(url, {
+          limit: options?.limit,
+          offset: options?.offset
+        });
+
         if (data) {
           this.setMessageList(searchId, data, options);
         }

@@ -3,6 +3,7 @@
 "use client"
 
 import { motion } from "framer-motion"
+import { animations, transitions, withStaggerIndex } from "@/lib/animations"
 import { FileIcon, FileTextIcon, FileTypeIcon, FileSpreadsheetIcon, FileImageIcon } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 import Link from "next/link" // Add Link import
@@ -55,9 +56,8 @@ export function FileList({ groupedFiles, onFileHover, onFileSelect, selectedFile
         <motion.div
           key={category}
           id={category.toLowerCase()}
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
+          {...animations.fadeInUpSmall}
+          transition={transitions.normal}
           className="space-y-6"
         >
           <h3 className="mb-4 text-xl font-normal italic text-neutral-900 font-['Libre_Baskerville']">{category}</h3>
@@ -78,13 +78,7 @@ export function FileList({ groupedFiles, onFileHover, onFileSelect, selectedFile
                 }}
               >
                 <motion.div
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{
-                    duration: 0.3,
-                    ease: [0.4, 0, 0.2, 1],
-                    delay: index * 0.05,
-                  }}
+                  {...withStaggerIndex(animations.slideInLeft, index, 0.05)}
                   onMouseEnter={() => onFileHover(file)}
                   onMouseLeave={() => onFileHover(null)}
                 >

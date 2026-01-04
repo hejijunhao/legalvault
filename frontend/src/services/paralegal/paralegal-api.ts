@@ -1,79 +1,62 @@
 // src/services/paralegal/paralegal-api.ts
 
+import { apiClient, ApiError } from '@/lib/api-client';
 import {
   VirtualParalegalCreate,
   VirtualParalegalUpdate,
   VirtualParalegalResponse,
-  ParalegalError,
   ParalegalNotFoundError,
   ParalegalConflictError,
+  ParalegalError,
 } from './paralegal-api-types';
 
 export class ParalegalService {
   private baseUrl = '/api/paralegals';
 
-  private getHeaders(): HeadersInit {
-    const token = localStorage.getItem('auth_token');
-    if (!token) {
-      throw new Error('Not authenticated');
-    }
-    return {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    };
-  }
-
-  private async handleResponse<T>(response: Response): Promise<T> {
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
-      
-      if (response.status === 404) {
-        throw new ParalegalNotFoundError(error.detail);
+  private handleError(error: unknown): never {
+    if (error instanceof ApiError) {
+      if (error.status === 404) {
+        throw new ParalegalNotFoundError(error.details || error.message);
       }
-      if (response.status === 409) {
-        throw new ParalegalConflictError(error.detail);
+      if (error.status === 409) {
+        throw new ParalegalConflictError(error.details || error.message);
       }
-      
-      throw new ParalegalError(
-        error.detail || 'An error occurred',
-        response.status
-      );
+      throw new ParalegalError(error.message, error.status || 500, error.code);
     }
-    return response.json();
+    throw error;
   }
 
   /**
    * Get the current user's Virtual Paralegal
    */
   async getMyParalegal(): Promise<VirtualParalegalResponse> {
-    const response = await fetch(`${this.baseUrl}/me`, {
-      headers: this.getHeaders(),
-    });
-    return this.handleResponse<VirtualParalegalResponse>(response);
+    try {
+      return await apiClient.get<VirtualParalegalResponse>(`${this.baseUrl}/me`);
+    } catch (error) {
+      this.handleError(error);
+    }
   }
 
   /**
    * Create a new Virtual Paralegal and assign it to the current user
    */
   async createParalegal(data: VirtualParalegalCreate): Promise<VirtualParalegalResponse> {
-    const response = await fetch(this.baseUrl, {
-      method: 'POST',
-      headers: this.getHeaders(),
-      body: JSON.stringify(data),
-    });
-    return this.handleResponse<VirtualParalegalResponse>(response);
+    try {
+      return await apiClient.post<VirtualParalegalResponse>(this.baseUrl, data);
+    } catch (error) {
+      this.handleError(error);
+    }
   }
 
   /**
    * Update the current user's Virtual Paralegal
    */
   async updateMyParalegal(data: VirtualParalegalUpdate): Promise<VirtualParalegalResponse> {
-    const response = await fetch(`${this.baseUrl}/me`, {
-      method: 'PATCH',
-      headers: this.getHeaders(),
-      body: JSON.stringify(data),
-    });
-    return this.handleResponse<VirtualParalegalResponse>(response);
+    try {
+      return await apiClient.patch<VirtualParalegalResponse>(`${this.baseUrl}/me`, data);
+    } catch (error) {
+      this.handleError(error);
+    }
   }
 
   /**
