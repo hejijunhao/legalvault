@@ -23,11 +23,6 @@ export {
   type UpdateSessionRequest,
 } from "@/types/research"
 
-// Legacy ApiError interface - use ApiError from @/lib/api-client instead
-export interface ApiError extends Error {
-  status?: number
-  statusText?: string
-  code?: string
-  details?: string
-  originalError?: Error | unknown
-}
+// ApiError is now exported from @/lib/api-client
+// Re-export for backwards compatibility
+export { ApiError } from '@/lib/api-client'

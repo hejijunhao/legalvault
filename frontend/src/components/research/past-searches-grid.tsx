@@ -4,6 +4,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import { motion } from "framer-motion"
+import { animations, withStaggerIndex } from "@/lib/animations"
 import { ArrowUpRight, BookmarkIcon, Loader2 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useResearch } from "@/contexts/research/research-context"
@@ -83,9 +84,7 @@ export function PastSearchesGrid() {
         {sessions.map((search, index) => (
           <motion.div
             key={search.id}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3, delay: index * 0.05 }}
+            {...withStaggerIndex(animations.fadeInUpSmall, index, 0.05)}
             className="group flex cursor-pointer items-center justify-between rounded-lg border border-gray-200 bg-white p-4 shadow-sm transition-colors duration-150 hover:border-gray-300 hover:bg-gray-50 hover:shadow-md"
             onClick={() => handleSearchClick(search.id)}
           >

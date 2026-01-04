@@ -7,9 +7,9 @@ from sqlmodel import Session
 
 from core.database import get_session
 from models.domain.workspace.notebook import NotebookStateError
-from models.domain.workspace.operations_notebook import (
+from models.permissions import (
     NotebookOperation,
-    validate_operation_constraints
+    validate_notebook_operation as validate_operation_constraints
 )
 from models.schemas.workspace.notebook import (
     NotebookCreate,

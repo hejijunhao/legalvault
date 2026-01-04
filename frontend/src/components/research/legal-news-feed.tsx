@@ -3,6 +3,7 @@
 "use client"
 
 import { motion } from "framer-motion"
+import { animations, withDelay, withStaggerIndex } from "@/lib/animations"
 import { Bookmark, Scale, Gavel, Globe, BookOpen, Building2 } from "lucide-react"
 import { useState } from "react"
 import Image from 'next/image'
@@ -67,9 +68,7 @@ export function LegalNewsFeed() {
     <div className="w-full space-y-6">
       {/* Categories */}
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
+        {...animations.fadeInUp}
         className="flex space-x-2 overflow-x-auto pb-2"
       >
         {categories.map(({ id, label, icon: Icon }) => (
@@ -91,9 +90,7 @@ export function LegalNewsFeed() {
       {/* Featured Article */}
       {featuredArticle && (
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.2 }}
+          {...withDelay(animations.fadeInUp, 0.2)}
           className="group relative overflow-hidden rounded-xl bg-card"
         >
           <div className="aspect-[2/1] overflow-hidden">
@@ -125,17 +122,13 @@ export function LegalNewsFeed() {
 
       {/* Regular Articles Grid */}
       <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.5, delay: 0.4 }}
+        {...withDelay(animations.fadeIn, 0.4)}
         className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3"
       >
         {regularArticles.map((article, index) => (
           <motion.div
             key={article.id}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.4 + index * 0.1 }}
+            {...withDelay(withStaggerIndex(animations.fadeInUp, index, 0.1), 0.4)}
             className="group overflow-hidden rounded-lg border bg-card"
           >
             <div className="aspect-[3/2] overflow-hidden">

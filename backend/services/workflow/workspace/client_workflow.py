@@ -7,9 +7,9 @@ from sqlmodel import Session
 
 from core.database import get_session
 from models.database.workspace.client import ClientStatus, LegalEntityType
-from models.domain.workspace.operations_client import (
+from models.permissions import (
     ClientOperation,
-    validate_operation_constraints,
+    validate_client_operation as validate_operation_constraints,
     check_sensitive_data_access
 )
 from models.schemas.workspace.client import (

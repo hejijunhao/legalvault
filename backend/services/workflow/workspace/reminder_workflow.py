@@ -7,9 +7,9 @@ from sqlmodel import Session
 
 from core.database import get_session
 from models.database.workspace.reminder import ReminderStatus
-from models.domain.workspace.operations_reminder import (
+from models.permissions import (
     ReminderOperation,
-    validate_operation_constraints
+    validate_reminder_operation as validate_operation_constraints
 )
 from models.schemas.workspace.reminder import (
     ReminderCreate,

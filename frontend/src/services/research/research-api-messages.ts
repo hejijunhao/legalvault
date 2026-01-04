@@ -1,39 +1,28 @@
 // src/services/research/research-api-messages.ts
+// Research message API functions using centralized apiClient
 
-import { 
-  Message, 
-  MessageListResponse, 
-  Citation, 
-  QueryStatus 
-} from './research-api-types';
-import { 
-  getAuthHeader, 
-  fetchWithSelfSignedCert, 
-  withRetry, 
-  handleApiError 
-} from './research-api-core';
-import { researchCache } from './research-cache';
+import { apiClient } from '@/lib/api-client'
+import {
+  Message,
+  MessageListResponse,
+  Citation,
+  QueryStatus
+} from './research-api-types'
+import { researchCache } from './research-cache'
 
 /**
  * Fetch a single message by ID
  */
 export async function fetchMessage(messageId: string): Promise<Message> {
-  const cachedMessage = researchCache.getMessage(messageId);
+  const cachedMessage = researchCache.getMessage(messageId)
   if (cachedMessage) {
-    return cachedMessage;
+    return cachedMessage
   }
 
-  const headers = await getAuthHeader();
-  const url = `/api/research/messages/${messageId}`;
-  console.log('fetchMessage URL:', url);
-  
-  const response = await withRetry(() => fetchWithSelfSignedCert(url, { headers }));
-  
-  if (!response.ok) return handleApiError(response);
-  const data = await response.json();
-  
-  researchCache.setMessage(data);
-  return data;
+  const data = await apiClient.get<Message>(`/api/research/messages/${messageId}`)
+
+  researchCache.setMessage(data)
+  return data
 }
 
 /**
@@ -42,28 +31,20 @@ export async function fetchMessage(messageId: string): Promise<Message> {
 export async function createMessage(
   searchId: string,
   message: {
-    role: string;
-    content: { text: string; citations?: Citation[] };
-    sequence?: number;
-    status?: QueryStatus;
+    role: string
+    content: { text: string; citations?: Citation[] }
+    sequence?: number
+    status?: QueryStatus
   }
 ): Promise<Message> {
-  const headers = await getAuthHeader();
-  const url = `/api/research/messages/search/${searchId}`;
-  console.log('createMessage URL:', url);
-  
-  const response = await withRetry(() => fetchWithSelfSignedCert(url, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(message)
-  }));
-  
-  if (!response.ok) return handleApiError(response);
-  const data = await response.json();
-  
-  researchCache.setMessage(data);
-  researchCache.invalidateMessageList(searchId);
-  return data;
+  const data = await apiClient.post<Message>(
+    `/api/research/messages/search/${searchId}`,
+    message
+  )
+
+  researchCache.setMessage(data)
+  researchCache.invalidateMessageList(searchId)
+  return data
 }
 
 /**
@@ -72,90 +53,68 @@ export async function createMessage(
 export async function fetchMessagesForSearch(
   searchId: string,
   options?: {
-    limit?: number;
-    offset?: number;
+    limit?: number
+    offset?: number
   } | null
 ): Promise<MessageListResponse> {
-  const cachedMessages = researchCache.checkMessageListCache(searchId, options);
+  const cachedMessages = researchCache.checkMessageListCache(searchId, options)
   if (cachedMessages) {
-    return cachedMessages;
+    return cachedMessages
   }
 
-  const headers = await getAuthHeader();
-  const params = new URLSearchParams();
-  if (options?.limit) params.append('limit', options.limit.toString());
-  if (options?.offset) params.append('offset', options.offset.toString());
-  
-  const queryString = params.toString() ? `?${params.toString()}` : '';
-  const url = `/api/research/messages/search/${searchId}${queryString}`;
-  console.log('fetchMessagesForSearch URL:', url);
-  
-  const response = await withRetry(() => fetchWithSelfSignedCert(url, { headers }));
-  
-  if (!response.ok) return handleApiError(response);
-  const data = await response.json();
-  
-  researchCache.setMessageList(searchId, data, options);
-  return data;
+  const params: Record<string, string | number | boolean | undefined> = {}
+  if (options?.limit) params.limit = options.limit
+  if (options?.offset) params.offset = options.offset
+
+  const data = await apiClient.get<MessageListResponse>(
+    `/api/research/messages/search/${searchId}`,
+    params
+  )
+
+  researchCache.setMessageList(searchId, data, options)
+  return data
 }
 
 /**
  * Update a message
  */
 export async function updateMessage(
-  messageId: string, 
+  messageId: string,
   updates: {
-    content?: { text: string, citations?: Citation[] };
-    status?: QueryStatus;
+    content?: { text: string; citations?: Citation[] }
+    status?: QueryStatus
   }
 ): Promise<Message> {
-  const headers = await getAuthHeader();
-  const url = `/api/research/messages/${messageId}`;
-  console.log('updateMessage URL:', url);
-  
-  const response = await withRetry(() => fetchWithSelfSignedCert(url, {
-    method: 'PATCH',
-    headers,
-    body: JSON.stringify(updates)
-  }));
-  
-  if (!response.ok) return handleApiError(response);
-  const data = await response.json();
-  
-  researchCache.setMessage(data);
+  const data = await apiClient.patch<Message>(
+    `/api/research/messages/${messageId}`,
+    updates
+  )
+
+  researchCache.setMessage(data)
   if (data.search_id) {
-    researchCache.invalidateMessageList(data.search_id);
+    researchCache.invalidateMessageList(data.search_id)
   }
-  return data;
+  return data
 }
 
 /**
  * Delete a message
  */
 export async function deleteMessage(messageId: string, searchId?: string): Promise<void> {
-  const headers = await getAuthHeader();
-  
+  // If searchId not provided, try to get it from cached message
   if (!searchId) {
     try {
-      const message = await fetchMessage(messageId);
-      searchId = message.search_id;
-    } catch (error) {
-      console.error('Failed to fetch message before deletion:', error);
+      const message = await fetchMessage(messageId)
+      searchId = message.search_id
+    } catch {
+      // Continue without searchId - cache invalidation will be skipped
     }
   }
-  
-  const url = `/api/research/messages/${messageId}`;
-  console.log('deleteMessage URL:', url);
-  
-  const response = await withRetry(() => fetchWithSelfSignedCert(url, {
-    method: 'DELETE',
-    headers
-  }));
-  
-  if (!response.ok) return handleApiError(response);
-  
-  researchCache.deleteMessage(messageId);
+
+  await apiClient.delete(`/api/research/messages/${messageId}`)
+
+  researchCache.deleteMessage(messageId)
   if (searchId) {
-    researchCache.invalidateMessageList(searchId);
+    researchCache.invalidateMessageList(searchId)
   }
 }

@@ -7,9 +7,9 @@ from sqlmodel import Session
 
 from core.database import get_session
 from models.database.workspace.task import TaskStatus
-from models.domain.workspace.operations_task import (
+from models.permissions import (
     TaskOperation,
-    validate_operation_constraints
+    validate_task_operation as validate_operation_constraints
 )
 from models.schemas.workspace.task import (
     TaskCreate,

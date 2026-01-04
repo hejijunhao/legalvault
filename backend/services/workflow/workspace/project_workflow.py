@@ -8,13 +8,11 @@ from sqlmodel import Session
 from core.database import get_session
 from models.database.workspace.project import ProjectStatus
 from models.domain.workspace.project import ProjectStateError
-from models.domain.workspace.operations_project import (
+from models.permissions import (
     ProjectOperation,
-    validate_operation_constraints
-)
-from models.domain.workspace.operations_notebook import (
     NotebookOperation,
-    validate_operation_constraints as validate_notebook_operation
+    validate_project_operation as validate_operation_constraints,
+    validate_notebook_operation
 )
 from models.schemas.workspace.project import (
     ProjectCreate,

@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { motion } from "framer-motion"
+import { animations, transitions } from "@/lib/animations"
 
 interface PromptSuggestion {
   category: string
@@ -45,9 +46,8 @@ export function ResearchPromptSuggestions({ onSelectPrompt }: ResearchPromptSugg
 
   return (
     <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.6 }}
+      {...animations.fadeIn}
+      transition={transitions.slow}
       className="mt-4 w-full"
     >
       <div className="text-xs text-gray-500 mb-2 ml-1">Try asking about:</div>
