@@ -5,6 +5,7 @@
 import { motion } from "framer-motion"
 import { Card } from "@/components/ui/card"
 import { CheckCircle, Users, Clock } from "lucide-react"
+import { animations, withDelay } from "@/lib/animations"
 
 interface WorkStatsProps {
   data: {
@@ -27,18 +28,14 @@ export function WorkStats({ data }: WorkStatsProps) {
         <h2 className="mb-4 text-xl font-semibold text-gray-900">Work Statistics</h2>
         <div className="grid gap-4 sm:grid-cols-2">
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
+            {...animations.fadeInUp}
             className="rounded-lg bg-blue-50 p-4"
           >
             <div className="text-2xl font-bold text-blue-600">{data.activeProjects}</div>
             <div className="text-sm text-blue-600">Active Projects</div>
           </motion.div>
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.1 }}
+            {...withDelay(animations.fadeInUp, 0.1)}
             className="rounded-lg bg-green-50 p-4"
           >
             <div className="text-2xl font-bold text-green-600">{data.taskCompletionRate}%</div>
@@ -46,9 +43,7 @@ export function WorkStats({ data }: WorkStatsProps) {
           </motion.div>
         </div>
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.2 }}
+          {...withDelay(animations.fadeInUp, 0.2)}
           className="mt-4"
         >
           <h3 className="mb-2 font-semibold text-gray-700">Recent Activities</h3>
@@ -65,9 +60,7 @@ export function WorkStats({ data }: WorkStatsProps) {
           </ul>
         </motion.div>
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.3 }}
+          {...withDelay(animations.fadeInUp, 0.3)}
           className="mt-4"
         >
           <h3 className="mb-2 font-semibold text-gray-700">Collaboration Metrics</h3>
@@ -90,9 +83,7 @@ export function WorkStats({ data }: WorkStatsProps) {
           </div>
         </motion.div>
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.4 }}
+          {...withDelay(animations.fadeInUp, 0.4)}
           className="mt-4 flex items-center rounded-lg bg-purple-50 p-4"
         >
           <Clock className="mr-2 h-6 w-6 text-purple-600" />
@@ -105,4 +96,3 @@ export function WorkStats({ data }: WorkStatsProps) {
     </Card>
   )
 }
-

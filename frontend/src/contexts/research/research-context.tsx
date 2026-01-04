@@ -3,12 +3,12 @@
 "use client"
 
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react'
-import { 
-  fetchSessions, 
-  fetchSession, 
-  createNewSession, 
-  updateSessionMetadata as updateSessionApi, 
-  deleteSession as deleteSessionApi, 
+import {
+  fetchSessions,
+  fetchSession,
+  createNewSession,
+  updateSessionMetadata as updateSessionApi,
+  deleteSession as deleteSessionApi,
   sendSessionMessage as sendMessageApi,
   fetchMessagesForSearch,
   formatApiError,
@@ -17,77 +17,30 @@ import {
   MessageListResponse
 } from "@/services/research/research-api"
 import { supabase } from "@/lib/supabase";
-import authManager from '@/lib/auth-manager';
+import { addAuthEventListener } from '@/store/auth-store';
 
-// Define enum types that mirror the backend
-export enum QueryCategory {
-  CLEAR = "clear",
-  UNCLEAR = "unclear",
-  IRRELEVANT = "irrelevant",
-  BORDERLINE = "borderline"
-}
+// Import types from centralized location
+import {
+  QueryCategory,
+  QueryType,
+  QueryStatus,
+  Citation,
+  Message,
+  SearchParams,
+  ResearchSession,
+  SearchListResponse,
+} from "@/types/research"
 
-export enum QueryType {
-  COURT_CASE = "court_case",
-  LEGISLATIVE = "legislative",
-  COMMERCIAL = "commercial",
-  GENERAL = "general"
-}
-
-export enum QueryStatus {
-  PENDING = "pending",
-  COMPLETED = "completed",
-  FAILED = "failed",
-  NEEDS_CLARIFICATION = "needs_clarification",
-  IRRELEVANT = "irrelevant_query"
-}
-
-export interface Citation {
-  text: string
-  url: string
-  metadata?: Record<string, any>
-}
-
-export interface Message {
-  id: string
-  role: "user" | "assistant" | "system"
-  content: { text: string, citations?: Citation[] }
-  sequence: number
-  status?: QueryStatus
-}
-
-export interface SearchParams {
-  temperature?: number
-  max_tokens?: number
-  top_p?: number
-  top_k?: number
-  jurisdiction?: string
-  type?: QueryType
-}
-
-export interface ResearchSession {
-  id: string
-  title: string
-  query: string
-  description?: string
-  is_featured: boolean
-  tags?: string[]
-  search_params?: SearchParams
-  messages?: Message[]
-  created_at: string
-  updated_at: string
-  status: QueryStatus
-  category?: QueryCategory
-  query_type?: QueryType
-  user_id: string
-  enterprise_id?: string
-}
-
-export interface SearchListResponse {
-  items: ResearchSession[]
-  total: number
-  offset: number
-  limit: number
+// Re-export for backwards compatibility
+export {
+  QueryCategory,
+  QueryType,
+  QueryStatus,
+  type Citation,
+  type Message,
+  type SearchParams,
+  type ResearchSession,
+  type SearchListResponse,
 }
 
 type ErrorType = {
@@ -477,8 +430,8 @@ export function ResearchProvider({ children }: { children: ReactNode }) {
   }, [currentSession?.id, isAuthenticated])
 
   useEffect(() => {
-    const removeListener = authManager.addListener((event) => {
-      if (event.type === 'SIGNED_OUT' || event.type === 'TOKEN_REFRESH_FAILED') {
+    const removeListener = addAuthEventListener((eventType) => {
+      if (eventType === 'SIGNED_OUT') {
         cache.clear()
         setSessions([])
         setCurrentSession(null)

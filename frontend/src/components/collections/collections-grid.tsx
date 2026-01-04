@@ -4,6 +4,7 @@
 
 import { motion } from "framer-motion"
 import { CollectionCard } from "./collection-card"
+import { animations, withStaggerIndex } from "@/lib/animations"
 
 const collections = [
   {
@@ -68,9 +69,7 @@ export function CollectionsGrid() {
       {collections.map((collection, index) => (
         <motion.div
           key={collection.id}
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: index * 0.1 }}
+          {...withStaggerIndex(animations.fadeInUp, index, 0.1)}
         >
           <CollectionCard collection={collection} />
         </motion.div>
